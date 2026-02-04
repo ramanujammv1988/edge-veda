@@ -99,28 +99,39 @@ mkdir -p "$BUILD_IOS_DEVICE"
 
 cmake -B "$BUILD_IOS_DEVICE" \
     -S "$CORE_DIR" \
-    -G Xcode \
+    -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$CORE_DIR/cmake/ios.toolchain.cmake" \
     -DPLATFORM=OS64 \
     -DDEPLOYMENT_TARGET=13.0 \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DEDGE_VEDA_BUILD_SHARED=OFF \
     -DEDGE_VEDA_BUILD_STATIC=ON \
-    -DEDGE_VEDA_ENABLE_METAL=ON \
-    -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+    -DEDGE_VEDA_ENABLE_METAL=ON
 
-cmake --build "$BUILD_IOS_DEVICE" --config $BUILD_TYPE -- -quiet
+cmake --build "$BUILD_IOS_DEVICE" --config $BUILD_TYPE
 
 # Find the built static library
-DEVICE_LIB=$(find "$BUILD_IOS_DEVICE" -name "libedge_veda.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-if [ -z "$DEVICE_LIB" ]; then
+DEVICE_LIB=""
+
+# Check standard locations (Ninja puts libs at build root or in subdirs)
+if [ -f "$BUILD_IOS_DEVICE/libedge_veda.a" ]; then
+    DEVICE_LIB="$BUILD_IOS_DEVICE/libedge_veda.a"
+elif [ -f "$BUILD_IOS_DEVICE/$BUILD_TYPE/libedge_veda.a" ]; then
     DEVICE_LIB="$BUILD_IOS_DEVICE/$BUILD_TYPE/libedge_veda.a"
+# Xcode-style paths
+elif [ -f "$BUILD_IOS_DEVICE/$BUILD_TYPE-iphoneos/edge_veda.framework/edge_veda" ]; then
+    DEVICE_LIB="$BUILD_IOS_DEVICE/$BUILD_TYPE-iphoneos/edge_veda.framework/edge_veda"
+elif [ -f "$BUILD_IOS_DEVICE/$BUILD_TYPE-iphoneos/libedge_veda.a" ]; then
+    DEVICE_LIB="$BUILD_IOS_DEVICE/$BUILD_TYPE-iphoneos/libedge_veda.a"
+else
+    # Fallback: search for any edge_veda library
+    DEVICE_LIB=$(find "$BUILD_IOS_DEVICE" \( -name "libedge_veda.a" -o -path "*/edge_veda.framework/edge_veda" \) 2>/dev/null | head -1)
 fi
 
-if [ ! -f "$DEVICE_LIB" ]; then
-    echo "ERROR: Device library not found at $DEVICE_LIB"
-    echo "Searching for .a files:"
-    find "$BUILD_IOS_DEVICE" -name "*.a" -ls
+if [ -z "$DEVICE_LIB" ] || [ ! -f "$DEVICE_LIB" ]; then
+    echo "ERROR: Device library not found"
+    echo "Searching for edge_veda files:"
+    find "$BUILD_IOS_DEVICE" -name "*edge_veda*" -ls
     exit 1
 fi
 
@@ -135,28 +146,38 @@ mkdir -p "$BUILD_IOS_SIM"
 
 cmake -B "$BUILD_IOS_SIM" \
     -S "$CORE_DIR" \
-    -G Xcode \
+    -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$CORE_DIR/cmake/ios.toolchain.cmake" \
     -DPLATFORM=SIMULATORARM64 \
     -DDEPLOYMENT_TARGET=13.0 \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DEDGE_VEDA_BUILD_SHARED=OFF \
     -DEDGE_VEDA_BUILD_STATIC=ON \
-    -DEDGE_VEDA_ENABLE_METAL=OFF \
-    -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+    -DEDGE_VEDA_ENABLE_METAL=OFF
 
-cmake --build "$BUILD_IOS_SIM" --config $BUILD_TYPE -- -quiet
+cmake --build "$BUILD_IOS_SIM" --config $BUILD_TYPE
 
 # Find the built static library
-SIM_LIB=$(find "$BUILD_IOS_SIM" -name "libedge_veda.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-if [ -z "$SIM_LIB" ]; then
+SIM_LIB=""
+
+# Check standard locations (Ninja puts libs at build root or in subdirs)
+if [ -f "$BUILD_IOS_SIM/libedge_veda.a" ]; then
+    SIM_LIB="$BUILD_IOS_SIM/libedge_veda.a"
+elif [ -f "$BUILD_IOS_SIM/$BUILD_TYPE/libedge_veda.a" ]; then
     SIM_LIB="$BUILD_IOS_SIM/$BUILD_TYPE/libedge_veda.a"
+# Xcode-style paths
+elif [ -f "$BUILD_IOS_SIM/$BUILD_TYPE-iphonesimulator/edge_veda.framework/edge_veda" ]; then
+    SIM_LIB="$BUILD_IOS_SIM/$BUILD_TYPE-iphonesimulator/edge_veda.framework/edge_veda"
+elif [ -f "$BUILD_IOS_SIM/$BUILD_TYPE-iphonesimulator/libedge_veda.a" ]; then
+    SIM_LIB="$BUILD_IOS_SIM/$BUILD_TYPE-iphonesimulator/libedge_veda.a"
+else
+    SIM_LIB=$(find "$BUILD_IOS_SIM" \( -name "libedge_veda.a" -o -path "*/edge_veda.framework/edge_veda" \) 2>/dev/null | head -1)
 fi
 
-if [ ! -f "$SIM_LIB" ]; then
-    echo "ERROR: Simulator library not found at $SIM_LIB"
-    echo "Searching for .a files:"
-    find "$BUILD_IOS_SIM" -name "*.a" -ls
+if [ -z "$SIM_LIB" ] || [ ! -f "$SIM_LIB" ]; then
+    echo "ERROR: Simulator library not found"
+    echo "Searching for edge_veda files:"
+    find "$BUILD_IOS_SIM" -name "*edge_veda*" -ls
     exit 1
 fi
 
@@ -167,29 +188,33 @@ echo "Simulator library size: $(du -h "$SIM_LIB" | cut -f1)"
 echo ""
 echo "=== Collecting llama.cpp libraries ==="
 
-# Device libs
-DEVICE_LLAMA_LIB=$(find "$BUILD_IOS_DEVICE" -name "libllama.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-DEVICE_GGML_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-DEVICE_GGML_BASE_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-base.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-DEVICE_GGML_METAL_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-metal.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-DEVICE_GGML_CPU_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-cpu.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
+# Device libs - search in all possible locations
+DEVICE_LLAMA_LIB=$(find "$BUILD_IOS_DEVICE" -name "libllama.a" 2>/dev/null | head -1)
+DEVICE_GGML_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml.a" 2>/dev/null | head -1)
+DEVICE_GGML_BASE_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-base.a" 2>/dev/null | head -1)
+DEVICE_GGML_METAL_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-metal.a" 2>/dev/null | head -1)
+DEVICE_GGML_CPU_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-cpu.a" 2>/dev/null | head -1)
+DEVICE_GGML_BLAS_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-blas.a" 2>/dev/null | head -1)
 
 echo "Device llama: $DEVICE_LLAMA_LIB"
 echo "Device ggml: $DEVICE_GGML_LIB"
 echo "Device ggml-base: $DEVICE_GGML_BASE_LIB"
 echo "Device ggml-metal: $DEVICE_GGML_METAL_LIB"
 echo "Device ggml-cpu: $DEVICE_GGML_CPU_LIB"
+echo "Device ggml-blas: $DEVICE_GGML_BLAS_LIB"
 
-# Simulator libs
-SIM_LLAMA_LIB=$(find "$BUILD_IOS_SIM" -name "libllama.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-SIM_GGML_LIB=$(find "$BUILD_IOS_SIM" -name "libggml.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-SIM_GGML_BASE_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-base.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
-SIM_GGML_CPU_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-cpu.a" -path "*$BUILD_TYPE*" 2>/dev/null | head -1)
+# Simulator libs - search in all possible locations
+SIM_LLAMA_LIB=$(find "$BUILD_IOS_SIM" -name "libllama.a" 2>/dev/null | head -1)
+SIM_GGML_LIB=$(find "$BUILD_IOS_SIM" -name "libggml.a" 2>/dev/null | head -1)
+SIM_GGML_BASE_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-base.a" 2>/dev/null | head -1)
+SIM_GGML_CPU_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-cpu.a" 2>/dev/null | head -1)
+SIM_GGML_BLAS_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-blas.a" 2>/dev/null | head -1)
 
 echo "Simulator llama: $SIM_LLAMA_LIB"
 echo "Simulator ggml: $SIM_GGML_LIB"
 echo "Simulator ggml-base: $SIM_GGML_BASE_LIB"
 echo "Simulator ggml-cpu: $SIM_GGML_CPU_LIB"
+echo "Simulator ggml-blas: $SIM_GGML_BLAS_LIB"
 
 # Merge libraries into single static library per platform
 echo ""
@@ -205,6 +230,7 @@ DEVICE_LIBS_TO_MERGE="$DEVICE_LIB"
 [ -n "$DEVICE_GGML_BASE_LIB" ] && [ -f "$DEVICE_GGML_BASE_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_BASE_LIB"
 [ -n "$DEVICE_GGML_METAL_LIB" ] && [ -f "$DEVICE_GGML_METAL_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_METAL_LIB"
 [ -n "$DEVICE_GGML_CPU_LIB" ] && [ -f "$DEVICE_GGML_CPU_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_CPU_LIB"
+[ -n "$DEVICE_GGML_BLAS_LIB" ] && [ -f "$DEVICE_GGML_BLAS_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_BLAS_LIB"
 
 # Build list of simulator libraries to merge
 SIM_LIBS_TO_MERGE="$SIM_LIB"
@@ -212,6 +238,7 @@ SIM_LIBS_TO_MERGE="$SIM_LIB"
 [ -n "$SIM_GGML_LIB" ] && [ -f "$SIM_GGML_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_LIB"
 [ -n "$SIM_GGML_BASE_LIB" ] && [ -f "$SIM_GGML_BASE_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_BASE_LIB"
 [ -n "$SIM_GGML_CPU_LIB" ] && [ -f "$SIM_GGML_CPU_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_CPU_LIB"
+[ -n "$SIM_GGML_BLAS_LIB" ] && [ -f "$SIM_GGML_BLAS_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_BLAS_LIB"
 
 echo "Merging device libraries: $DEVICE_LIBS_TO_MERGE"
 # shellcheck disable=SC2086
@@ -229,6 +256,24 @@ libtool -static -o "$MERGED_DIR/simulator/libedge_veda_full.a" $SIM_LIBS_TO_MERG
 
 echo "Merged device library size: $(du -h "$MERGED_DIR/device/libedge_veda_full.a" | cut -f1)"
 echo "Merged simulator library size: $(du -h "$MERGED_DIR/simulator/libedge_veda_full.a" | cut -f1)"
+
+# Strip bitcode from libraries (required for xcframework creation)
+echo ""
+echo "=== Stripping bitcode ==="
+if command -v bitcode_strip &> /dev/null || xcrun --find bitcode_strip &> /dev/null; then
+    BITCODE_STRIP=$(xcrun --find bitcode_strip 2>/dev/null || echo "bitcode_strip")
+    echo "Using: $BITCODE_STRIP"
+
+    "$BITCODE_STRIP" -r "$MERGED_DIR/device/libedge_veda_full.a" -o "$MERGED_DIR/device/libedge_veda_full_stripped.a" 2>/dev/null && \
+        mv "$MERGED_DIR/device/libedge_veda_full_stripped.a" "$MERGED_DIR/device/libedge_veda_full.a" && \
+        echo "Device library: bitcode stripped" || echo "Device library: no bitcode found or strip failed"
+
+    "$BITCODE_STRIP" -r "$MERGED_DIR/simulator/libedge_veda_full.a" -o "$MERGED_DIR/simulator/libedge_veda_full_stripped.a" 2>/dev/null && \
+        mv "$MERGED_DIR/simulator/libedge_veda_full_stripped.a" "$MERGED_DIR/simulator/libedge_veda_full.a" && \
+        echo "Simulator library: bitcode stripped" || echo "Simulator library: no bitcode found or strip failed"
+else
+    echo "WARNING: bitcode_strip not found, xcframework creation may fail"
+fi
 
 # Verify library sizes are under 15MB
 echo ""
