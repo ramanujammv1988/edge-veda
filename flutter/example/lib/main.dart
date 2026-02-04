@@ -28,7 +28,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final EdgeVeda _edgeVeda = EdgeVeda();
   final ModelManager _modelManager = ModelManager();
   final TextEditingController _promptController = TextEditingController();
@@ -36,6 +36,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _isInitialized = false;
   bool _isLoading = false;
+  bool _isGenerating = false; // Track active generation for lifecycle cancellation
   bool _isDownloading = false;
   double _downloadProgress = 0.0;
   String? _modelPath;
@@ -53,16 +54,51 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Register lifecycle observer for iOS background handling (Pitfall 5 - Critical)
+    WidgetsBinding.instance.addObserver(this);
     _checkAndDownloadModel();
   }
 
   @override
   void dispose() {
+    // CRITICAL: Remove observer FIRST to prevent callbacks after disposal
+    WidgetsBinding.instance.removeObserver(this);
     _edgeVeda.dispose();
     _modelManager.dispose();
     _promptController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Handle app lifecycle changes - MANDATORY for App Store approval
+  ///
+  /// iOS kills apps that run CPU-intensive tasks in the background.
+  /// This implements Pitfall 5 (Critical) from research: background handling.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // App is being backgrounded - cancel any active generation
+      if (_isGenerating) {
+        _isGenerating = false;
+        setState(() {
+          _isLoading = false;
+        });
+        // Show user-friendly message about cancellation
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Generation cancelled - app backgrounded'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        print('EdgeVeda: Generation cancelled due to app backgrounding');
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      // App is foregrounded again - no action needed, user can start new generation
+      print('EdgeVeda: App resumed');
+    }
   }
 
   Future<void> _checkAndDownloadModel() async {
@@ -157,6 +193,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       _isLoading = true;
+      _isGenerating = true; // Track for lifecycle cancellation
       _tokenCount = 0;
       _timeToFirstTokenMs = null;
       _tokensPerSecond = null;
@@ -175,6 +212,12 @@ class _ChatScreenState extends State<ChatScreen> {
           topP: 0.9,
         ),
       );
+
+      // Check if generation was cancelled while backgrounded
+      if (!_isGenerating) {
+        print('EdgeVeda: Generation completed but was cancelled by backgrounding');
+        return;
+      }
 
       // Calculate TTFT (time to first token - for non-streaming, use latency)
       _timeToFirstTokenMs = _stopwatch.elapsedMilliseconds;
@@ -211,6 +254,8 @@ class _ChatScreenState extends State<ChatScreen> {
         _isLoading = false;
       });
       _showError('Generation failed: ${e.toString()}');
+    } finally {
+      _isGenerating = false; // Always clear generation flag
     }
   }
 
@@ -478,7 +523,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 4,
                   offset: const Offset(0, -2),
                 ),
