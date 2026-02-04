@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter iOS apps with a simple API - text in, text out.
-**Current focus:** Phase 1 - C++ Core + llama.cpp Integration
+**Current focus:** Phase 2 - Flutter FFI + Model Management
 
 ## Current Position
 
-Phase: 1 of 4 (C++ Core + llama.cpp Integration) **COMPLETE**
-Plan: 4 of 4 complete
-Status: Phase complete - Ready for Phase 2
-Last activity: 2026-02-04 - Completed 01-04-PLAN.md (Smoke test passed: 79 tok/sec)
+Phase: 2 of 4 (Flutter FFI + Model Management)
+Plan: 1 of 4 complete
+Status: In progress
+Last activity: 2026-02-04 - Completed 02-01-PLAN.md (FFI bindings + memory helpers)
 
-Progress: [##########] 100% (Phase 1)
+Progress: [#####-----] 50% (Phase 1: 4/4, Phase 2: 1/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 6.0 min
-- Total execution time: 0.40 hours
+- Total plans completed: 5
+- Average duration: 5.8 min
+- Total execution time: 0.48 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 4/4 | 24min | 6.0min |
+| 02 | 1/4 | 5min | 5.0min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5min), 01-02 (4min), 01-03 (8min), 01-04 (7min)
+- Last 5 plans: 01-02 (4min), 01-03 (8min), 01-04 (7min), 02-01 (5min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -58,11 +59,14 @@ Recent decisions affecting current work:
 - (01-03) XCFramework is build artifact (gitignored), not committed to repo
 - (01-04) Updated to new llama.cpp API (vocab-based tokenization, llama_model_* functions)
 - (01-04) Smoke test achieved 79 tok/sec with Llama 3.2 1B Q4_K_M on M1 Mac
+- (02-01) Dart enums use named value property for C interop (not ordinal)
+- (02-01) RAII scopes provide both free() and use() pattern for flexibility
+- (02-01) Memory ownership: Dart allocs -> calloc.free(), C++ allocs -> ev_free_string()
 
 ### Pending Todos
 
+- Install Flutter SDK for dart analyze verification
 - Install Xcode for iOS simulator/device builds (optional - macOS build works)
-- Begin Phase 2 planning (Flutter FFI + Model Management)
 
 ### Blockers/Concerns
 
@@ -74,17 +78,19 @@ Recent decisions affecting current work:
 **Phase 2 Risks:**
 - FFI threading violations will block UI - must use background isolate from start
 - File path sandbox violations on iOS - must use correct path_provider API
+- ~~FFI struct layout mismatch~~ ADDRESSED in 02-01 with exact edge_veda.h matching
 
 **Environment Notes:**
 - ~~CMake not installed in dev environment~~ RESOLVED: Installed via Homebrew (4.2.3)
+- Flutter SDK not installed - needed for dart analyze verification
 - Xcode not installed (only Command Line Tools) - required for actual iOS build
 - Build script verified structurally; actual compilation deferred until Xcode available
 
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Phase 1 COMPLETE - Smoke test verified (79 tok/sec)
+Stopped at: Completed 02-01-PLAN.md (FFI bindings + RAII memory helpers)
 Resume file: None
 
 ---
-*Next step: Plan Phase 2 (Flutter FFI + Model Management)*
+*Next step: Execute 02-02-PLAN.md (Model Download Manager)*
