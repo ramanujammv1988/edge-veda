@@ -1,0 +1,30 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Effective Dart rules
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    prefer_final_fields: true
+    prefer_final_locals: true
+    avoid_print: false  # Allow print for SDK logging
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    require_trailing_commas: false
+
+    # Additional best practices
+    avoid_returning_null_for_void: true
+    avoid_unnecessary_containers: true
+    avoid_void_async: true
+    cancel_subscriptions: true
+    close_sinks: true
+    prefer_is_empty: true
+    prefer_is_not_empty: true
+    use_key_in_widget_constructors: true
+
+analyzer:
+  exclude:
+    - lib/src/ffi/generated_bindings.dart  # Exclude generated FFI bindings
+  errors:
+    missing_required_param: error
+    missing_return: error
