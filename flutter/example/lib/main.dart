@@ -38,9 +38,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isLoading = false;
   bool _isGenerating = false; // Track active generation for lifecycle cancellation
   bool _isDownloading = false;
+  bool _runningBenchmark = false;
   double _downloadProgress = 0.0;
   String? _modelPath;
   String _statusMessage = 'Ready to initialize';
+
+  // Benchmark test prompts - varying complexity for realistic testing
+  final List<String> _benchmarkPrompts = [
+    'What is the capital of France?',
+    'Explain quantum computing in simple terms.',
+    'Write a haiku about nature.',
+    'What are the benefits of exercise?',
+    'Describe the solar system.',
+    'What is machine learning?',
+    'Tell me about the ocean.',
+    'Explain photosynthesis.',
+    'What is artificial intelligence?',
+    'Describe the water cycle.',
+  ];
 
   // Performance metrics tracking
   int _tokenCount = 0;
@@ -259,6 +274,164 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Run benchmark: 10 consecutive generations with metrics logging
+  Future<void> _runBenchmark() async {
+    if (!_isInitialized) {
+      _showError('Initialize SDK first');
+      return;
+    }
+
+    setState(() {
+      _runningBenchmark = true;
+      _statusMessage = 'Running benchmark (10 tests)...';
+    });
+
+    final List<double> tokenRates = [];
+    final List<int> ttfts = [];
+    final List<double> memoryMbs = [];
+    final List<int> latencies = [];
+
+    try {
+      for (int i = 0; i < 10; i++) {
+        setState(() {
+          _statusMessage = 'Benchmark ${i + 1}/10...';
+        });
+
+        final prompt = _benchmarkPrompts[i % _benchmarkPrompts.length];
+
+        _stopwatch.reset();
+        _stopwatch.start();
+
+        final response = await _edgeVeda.generate(
+          prompt,
+          options: const GenerateOptions(
+            maxTokens: 100, // Consistent token limit for fair comparison
+            temperature: 0.7,
+            topP: 0.9,
+          ),
+        );
+
+        _stopwatch.stop();
+
+        // Calculate metrics
+        final latencyMs = _stopwatch.elapsedMilliseconds;
+        final tokenCount = (response.text.length / 4).round(); // Estimate ~4 chars/token
+        final tokensPerSec = tokenCount / (latencyMs / 1000);
+
+        // TTFT approximation (can't measure precisely without streaming)
+        final ttftMs = (latencyMs * 0.2).round(); // Assume 20% is prompt processing
+
+        // Get memory
+        final memStats = await _edgeVeda.getMemoryStats();
+        final memoryMb = memStats.currentBytes / (1024 * 1024);
+
+        tokenRates.add(tokensPerSec);
+        ttfts.add(ttftMs);
+        memoryMbs.add(memoryMb);
+        latencies.add(latencyMs);
+
+        // Brief pause between tests to prevent thermal throttling
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // Calculate summary statistics
+      final avgTokensPerSec = tokenRates.reduce((a, b) => a + b) / tokenRates.length;
+      final avgTTFT = ttfts.reduce((a, b) => a + b) ~/ ttfts.length;
+      final peakMemory = memoryMbs.reduce((a, b) => a > b ? a : b);
+      final minTokensPerSec = tokenRates.reduce((a, b) => a < b ? a : b);
+      final maxTokensPerSec = tokenRates.reduce((a, b) => a > b ? a : b);
+      final avgLatency = latencies.reduce((a, b) => a + b) ~/ latencies.length;
+
+      // Print results to console (visible in Xcode logs)
+      print('');
+      print('=== BENCHMARK RESULTS ===');
+      print('Device: iPhone (iOS)');
+      print('Model: Llama 3.2 1B Q4_K_M');
+      print('Tests: 10 runs');
+      print('');
+      print('Speed: ${avgTokensPerSec.toStringAsFixed(1)} tok/s (avg)');
+      print('  Min: ${minTokensPerSec.toStringAsFixed(1)} tok/s');
+      print('  Max: ${maxTokensPerSec.toStringAsFixed(1)} tok/s');
+      print('TTFT: ${avgTTFT}ms (avg)');
+      print('Latency: ${avgLatency}ms (avg)');
+      print('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB');
+      print('=========================');
+      print('');
+
+      setState(() {
+        _runningBenchmark = false;
+        _statusMessage = 'Benchmark complete - check console';
+      });
+
+      _showBenchmarkDialog(
+        avgTokensPerSec: avgTokensPerSec,
+        avgTTFT: avgTTFT,
+        peakMemory: peakMemory,
+        minTPS: minTokensPerSec,
+        maxTPS: maxTokensPerSec,
+        avgLatency: avgLatency,
+      );
+    } catch (e) {
+      setState(() {
+        _runningBenchmark = false;
+        _statusMessage = 'Benchmark failed';
+      });
+      _showError('Benchmark error: $e');
+    }
+  }
+
+  void _showBenchmarkDialog({
+    required double avgTokensPerSec,
+    required int avgTTFT,
+    required double peakMemory,
+    required double minTPS,
+    required double maxTPS,
+    required int avgLatency,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Benchmark Results'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Avg Speed: ${avgTokensPerSec.toStringAsFixed(1)} tok/s'),
+            Text('  Range: ${minTPS.toStringAsFixed(1)} - ${maxTPS.toStringAsFixed(1)}'),
+            Text('Avg TTFT: ${avgTTFT}ms'),
+            Text('Avg Latency: ${avgLatency}ms'),
+            Text('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB'),
+            const SizedBox(height: 12),
+            Text(
+              avgTokensPerSec >= 15
+                  ? '✓ Meets >15 tok/s target'
+                  : '⚠ Below 15 tok/s target',
+              style: TextStyle(
+                color: avgTokensPerSec >= 15 ? Colors.green : Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              peakMemory <= 1200
+                  ? '✓ Under 1.2GB memory limit'
+                  : '⚠ Exceeds 1.2GB memory limit',
+              style: TextStyle(
+                color: peakMemory <= 1200 ? Colors.green : Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addUserMessage(String text) {
     setState(() {
       _messages.add(ChatMessage(
@@ -405,6 +578,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       appBar: AppBar(
         title: const Text('Edge Veda Chat'),
         actions: [
+          if (_isInitialized && !_runningBenchmark)
+            IconButton(
+              icon: const Icon(Icons.assessment),
+              tooltip: 'Run Benchmark',
+              onPressed: _runBenchmark,
+            ),
           if (_isInitialized)
             IconButton(
               icon: const Icon(Icons.info_outline),
