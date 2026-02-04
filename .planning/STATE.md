@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 2 of 4 (Flutter FFI + Model Management)
-Plan: 2 of 4 complete
+Plan: 3 of 4 complete
 Status: In progress
-Last activity: 2026-02-04 - Completed 02-02-PLAN.md (Atomic download pattern)
+Last activity: 2026-02-04 - Completed 02-03-PLAN.md (Isolate.run() integration)
 
-Progress: [######----] 60% (Phase 1: 4/4, Phase 2: 2/4)
+Progress: [#######---] 70% (Phase 1: 4/4, Phase 2: 3/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 6.3 min
-- Total execution time: 0.63 hours
+- Total plans completed: 7
+- Average duration: 5.6 min
+- Total execution time: 0.65 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 4/4 | 24min | 6.0min |
-| 02 | 2/4 | 13min | 6.5min |
+| 02 | 3/4 | 15min | 5.0min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4min), 01-03 (8min), 01-04 (7min), 02-01 (5min), 02-02 (8min)
-- Trend: Stable
+- Last 5 plans: 01-03 (8min), 01-04 (7min), 02-01 (5min), 02-02 (8min), 02-03 (2min)
+- Trend: Stable (02-03 fast due to focused scope)
 
 *Updated after each plan completion*
 
@@ -66,6 +66,9 @@ Recent decisions affecting current work:
 - (02-02) NativeErrorCode.toException() returns nullable for success code handling
 - (02-02) 3 retries with exponential backoff (1s/2s/4s) for transient network errors
 - (02-02) Atomic temp file pattern: download to .tmp, verify checksum, rename
+- (02-03) Each Isolate.run() creates fresh context (correct for v1, efficient pattern in v2)
+- (02-03) Streaming deferred to v2 (requires long-lived worker isolate)
+- (02-03) Validation runs on main isolate (no FFI, safe)
 
 ### Pending Todos
 
@@ -80,7 +83,7 @@ Recent decisions affecting current work:
 - ~~Binary size can explode with desktop SIMD - disable non-ARM optimizations in CMake~~ RESOLVED in 01-01
 
 **Phase 2 Risks:**
-- FFI threading violations will block UI - must use background isolate from start (addressed in 02-03)
+- ~~FFI threading violations will block UI - must use background isolate from start~~ RESOLVED in 02-03 (Isolate.run() pattern)
 - ~~File path sandbox violations on iOS - must use correct path_provider API~~ RESOLVED in 02-02 (uses applicationSupportDirectory)
 - ~~FFI struct layout mismatch~~ ADDRESSED in 02-01 with exact edge_veda.h matching
 
@@ -92,9 +95,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-04 11:58 UTC
-Stopped at: Completed 02-02-PLAN.md (Atomic download + typed exceptions)
+Last session: 2026-02-04 12:06 UTC
+Stopped at: Completed 02-03-PLAN.md (Isolate.run() integration)
 Resume file: None
 
 ---
-*Next step: Execute 02-03-PLAN.md (Isolate.run() integration)*
+*Next step: Execute 02-04-PLAN.md (Public API and exports)*
