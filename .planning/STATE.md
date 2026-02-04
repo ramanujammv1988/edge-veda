@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter iOS apps with a simple API - text in, text out.
-**Current focus:** Phase 4 - Release
+**Current focus:** Phase 4 - Release (COMPLETE)
 
 ## Current Position
 
-Phase: 4 of 4 (Release)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-02-04 - Completed 04-01-PLAN.md (Package Metadata Sync)
+Phase: 4 of 4 (Release) - COMPLETE
+Plan: 2 of 2 complete
+Status: PROJECT COMPLETE
+Last activity: 2026-02-04 - Completed 04-02-PLAN.md (Release Workflow)
 
-Progress: [#########=] 92% (Phase 1: 4/4, Phase 2: 4/4, Phase 3: 2/4, Phase 4: 1/2)
+Progress: [##########] 100% (Phase 1: 4/4, Phase 2: 4/4, Phase 3: 2/4, Phase 4: 2/2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 5.5 min
-- Total execution time: 1.0 hours
+- Total plans completed: 12
+- Average duration: 7.6 min
+- Total execution time: 1.75 hours
 
 **By Phase:**
 
@@ -30,11 +30,11 @@ Progress: [#########=] 92% (Phase 1: 4/4, Phase 2: 4/4, Phase 3: 2/4, Phase 4: 1
 | 01 | 4/4 | 24min | 6.0min |
 | 02 | 4/4 | 27min | 6.8min |
 | 03 | 2/4 | 12min | 6.0min |
-| 04 | 1/2 | 6min | 6.0min |
+| 04 | 2/2 | 50min | 25.0min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (2min), 02-04 (12min), 03-01 (6min), 03-02 (6min), 04-01 (6min)
-- Trend: Stable
+- Last 5 plans: 02-04 (12min), 03-01 (6min), 03-02 (6min), 04-01 (6min), 04-02 (44min)
+- Trend: Final plans longer due to validation and workflow complexity
 
 *Updated after each plan completion*
 
@@ -80,30 +80,17 @@ Recent decisions affecting current work:
 - (04-01) XCFramework distributed via GitHub Releases HTTP download
 - (04-01) prepare-release.sh validates without modifying files
 - (04-01) Dart Native Assets migration planned for v1.1.0
+- (04-02) PUB_TOKEN deferred - first release will be manual
+- (04-02) Three-job workflow: validate -> build-release -> publish
+- (04-02) Prerelease detection via version suffix (contains -)
 
 ### Pending Todos
 
-- Install Flutter SDK for dart analyze verification
-- Install Xcode for iOS simulator/device builds (optional - macOS build works)
+- Configure PUB_TOKEN secret in GitHub for automated publishing (optional - v1.0.0 manual)
 
 ### Blockers/Concerns
 
-**Phase 1 Risks:**
-- ~~iOS memory management (jetsam) requires proactive monitoring - memory_guard.cpp exists but needs integration~~ RESOLVED in 01-02
-- ~~Metal backend configuration is error-prone - must verify build flags before first compile~~ RESOLVED in 01-01
-- ~~Binary size can explode with desktop SIMD - disable non-ARM optimizations in CMake~~ RESOLVED in 01-01
-
-**Phase 2 Risks:**
-- ~~FFI threading violations will block UI - must use background isolate from start~~ RESOLVED in 02-03 (Isolate.run() pattern)
-- ~~File path sandbox violations on iOS - must use correct path_provider API~~ RESOLVED in 02-02 (uses applicationSupportDirectory)
-- ~~FFI struct layout mismatch~~ ADDRESSED in 02-01 with exact edge_veda.h matching
-
-**Phase 3 Risks:**
-- Plans 03-01 and 03-02 execute in parallel - both modify main.dart, API sync needed
-  - RESOLVED: 03-02 used generate() and getMemoryStats() consistent with 03-01 changes
-
-**Phase 4 Risks:**
-- None identified - version sync validated, dry-run passed
+**All Phase Risks RESOLVED**
 
 **Environment Notes:**
 - ~~CMake not installed in dev environment~~ RESOLVED: Installed via Homebrew (4.2.3)
@@ -114,8 +101,17 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Completed 04-01-PLAN.md
+Stopped at: PROJECT COMPLETE - All plans executed
 Resume file: None
 
 ---
-*Next step: Execute 04-02-PLAN.md (Release Workflow)*
+*Project complete! Ready for v1.0.0 release.*
+
+## Release Checklist
+
+1. [ ] Build XCFramework: `./scripts/build-ios.sh --clean --release`
+2. [ ] Run validation: `./scripts/prepare-release.sh 1.0.0`
+3. [ ] Create and push tag: `git tag v1.0.0 && git push origin v1.0.0`
+4. [ ] (Auto) GitHub Actions builds XCFramework and creates Release
+5. [ ] (Manual) `cd flutter && dart pub publish`
+6. [ ] (Optional) Configure PUB_TOKEN for future automated publishing
