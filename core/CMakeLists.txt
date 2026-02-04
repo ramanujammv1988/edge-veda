@@ -33,7 +33,9 @@ option(EDGE_VEDA_BUILD_STATIC "Build static library" OFF)
 option(EDGE_VEDA_BUILD_TESTS "Build tests" OFF)
 
 # Enable LTO for release builds (reduces binary size ~10-20%)
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+# Note: LTO disabled for iOS to allow XCFramework creation
+# LTO produces LLVM bitcode object files that can't be archived directly
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT IOS)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
@@ -255,6 +257,7 @@ if(EDGE_VEDA_BUILD_STATIC)
     install(TARGETS edge_veda_static
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
+        FRAMEWORK DESTINATION lib
     )
 endif()
 
