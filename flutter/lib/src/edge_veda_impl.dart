@@ -142,6 +142,53 @@ class EdgeVeda {
         details: 'Got: ${config.contextLength}',
       );
     }
+
+    if (config.maxMemoryMb < 256) {
+      throw ConfigurationException(
+        'maxMemoryMb must be at least 256 MB',
+        details: 'Got: ${config.maxMemoryMb}',
+      );
+    }
+  }
+
+  /// Validate generation options before generating
+  ///
+  /// Runs on main isolate (no FFI calls - safe).
+  void _validateOptions(GenerateOptions options) {
+    if (options.maxTokens < 1 || options.maxTokens > 32768) {
+      throw ConfigurationException(
+        'maxTokens must be between 1 and 32768',
+        details: 'Got: ${options.maxTokens}',
+      );
+    }
+
+    if (options.temperature < 0.0 || options.temperature > 2.0) {
+      throw ConfigurationException(
+        'temperature must be between 0.0 and 2.0',
+        details: 'Got: ${options.temperature}',
+      );
+    }
+
+    if (options.topP < 0.0 || options.topP > 1.0) {
+      throw ConfigurationException(
+        'topP must be between 0.0 and 1.0',
+        details: 'Got: ${options.topP}',
+      );
+    }
+
+    if (options.topK < 1 || options.topK > 100) {
+      throw ConfigurationException(
+        'topK must be between 1 and 100',
+        details: 'Got: ${options.topK}',
+      );
+    }
+
+    if (options.repeatPenalty < 0.0 || options.repeatPenalty > 2.0) {
+      throw ConfigurationException(
+        'repeatPenalty must be between 0.0 and 2.0',
+        details: 'Got: ${options.repeatPenalty}',
+      );
+    }
   }
 
   /// Generate text from a prompt
@@ -160,6 +207,9 @@ class EdgeVeda {
     }
 
     options ??= const GenerateOptions();
+
+    // Validate generation options (safe on main isolate - no FFI)
+    _validateOptions(options);
 
     // Capture all config values as primitives for isolate transfer
     final modelPath = _config!.modelPath;
