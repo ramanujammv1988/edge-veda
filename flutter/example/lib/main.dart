@@ -363,15 +363,34 @@ class _ChatScreenState extends State<ChatScreen> {
           if (_isInitialized)
             IconButton(
               icon: const Icon(Icons.info_outline),
-              onPressed: () {
-                final memoryMb = _edgeVeda.getMemoryUsageMb();
+              onPressed: () async {
+                final memStats = await _edgeVeda.getMemoryStats();
+                final memoryMb = memStats.currentBytes / (1024 * 1024);
+                final usagePercent = (memStats.usagePercent * 100).toStringAsFixed(1);
+
+                if (!mounted) return;
+
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Edge Veda Info'),
-                    content: Text(
-                      'Memory Usage: ${memoryMb.toStringAsFixed(1)} MB\n'
-                      'Status: $_statusMessage',
+                    title: const Text('Performance Info'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Memory: ${memoryMb.toStringAsFixed(1)} MB'),
+                        Text('Usage: $usagePercent%'),
+                        if (memStats.isHighPressure)
+                          const Text(
+                            'High memory pressure',
+                            style: TextStyle(color: Colors.orange),
+                          ),
+                        const SizedBox(height: 8),
+                        if (_tokensPerSecond != null)
+                          Text('Last Speed: ${_tokensPerSecond!.toStringAsFixed(1)} tok/s'),
+                        if (_timeToFirstTokenMs != null)
+                          Text('Last TTFT: ${_timeToFirstTokenMs}ms'),
+                      ],
                     ),
                     actions: [
                       TextButton(
