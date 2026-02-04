@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter iOS apps with a simple API - text in, text out.
-**Current focus:** Phase 3 - Demo App + Polish
+**Current focus:** Phase 4 - Release
 
 ## Current Position
 
-Phase: 3 of 4 (Demo App + Polish)
-Plan: 2 of 4 complete
+Phase: 4 of 4 (Release)
+Plan: 1 of 2 complete
 Status: In progress
-Last activity: 2026-02-04 - Completed 03-02-PLAN.md (Performance Metrics Display)
+Last activity: 2026-02-04 - Completed 04-01-PLAN.md (Package Metadata Sync)
 
-Progress: [########=-] 83% (Phase 1: 4/4, Phase 2: 4/4, Phase 3: 2/4)
+Progress: [#########=] 92% (Phase 1: 4/4, Phase 2: 4/4, Phase 3: 2/4, Phase 4: 1/2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 5.5 min
-- Total execution time: 0.92 hours
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [########=-] 83% (Phase 1: 4/4, Phase 2: 4/4, Phase 3: 2/4)
 | 01 | 4/4 | 24min | 6.0min |
 | 02 | 4/4 | 27min | 6.8min |
 | 03 | 2/4 | 12min | 6.0min |
+| 04 | 1/2 | 6min | 6.0min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (8min), 02-03 (2min), 02-04 (12min), 03-01 (6min), 03-02 (6min)
+- Last 5 plans: 02-03 (2min), 02-04 (12min), 03-01 (6min), 03-02 (6min), 04-01 (6min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - (03-02) Stopwatch-based timing more accurate than DateTime.now() arithmetic
 - (03-02) Token estimation: ~4 chars per token heuristic for English text
 - (03-02) Memory warning threshold at 1000MB (1.2GB limit from PRD)
+- (04-01) XCFramework distributed via GitHub Releases HTTP download
+- (04-01) prepare-release.sh validates without modifying files
+- (04-01) Dart Native Assets migration planned for v1.1.0
 
 ### Pending Todos
 
@@ -98,6 +102,9 @@ Recent decisions affecting current work:
 - Plans 03-01 and 03-02 execute in parallel - both modify main.dart, API sync needed
   - RESOLVED: 03-02 used generate() and getMemoryStats() consistent with 03-01 changes
 
+**Phase 4 Risks:**
+- None identified - version sync validated, dry-run passed
+
 **Environment Notes:**
 - ~~CMake not installed in dev environment~~ RESOLVED: Installed via Homebrew (4.2.3)
 - Flutter SDK not installed - needed for dart analyze verification
@@ -107,8 +114,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Completed 03-02-PLAN.md
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
 
 ---
-*Next step: Execute remaining Phase 3 plans (03-03, 03-04)*
+*Next step: Execute 04-02-PLAN.md (Release Workflow)*
