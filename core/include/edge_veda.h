@@ -17,6 +17,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* Symbol visibility for FFI/dlsym access */
+#if defined(_WIN32) || defined(__CYGWIN__)
+#  ifdef EV_BUILD_SHARED
+#    define EV_API __declspec(dllexport)
+#  else
+#    define EV_API __declspec(dllimport)
+#  endif
+#else
+#  define EV_API __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,7 +44,7 @@ extern "C" {
  * @brief Get the version string of the Edge Veda SDK
  * @return Version string in format "MAJOR.MINOR.PATCH"
  */
-const char* ev_version(void);
+EV_API const char* ev_version(void);
 
 /* ============================================================================
  * Error Codes
@@ -59,7 +70,7 @@ typedef enum {
  * @param error Error code
  * @return Error message string
  */
-const char* ev_error_string(ev_error_t error);
+EV_API const char* ev_error_string(ev_error_t error);
 
 /* ============================================================================
  * Backend Types
@@ -76,21 +87,21 @@ typedef enum {
  * @brief Detect the best available backend for current platform
  * @return The recommended backend type
  */
-ev_backend_t ev_detect_backend(void);
+EV_API ev_backend_t ev_detect_backend(void);
 
 /**
  * @brief Check if a specific backend is available
  * @param backend Backend type to check
  * @return true if available, false otherwise
  */
-bool ev_is_backend_available(ev_backend_t backend);
+EV_API bool ev_is_backend_available(ev_backend_t backend);
 
 /**
  * @brief Get human-readable name for backend type
  * @param backend Backend type
  * @return Backend name string
  */
-const char* ev_backend_name(ev_backend_t backend);
+EV_API const char* ev_backend_name(ev_backend_t backend);
 
 /* ============================================================================
  * Configuration
@@ -141,7 +152,7 @@ typedef struct {
  * @brief Get default configuration with recommended settings
  * @param config Pointer to config structure to fill
  */
-void ev_config_default(ev_config* config);
+EV_API void ev_config_default(ev_config* config);
 
 /* ============================================================================
  * Context Management
@@ -158,20 +169,20 @@ typedef struct ev_context_impl* ev_context;
  * @param error Optional pointer to receive error code
  * @return Context handle on success, NULL on failure
  */
-ev_context ev_init(const ev_config* config, ev_error_t* error);
+EV_API ev_context ev_init(const ev_config* config, ev_error_t* error);
 
 /**
  * @brief Free Edge Veda context and release all resources
  * @param ctx Context handle to free
  */
-void ev_free(ev_context ctx);
+EV_API void ev_free(ev_context ctx);
 
 /**
  * @brief Check if context is valid and ready for inference
  * @param ctx Context handle
  * @return true if valid, false otherwise
  */
-bool ev_is_valid(ev_context ctx);
+EV_API bool ev_is_valid(ev_context ctx);
 
 /* ============================================================================
  * Generation Parameters
@@ -216,7 +227,7 @@ typedef struct {
  * @brief Get default generation parameters
  * @param params Pointer to parameters structure to fill
  */
-void ev_generation_params_default(ev_generation_params* params);
+EV_API void ev_generation_params_default(ev_generation_params* params);
 
 /* ============================================================================
  * Single-Shot Generation
@@ -234,7 +245,7 @@ void ev_generation_params_default(ev_generation_params* params);
  * @param output Pointer to receive generated text (caller must free with ev_free_string)
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_generate(
+EV_API ev_error_t ev_generate(
     ev_context ctx,
     const char* prompt,
     const ev_generation_params* params,
@@ -245,7 +256,7 @@ ev_error_t ev_generate(
  * @brief Free string allocated by Edge Veda
  * @param str String to free
  */
-void ev_free_string(char* str);
+EV_API void ev_free_string(char* str);
 
 /* ============================================================================
  * Streaming Generation
@@ -268,7 +279,7 @@ typedef struct ev_stream_impl* ev_stream;
  * @param error Optional pointer to receive error code
  * @return Stream handle on success, NULL on failure
  */
-ev_stream ev_generate_stream(
+EV_API ev_stream ev_generate_stream(
     ev_context ctx,
     const char* prompt,
     const ev_generation_params* params,
@@ -285,26 +296,26 @@ ev_stream ev_generate_stream(
  * @param error Optional pointer to receive error code
  * @return Next token string (caller must free with ev_free_string), or NULL when done
  */
-char* ev_stream_next(ev_stream stream, ev_error_t* error);
+EV_API char* ev_stream_next(ev_stream stream, ev_error_t* error);
 
 /**
  * @brief Check if stream has more tokens available
  * @param stream Stream handle
  * @return true if more tokens available, false if ended or error
  */
-bool ev_stream_has_next(ev_stream stream);
+EV_API bool ev_stream_has_next(ev_stream stream);
 
 /**
  * @brief Cancel ongoing streaming generation
  * @param stream Stream handle
  */
-void ev_stream_cancel(ev_stream stream);
+EV_API void ev_stream_cancel(ev_stream stream);
 
 /**
  * @brief Free stream handle and release resources
  * @param stream Stream handle to free
  */
-void ev_stream_free(ev_stream stream);
+EV_API void ev_stream_free(ev_stream stream);
 
 /* ============================================================================
  * Memory Management
@@ -339,7 +350,7 @@ typedef struct {
  * @param stats Pointer to stats structure to fill
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats);
+EV_API ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats);
 
 /**
  * @brief Set memory limit for context
@@ -351,7 +362,7 @@ ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats);
  * @param limit_bytes Memory limit in bytes (0 = no limit)
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_set_memory_limit(ev_context ctx, size_t limit_bytes);
+EV_API ev_error_t ev_set_memory_limit(ev_context ctx, size_t limit_bytes);
 
 /**
  * @brief Memory pressure callback function type
@@ -376,7 +387,7 @@ typedef void (*ev_memory_pressure_callback)(
  * @param user_data User data to pass to callback
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_set_memory_pressure_callback(
+EV_API ev_error_t ev_set_memory_pressure_callback(
     ev_context ctx,
     ev_memory_pressure_callback callback,
     void* user_data
@@ -387,7 +398,7 @@ ev_error_t ev_set_memory_pressure_callback(
  * @param ctx Context handle
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_memory_cleanup(ev_context ctx);
+EV_API ev_error_t ev_memory_cleanup(ev_context ctx);
 
 /* ============================================================================
  * Model Information
@@ -429,7 +440,7 @@ typedef struct {
  * @param info Pointer to info structure to fill
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info);
+EV_API ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info);
 
 /* ============================================================================
  * Utility Functions
@@ -439,21 +450,21 @@ ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info);
  * @brief Enable or disable verbose logging
  * @param enable true to enable, false to disable
  */
-void ev_set_verbose(bool enable);
+EV_API void ev_set_verbose(bool enable);
 
 /**
  * @brief Get last error message for context
  * @param ctx Context handle
  * @return Last error message string (valid until next API call)
  */
-const char* ev_get_last_error(ev_context ctx);
+EV_API const char* ev_get_last_error(ev_context ctx);
 
 /**
  * @brief Reset context state (clear conversation history)
  * @param ctx Context handle
  * @return Error code (EV_SUCCESS on success)
  */
-ev_error_t ev_reset(ev_context ctx);
+EV_API ev_error_t ev_reset(ev_context ctx);
 
 #ifdef __cplusplus
 }
