@@ -9,28 +9,28 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 
 ## Current Position
 
-Phase: 1 of 4 (C++ Core + llama.cpp Integration)
-Plan: 3 of 4 complete
-Status: In progress
-Last activity: 2026-02-04 - Completed 01-03-PLAN.md (iOS Build Script)
+Phase: 1 of 4 (C++ Core + llama.cpp Integration) **COMPLETE**
+Plan: 4 of 4 complete
+Status: Phase complete - Ready for Phase 2
+Last activity: 2026-02-04 - Completed 01-04-PLAN.md (Smoke test passed: 79 tok/sec)
 
-Progress: [####......] 30%
+Progress: [##########] 100% (Phase 1)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 5.7 min
-- Total execution time: 0.28 hours
+- Total plans completed: 4
+- Average duration: 6.0 min
+- Total execution time: 0.40 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 3/4 | 17min | 5.7min |
+| 01 | 4/4 | 24min | 6.0min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5min), 01-02 (4min), 01-03 (8min)
+- Last 5 plans: 01-01 (5min), 01-02 (4min), 01-03 (8min), 01-04 (7min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -56,10 +56,13 @@ Recent decisions affecting current work:
 - (01-03) Build device with Metal ON, simulator with Metal OFF (limited simulator Metal support)
 - (01-03) Merge llama.cpp/ggml libraries into single static archive for simpler linking
 - (01-03) XCFramework is build artifact (gitignored), not committed to repo
+- (01-04) Updated to new llama.cpp API (vocab-based tokenization, llama_model_* functions)
+- (01-04) Smoke test achieved 79 tok/sec with Llama 3.2 1B Q4_K_M on M1 Mac
 
 ### Pending Todos
 
-- Install Xcode to enable actual iOS build execution (required for Phase 2)
+- Install Xcode for iOS simulator/device builds (optional - macOS build works)
+- Begin Phase 2 planning (Flutter FFI + Model Management)
 
 ### Blockers/Concerns
 
@@ -80,8 +83,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Completed 01-03-PLAN.md (iOS Build Script)
+Stopped at: Phase 1 COMPLETE - Smoke test verified (79 tok/sec)
 Resume file: None
 
 ---
-*Next step: Execute 01-04-PLAN.md (Integration Testing) or install Xcode for actual build*
+*Next step: Plan Phase 2 (Flutter FFI + Model Management)*
