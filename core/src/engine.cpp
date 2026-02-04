@@ -644,18 +644,22 @@ ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats) {
     }
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
-
     std::memset(stats, 0, sizeof(ev_memory_stats));
 
-    // Get actual memory usage from memory guard
-    stats->current_bytes = memory_guard_get_current_usage();
+    // Get platform memory from memory guard
+    stats->current_bytes = static_cast<size_t>(memory_guard_get_current_usage());
     stats->peak_bytes = ctx->peak_memory_bytes;
     stats->limit_bytes = ctx->memory_limit;
 
-    // TODO: Get detailed memory breakdown from llama.cpp
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // stats->model_bytes = llama_get_model_size(ctx->model);
-    // stats->context_bytes = llama_get_state_size(ctx->ctx);
+    if (ctx->model) {
+        // Get model size (approximate)
+        stats->model_bytes = llama_model_size(ctx->model);
+    }
+    if (ctx->llama_ctx) {
+        // Context memory usage
+        stats->context_bytes = llama_state_get_size(ctx->llama_ctx);
+    }
 #endif
 
     // Update peak
@@ -714,11 +718,14 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
-    // TODO: Trigger llama.cpp cleanup
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // llama_kv_cache_clear(ctx->ctx);
+    // Clear KV cache to free memory
+    if (ctx->llama_ctx) {
+        llama_kv_cache_clear(ctx->llama_ctx);
+    }
 #endif
 
+    // Trigger platform memory cleanup
     memory_guard_cleanup();
 
     return EV_SUCCESS;
@@ -727,6 +734,9 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
 /* ============================================================================
  * Model Information
  * ========================================================================= */
+
+// Static buffer for model description (used by ev_get_model_info)
+static char g_model_desc[256] = {0};
 
 ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
     if (!ctx || !info) {
@@ -738,17 +748,23 @@ ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
     }
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
-
     std::memset(info, 0, sizeof(ev_model_info));
 
-    // TODO: Get model info from llama.cpp
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // info->name = llama_model_desc(ctx->model);
-    // info->architecture = llama_model_arch(ctx->model);
-    // info->num_parameters = llama_model_n_params(ctx->model);
-    // info->context_length = llama_n_ctx(ctx->ctx);
-    // info->embedding_dim = llama_n_embd(ctx->ctx);
-    // info->num_layers = llama_n_layer(ctx->ctx);
+    // Model description
+    llama_model_desc(ctx->model, g_model_desc, sizeof(g_model_desc));
+    info->name = g_model_desc;
+
+    // Architecture (most GGUF models are llama-based)
+    info->architecture = "llama";
+
+    // Parameters
+    info->num_parameters = llama_model_n_params(ctx->model);
+
+    // Context and embedding info
+    info->context_length = static_cast<int>(llama_n_ctx(ctx->llama_ctx));
+    info->embedding_dim = static_cast<int>(llama_n_embd(ctx->model));
+    info->num_layers = static_cast<int>(llama_n_layer(ctx->model));
 
     return EV_SUCCESS;
 #else
@@ -766,8 +782,20 @@ void ev_set_verbose(bool enable) {
     g_verbose = enable;
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // TODO: Set llama.cpp log level
-    // llama_log_set_verbosity(enable ? LLAMA_LOG_INFO : LLAMA_LOG_ERROR);
+    // llama.cpp uses log callback, set it based on verbosity
+    if (enable) {
+        llama_log_set([](enum ggml_log_level level, const char* text, void* /* user_data */) {
+            fprintf(stderr, "[llama] %s", text);
+            (void)level;
+        }, nullptr);
+    } else {
+        llama_log_set([](enum ggml_log_level level, const char* text, void* /* user_data */) {
+            // Suppress all but errors
+            if (level == GGML_LOG_LEVEL_ERROR) {
+                fprintf(stderr, "[llama] %s", text);
+            }
+        }, nullptr);
+    }
 #endif
 }
 
@@ -791,10 +819,8 @@ ev_error_t ev_reset(ev_context ctx) {
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
-    // TODO: Clear llama.cpp KV cache
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // llama_kv_cache_clear(ctx->ctx);
-
+    llama_kv_cache_clear(ctx->llama_ctx);
     return EV_SUCCESS;
 #else
     return EV_ERROR_NOT_IMPLEMENTED;
