@@ -280,6 +280,80 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
+  Widget _buildMetricsBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildMetricChip(
+            label: 'TTFT',
+            value: _timeToFirstTokenMs != null
+                ? '${_timeToFirstTokenMs}ms'
+                : '-',
+            icon: Icons.timer,
+          ),
+          _buildMetricChip(
+            label: 'Speed',
+            value: _tokensPerSecond != null
+                ? '${_tokensPerSecond!.toStringAsFixed(1)} tok/s'
+                : '-',
+            icon: Icons.speed,
+          ),
+          _buildMetricChip(
+            label: 'Memory',
+            value: _memoryMb != null
+                ? '${_memoryMb!.toStringAsFixed(0)} MB'
+                : '-',
+            icon: Icons.memory,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricChip({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: Colors.blue[700]),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue[900],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -348,6 +422,9 @@ class _ChatScreenState extends State<ChatScreen> {
           // Download progress
           if (_isDownloading)
             LinearProgressIndicator(value: _downloadProgress),
+
+          // Metrics bar (only visible after initialization)
+          if (_isInitialized) _buildMetricsBar(),
 
           // Messages list
           Expanded(
