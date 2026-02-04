@@ -9,6 +9,15 @@
 /// - Each Isolate.run() re-loads DynamicLibrary, creates context, performs op, frees context
 /// - Only primitive data (String, int, etc.) crosses isolate boundaries
 /// - Streaming deferred to v2 (requires long-lived worker isolate pattern)
+///
+/// ## Memory pressure handling for v1
+///
+/// Due to the per-request Isolate.run() architecture, real-time memory
+/// pressure callbacks from C++ are not supported in v1. Instead, use:
+/// - [EdgeVeda.getMemoryStats] to poll current memory usage
+/// - [EdgeVeda.isMemoryPressure] to check if usage exceeds threshold
+///
+/// For real-time callbacks, v2 will implement a long-lived worker isolate.
 library;
 
 import 'dart:async';
@@ -20,7 +29,17 @@ import 'package:ffi/ffi.dart';
 
 import 'ffi/bindings.dart';
 import 'ffi/native_memory.dart' show NativeConfigScope, NativeParamsScope;
-import 'types.dart';
+import 'types.dart' show
+    EdgeVedaConfig,
+    GenerateOptions,
+    GenerateResponse,
+    MemoryStats,
+    MemoryException,
+    NativeErrorCode,
+    InitializationException,
+    ModelLoadException,
+    GenerationException,
+    ConfigurationException;
 
 /// Main Edge Veda SDK class for on-device AI inference
 ///
@@ -370,5 +389,115 @@ class EdgeVeda {
   Future<void> dispose() async {
     _isInitialized = false;
     _config = null;
+  }
+
+  // ===========================================================================
+  // Memory Monitoring (R3.3 - Memory pressure handling via polling)
+  // ===========================================================================
+
+  /// Get current memory statistics from native layer
+  ///
+  /// Polls the native memory usage stats by creating a temporary context.
+  /// This is the v1 approach for memory monitoring - real-time callbacks
+  /// will be added in v2 with a long-lived worker isolate.
+  ///
+  /// Example:
+  /// ```dart
+  /// final stats = await edgeVeda.getMemoryStats();
+  /// print('Memory usage: ${stats.usagePercent * 100}%');
+  /// if (stats.isHighPressure) {
+  ///   // Consider unloading or reducing context size
+  /// }
+  /// ```
+  Future<MemoryStats> getMemoryStats() async {
+    _ensureInitialized();
+
+    // Capture config values as primitives for isolate transfer
+    final modelPath = _config!.modelPath;
+    final numThreads = _config!.numThreads;
+    final contextSize = _config!.contextLength;
+    final useGpu = _config!.useGpu;
+    final maxMemoryBytes = _config!.maxMemoryMb * 1024 * 1024;
+
+    // Run in background isolate (Pitfall 3 - Critical: no FFI on main)
+    return Isolate.run<MemoryStats>(() {
+      final bindings = EdgeVedaNativeBindings.instance;
+
+      // Allocate config struct
+      final configPtr = calloc<EvConfig>();
+      final modelPathPtr = modelPath.toNativeUtf8();
+      final errorPtr = calloc<ffi.Int32>();
+      final statsPtr = calloc<EvMemoryStats>();
+
+      ffi.Pointer<EvContextImpl>? ctx;
+      try {
+        // Populate config
+        configPtr.ref.modelPath = modelPathPtr;
+        configPtr.ref.backend = useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+        configPtr.ref.numThreads = numThreads;
+        configPtr.ref.contextSize = contextSize;
+        configPtr.ref.batchSize = 512;
+        configPtr.ref.memoryLimitBytes = maxMemoryBytes;
+        configPtr.ref.autoUnloadOnMemoryPressure = true;
+        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+        configPtr.ref.useMmap = true;
+        configPtr.ref.useMlock = false;
+        configPtr.ref.seed = -1;
+        configPtr.ref.reserved = ffi.nullptr;
+
+        ctx = bindings.evInit(configPtr, errorPtr);
+        if (ctx == ffi.nullptr) {
+          final errorCode = NativeErrorCode.fromCode(errorPtr.value);
+          final exception = errorCode.toException('Failed to get memory stats');
+          throw exception ?? MemoryException('Failed to get memory stats');
+        }
+
+        // Get memory stats
+        final result = bindings.evGetMemoryUsage(ctx!, statsPtr);
+        if (result != 0) {
+          final errorCode = NativeErrorCode.fromCode(result);
+          final exception = errorCode.toException('Memory stats query failed');
+          throw exception ?? MemoryException('Memory stats query failed');
+        }
+
+        // Extract values before freeing
+        return MemoryStats(
+          currentBytes: statsPtr.ref.currentBytes,
+          peakBytes: statsPtr.ref.peakBytes,
+          limitBytes: statsPtr.ref.limitBytes,
+          modelBytes: statsPtr.ref.modelBytes,
+          contextBytes: statsPtr.ref.contextBytes,
+        );
+      } finally {
+        if (ctx != null && ctx != ffi.nullptr) {
+          bindings.evFree(ctx!);
+        }
+        calloc.free(statsPtr);
+        calloc.free(modelPathPtr);
+        calloc.free(configPtr);
+        calloc.free(errorPtr);
+      }
+    });
+  }
+
+  /// Check if memory usage is above threshold
+  ///
+  /// Convenience method that polls memory stats and checks against threshold.
+  /// Use this for quick memory pressure checks without detailed stats.
+  ///
+  /// [threshold] is the memory usage percentage (0.0 - 1.0) above which
+  /// memory pressure is considered active. Defaults to 0.8 (80%).
+  ///
+  /// Example:
+  /// ```dart
+  /// if (await edgeVeda.isMemoryPressure()) {
+  ///   print('Warning: High memory usage!');
+  ///   // Reduce context size or unload model
+  /// }
+  /// ```
+  Future<bool> isMemoryPressure({double threshold = 0.8}) async {
+    final stats = await getMemoryStats();
+    if (stats.limitBytes == 0) return false; // No limit set
+    return stats.usagePercent > threshold;
   }
 }

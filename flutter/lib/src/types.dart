@@ -385,6 +385,72 @@ class MemoryPressureEvent {
       'MemoryPressureEvent(${(usagePercent * 100).toStringAsFixed(1)}%, $currentBytes/$limitBytes bytes)';
 }
 
+/// Memory usage statistics from native layer
+///
+/// Provides detailed memory breakdown for monitoring and responding to
+/// memory pressure on iOS devices. Use [usagePercent] to check overall
+/// utilization and [isHighPressure] for quick threshold checks.
+class MemoryStats {
+  /// Current total memory usage in bytes
+  final int currentBytes;
+
+  /// Peak memory usage in bytes (high watermark)
+  final int peakBytes;
+
+  /// Memory limit in bytes (0 = no limit set)
+  final int limitBytes;
+
+  /// Memory used by the loaded model in bytes
+  final int modelBytes;
+
+  /// Memory used by inference context in bytes
+  final int contextBytes;
+
+  /// Memory usage as a percentage (0.0 - 1.0)
+  ///
+  /// Returns 0 if no limit is set.
+  double get usagePercent => limitBytes > 0 ? currentBytes / limitBytes : 0.0;
+
+  /// Whether memory usage is above 80% threshold
+  bool get isHighPressure => usagePercent > 0.8;
+
+  /// Whether memory usage is critical (>90%)
+  bool get isCritical => usagePercent > 0.9;
+
+  const MemoryStats({
+    required this.currentBytes,
+    required this.peakBytes,
+    required this.limitBytes,
+    required this.modelBytes,
+    required this.contextBytes,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'currentBytes': currentBytes,
+        'peakBytes': peakBytes,
+        'limitBytes': limitBytes,
+        'modelBytes': modelBytes,
+        'contextBytes': contextBytes,
+        'usagePercent': usagePercent,
+        'isHighPressure': isHighPressure,
+      };
+
+  @override
+  String toString() {
+    final percent = (usagePercent * 100).toStringAsFixed(1);
+    return 'MemoryStats($percent% used, ${_formatBytes(currentBytes)} current, ${_formatBytes(modelBytes)} model)';
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+}
+
 /// Native error codes matching edge_veda.h ev_error_t
 enum NativeErrorCode {
   /// Operation successful
