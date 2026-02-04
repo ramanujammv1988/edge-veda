@@ -345,6 +345,82 @@ bool ev_is_valid(ev_context ctx) {
 }
 
 /* ============================================================================
+ * Internal Helper Functions
+ * ========================================================================= */
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+/**
+ * Tokenize a text prompt into llama tokens
+ * @param model The llama model for tokenization
+ * @param text The input text to tokenize
+ * @param add_bos Whether to add beginning-of-sequence token
+ * @return Vector of tokens
+ */
+static std::vector<llama_token> tokenize_prompt(
+    const llama_model* model,
+    const std::string& text,
+    bool add_bos
+) {
+    // Get max tokens needed (rough estimate: 1 token per character + BOS)
+    int n_tokens = static_cast<int>(text.length()) + (add_bos ? 1 : 0);
+    std::vector<llama_token> tokens(static_cast<size_t>(n_tokens));
+
+    // Tokenize
+    n_tokens = llama_tokenize(model, text.c_str(), static_cast<int32_t>(text.length()),
+                              tokens.data(), static_cast<int32_t>(tokens.size()), add_bos, false);
+
+    if (n_tokens < 0) {
+        // Buffer was too small, resize and retry
+        tokens.resize(static_cast<size_t>(-n_tokens));
+        n_tokens = llama_tokenize(model, text.c_str(), static_cast<int32_t>(text.length()),
+                                  tokens.data(), static_cast<int32_t>(tokens.size()), add_bos, false);
+    }
+
+    if (n_tokens >= 0) {
+        tokens.resize(static_cast<size_t>(n_tokens));
+    } else {
+        tokens.clear();
+    }
+    return tokens;
+}
+
+/**
+ * Create a sampler chain with the specified generation parameters
+ * @param params Generation parameters
+ * @return Configured sampler chain
+ */
+static llama_sampler* create_sampler(const ev_generation_params& params) {
+    llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
+    llama_sampler* sampler = llama_sampler_chain_init(chain_params);
+
+    // Add samplers in order: penalties -> top-k -> top-p -> temperature -> dist
+    llama_sampler_chain_add(sampler,
+        llama_sampler_init_penalties(
+            64,                        // penalty_last_n
+            params.repeat_penalty,     // repeat_penalty
+            params.frequency_penalty,  // frequency_penalty
+            params.presence_penalty    // presence_penalty
+        ));
+
+    if (params.top_k > 0) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(params.top_k));
+    }
+
+    if (params.top_p < 1.0f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_p(params.top_p, 1));
+    }
+
+    if (params.temperature > 0.0f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
+    }
+
+    llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+
+    return sampler;
+}
+#endif
+
+/* ============================================================================
  * Generation Parameters
  * ========================================================================= */
 
@@ -391,44 +467,82 @@ ev_error_t ev_generate(
         ev_generation_params_default(&gen_params);
     }
 
-    // TODO: Implement generation with llama.cpp
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // std::string result;
-    //
-    // // Tokenize prompt
-    // std::vector<llama_token> tokens = llama_tokenize(ctx->ctx, prompt, true);
-    //
-    // // Generate tokens
-    // for (int i = 0; i < gen_params.max_tokens; ++i) {
-    //     // Evaluate
-    //     if (llama_eval(ctx->ctx, tokens.data(), tokens.size(), 0, ctx->config.num_threads) != 0) {
-    //         ctx->last_error = "Failed to evaluate tokens";
-    //         return EV_ERROR_INFERENCE_FAILED;
-    //     }
-    //
-    //     // Sample next token
-    //     llama_token next_token = llama_sample_token(ctx->ctx, /* ... */);
-    //
-    //     // Check for EOS
-    //     if (next_token == llama_token_eos(ctx->ctx)) {
-    //         break;
-    //     }
-    //
-    //     // Decode and append
-    //     result += llama_token_to_piece(ctx->ctx, next_token);
-    //     tokens.push_back(next_token);
-    // }
-    //
-    // // Allocate output string
-    // *output = static_cast<char*>(std::malloc(result.size() + 1));
-    // if (!*output) {
-    //     return EV_ERROR_OUT_OF_MEMORY;
-    // }
-    // std::strcpy(*output, result.c_str());
+    // Clear KV cache for fresh generation
+    llama_kv_cache_clear(ctx->llama_ctx);
+
+    // Tokenize prompt
+    std::vector<llama_token> tokens = tokenize_prompt(ctx->model, prompt, true);
+    if (tokens.empty()) {
+        ctx->last_error = "Failed to tokenize prompt";
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Check context size
+    int n_ctx = static_cast<int>(llama_n_ctx(ctx->llama_ctx));
+    if (static_cast<int>(tokens.size()) > n_ctx - 4) {
+        ctx->last_error = "Prompt too long for context size";
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Create batch for prompt processing
+    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
+
+    // Evaluate prompt
+    if (llama_decode(ctx->llama_ctx, batch) != 0) {
+        ctx->last_error = "Failed to evaluate prompt";
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Create sampler
+    llama_sampler* sampler = create_sampler(gen_params);
+    if (!sampler) {
+        ctx->last_error = "Failed to create sampler";
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Generate tokens
+    std::string result;
+
+    for (int i = 0; i < gen_params.max_tokens; ++i) {
+        // Sample next token
+        llama_token new_token = llama_sampler_sample(sampler, ctx->llama_ctx, -1);
+
+        // Check for EOS
+        if (llama_token_is_eog(ctx->model, new_token)) {
+            break;
+        }
+
+        // Convert token to text
+        char buf[256];
+        int n = llama_token_to_piece(ctx->model, new_token, buf, sizeof(buf), 0, true);
+        if (n > 0) {
+            result.append(buf, static_cast<size_t>(n));
+        }
+
+        // Prepare next batch
+        batch = llama_batch_get_one(&new_token, 1);
+
+        // Evaluate
+        if (llama_decode(ctx->llama_ctx, batch) != 0) {
+            llama_sampler_free(sampler);
+            ctx->last_error = "Failed during generation";
+            return EV_ERROR_INFERENCE_FAILED;
+        }
+    }
+
+    llama_sampler_free(sampler);
+
+    // Allocate output string
+    *output = static_cast<char*>(std::malloc(result.size() + 1));
+    if (!*output) {
+        return EV_ERROR_OUT_OF_MEMORY;
+    }
+    std::memcpy(*output, result.c_str(), result.size() + 1);
 
     return EV_SUCCESS;
 #else
-    ctx->last_error = "Generation not implemented - llama.cpp not integrated";
+    ctx->last_error = "llama.cpp not compiled";
     return EV_ERROR_NOT_IMPLEMENTED;
 #endif
 }
