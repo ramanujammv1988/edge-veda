@@ -64,11 +64,13 @@ export 'src/types.dart' show
     DownloadProgress,
     ModelInfo,
     MemoryStats,
-    MemoryPressureEvent;
+    MemoryPressureEvent,
+    CancelToken;
 
 // Exceptions (all typed, per R4.1)
 export 'src/types.dart' show
     EdgeVedaException,
+    EdgeVedaGenericException,
     InitializationException,
     ModelLoadException,
     GenerationException,
