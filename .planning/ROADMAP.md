@@ -67,10 +67,13 @@ Plans:
 - **Pitfall 6 (Critical)**: FFI memory leaks - Establish RAII wrapper pattern, clear ownership rules
 - **Pitfall 12 (Moderate)**: Incorrect download progress - Use chunked download with explicit progress calculation
 
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
-- [ ] Plan details to be defined during phase planning
+- [ ] 02-01-PLAN.md - Align FFI bindings to edge_veda.h and create RAII memory helpers
+- [ ] 02-02-PLAN.md - Harden model download with atomic temp file pattern and typed exceptions
+- [ ] 02-03-PLAN.md - Rewrite SDK implementation with Isolate.run() for non-blocking FFI
+- [ ] 02-04-PLAN.md - Add memory pressure handling and finalize public API exports
 
 ### Phase 3: Demo App + Polish
 **Goal**: Example Flutter app demonstrates working text generation with proper lifecycle handling
@@ -125,12 +128,13 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2026-02-04 |
-| 2. Flutter FFI + Model Management | 0/? | Ready to plan | - |
+| 2. Flutter FFI + Model Management | 0/4 | Ready to execute | - |
 | 3. Demo App + Polish | 0/? | Not started | - |
 | 4. Release | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-04*
 *Phase 1 planned: 2026-02-04*
+*Phase 2 planned: 2026-02-04*
 *Depth: comprehensive (from config.json)*
 *Coverage: 19/19 v1 requirements mapped*
