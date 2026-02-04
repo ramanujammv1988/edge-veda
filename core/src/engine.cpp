@@ -229,8 +229,6 @@ void ev_config_default(ev_config* config) {
  * ========================================================================= */
 
 ev_context ev_init(const ev_config* config, ev_error_t* error) {
-    ev_error_t err = EV_SUCCESS;
-
     if (!config || !config->model_path) {
         if (error) *error = EV_ERROR_INVALID_PARAM;
         return nullptr;
@@ -270,8 +268,8 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     model_params.use_mmap = config->use_mmap;
     model_params.use_mlock = config->use_mlock;
 
-    // Load model
-    ctx->model = llama_load_model_from_file(ctx->model_path.c_str(), model_params);
+    // Load model (using new API: llama_model_load_from_file)
+    ctx->model = llama_model_load_from_file(ctx->model_path.c_str(), model_params);
     if (!ctx->model) {
         ctx->last_error = "Failed to load model from: " + ctx->model_path;
         llama_backend_free();
@@ -287,11 +285,11 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     ctx_params.n_threads = config->num_threads > 0 ? static_cast<uint32_t>(config->num_threads) : 4;
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
-    // Create llama context
-    ctx->llama_ctx = llama_new_context_with_model(ctx->model, ctx_params);
+    // Create llama context (using new API: llama_init_from_model)
+    ctx->llama_ctx = llama_init_from_model(ctx->model, ctx_params);
     if (!ctx->llama_ctx) {
         ctx->last_error = "Failed to create llama context";
-        llama_free_model(ctx->model);
+        llama_model_free(ctx->model);
         llama_backend_free();
         delete ctx;
         if (error) *error = EV_ERROR_BACKEND_INIT_FAILED;
@@ -330,7 +328,7 @@ void ev_free(ev_context ctx) {
         ctx->llama_ctx = nullptr;
     }
     if (ctx->model) {
-        llama_free_model(ctx->model);
+        llama_model_free(ctx->model);
         ctx->model = nullptr;
     }
     llama_backend_free();
@@ -350,7 +348,7 @@ bool ev_is_valid(ev_context ctx) {
 #ifdef EDGE_VEDA_LLAMA_ENABLED
 /**
  * Tokenize a text prompt into llama tokens
- * @param model The llama model for tokenization
+ * @param model The llama model for tokenization (vocab extracted internally)
  * @param text The input text to tokenize
  * @param add_bos Whether to add beginning-of-sequence token
  * @return Vector of tokens
@@ -360,18 +358,21 @@ static std::vector<llama_token> tokenize_prompt(
     const std::string& text,
     bool add_bos
 ) {
+    // Get vocab from model (new API)
+    const llama_vocab* vocab = llama_model_get_vocab(model);
+
     // Get max tokens needed (rough estimate: 1 token per character + BOS)
     int n_tokens = static_cast<int>(text.length()) + (add_bos ? 1 : 0);
     std::vector<llama_token> tokens(static_cast<size_t>(n_tokens));
 
-    // Tokenize
-    n_tokens = llama_tokenize(model, text.c_str(), static_cast<int32_t>(text.length()),
+    // Tokenize using vocab
+    n_tokens = llama_tokenize(vocab, text.c_str(), static_cast<int32_t>(text.length()),
                               tokens.data(), static_cast<int32_t>(tokens.size()), add_bos, false);
 
     if (n_tokens < 0) {
         // Buffer was too small, resize and retry
         tokens.resize(static_cast<size_t>(-n_tokens));
-        n_tokens = llama_tokenize(model, text.c_str(), static_cast<int32_t>(text.length()),
+        n_tokens = llama_tokenize(vocab, text.c_str(), static_cast<int32_t>(text.length()),
                                   tokens.data(), static_cast<int32_t>(tokens.size()), add_bos, false);
     }
 
@@ -502,19 +503,20 @@ ev_error_t ev_generate(
 
     // Generate tokens
     std::string result;
+    const llama_vocab* vocab = llama_model_get_vocab(ctx->model);
 
     for (int i = 0; i < gen_params.max_tokens; ++i) {
         // Sample next token
         llama_token new_token = llama_sampler_sample(sampler, ctx->llama_ctx, -1);
 
-        // Check for EOS
-        if (llama_token_is_eog(ctx->model, new_token)) {
+        // Check for EOS (using vocab, new API: llama_vocab_is_eog)
+        if (llama_vocab_is_eog(vocab, new_token)) {
             break;
         }
 
-        // Convert token to text
+        // Convert token to text (using vocab)
         char buf[256];
-        int n = llama_token_to_piece(ctx->model, new_token, buf, sizeof(buf), 0, true);
+        int n = llama_token_to_piece(vocab, new_token, buf, sizeof(buf), 0, true);
         if (n > 0) {
             result.append(buf, static_cast<size_t>(n));
         }
@@ -760,10 +762,10 @@ ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
     // Parameters
     info->num_parameters = llama_model_n_params(ctx->model);
 
-    // Context and embedding info
+    // Context and embedding info (using new API names)
     info->context_length = static_cast<int>(llama_n_ctx(ctx->llama_ctx));
-    info->embedding_dim = static_cast<int>(llama_n_embd(ctx->model));
-    info->num_layers = static_cast<int>(llama_n_layer(ctx->model));
+    info->embedding_dim = static_cast<int>(llama_model_n_embd(ctx->model));
+    info->num_layers = static_cast<int>(llama_model_n_layer(ctx->model));
 
     return EV_SUCCESS;
 #else

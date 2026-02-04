@@ -1,0 +1,185 @@
+# Build directories
+build/
+builds/
+cmake-build-*/
+out/
+dist/
+*.framework/
+*.xcframework/
+*.aar
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Dependency caches
+node_modules/
+.pub-cache/
+.pub/
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.gradle/
+.m2/
+
+# Model files (large binary files)
+*.gguf
+*.bin
+*.pth
+*.pt
+*.safetensors
+*.onnx
+models/
+checkpoints/
+
+# Compiled files
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.app
+*.dSYM/
+
+# CMake build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.generated
+
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Pods/
+ios/.symlinks/
+android/.gradle/
+android/local.properties
+android/.gradletasknamecache
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/key.properties
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+local.properties
+.gradle/
+captures/
+.externalNativeBuild/
+.cxx/
+*.jks
+*.keystore
+
+# iOS/macOS
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.pbxuser
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+xcuserdata/
+DerivedData/
+*.ipa
+*.app
+.build/
+Pods/
+Podfile.lock
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+/.swiftpm/xcode
+
+# React Native
+# node_modules/ (already covered above)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+*.test.js.snap
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+site/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.secret
+
+# Artifacts
+artifacts/
+*.zip
+*.tar.gz
+*.tar.bz2
+
+# Wasm build artifacts
+*.wasm
+*.js.mem
+
+# Profiling and debugging
+*.trace
+*.perf
+*.prof
+perf.data
+massif.out.*
+callgrind.out.*
+
+# Submodules (optional - uncomment if not tracking)
+# third_party/llama.cpp/
+# third_party/whisper.cpp/
