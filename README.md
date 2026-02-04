@@ -1,6 +1,18 @@
 # Edge Veda SDK
 
+**On-device AI SDK — LLM, STT, TTS across Flutter, iOS, Android, React Native & Web**
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/ramanujammv1988/edge-veda/build.yml?branch=main)](https://github.com/ramanujammv1988/edge-veda/actions)
+[![Platform](https://img.shields.io/badge/platform-Flutter%20|%20iOS%20|%20Android%20|%20React%20Native%20|%20Web-blue)](https://github.com/ramanujammv1988/edge-veda)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 **Knowledge at the Edge** - A unified, high-performance SDK for running AI models (LLM, STT, TTS) directly on-device across Flutter, iOS, Android, React Native, and Web platforms.
+
+## Demo
+
+![Edge Veda Demo](https://placehold.co/600x400/png?text=Edge+Veda+Demo+GIF+Coming+Soon)
+*(Add a 15s screen capture here showing performance on a real device)*
 
 ## Overview
 
@@ -74,7 +86,7 @@ Edge Veda enables developers to integrate powerful AI capabilities into their ap
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/edge-veda.git
+git clone https://github.com/ramanujammv1988/edge-veda.git
 cd edge-veda
 
 # Run the setup script
@@ -280,6 +292,16 @@ swiftformat swift/
 | iPad Pro M2 | Phi-3.5 Mini Q4 | 32 tok/s | 150ms | 1.8GB |
 | Pixel 7 | Whisper Tiny | - | 320ms | 400MB |
 
+## Comparison vs Alternatives
+
+| Feature | Edge Veda | MediaPipe LLM | ML Kit | CoreML (Raw) |
+|---------|-----------|---------------|--------|--------------|
+| **Cross-Platform** | ✅ Flutter, RN, iOS, Android, Web | ✅ Android, Web, iOS | ✅ Android, iOS | ❌ Apple Only |
+| **LLM Support** | ✅ Llama 3.2, Phi-3.5, etc. | ✅ Gemma, Phi-2, Falcon | ❌ No LLM | ✅ Custom |
+| **Speech-to-Text** | ✅ Whisper (High Accuracy) | ❌ | ❌ | ✅ |
+| **Text-to-Speech** | ✅ High Quality Neural | ❌ | ❌ | ✅ |
+| **Privacy** | ✅ 100% On-Device | ✅ On-Device | ⚠️ Cloud/On-Device Mix | ✅ On-Device |
+
 ## Documentation
 
 - [Architecture Guide](docs/architecture.md)
@@ -323,10 +345,9 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-org/edge-veda/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/edge-veda/discussions)
-- **Email**: support@edgeveda.dev
-- **Discord**: [Join our community](https://discord.gg/edgeveda)
+- **Issues**: [GitHub Issues](https://github.com/ramanujammv1988/edge-veda/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ramanujammv1988/edge-veda/discussions)
+- **Community**: [Open a Discussion](https://github.com/ramanujammv1988/edge-veda/discussions)
 
 ## Acknowledgments
 
