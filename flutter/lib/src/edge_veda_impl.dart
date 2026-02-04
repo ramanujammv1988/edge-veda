@@ -28,7 +28,6 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 
 import 'ffi/bindings.dart';
-import 'ffi/native_memory.dart' show NativeConfigScope, NativeParamsScope;
 import 'types.dart' show
     EdgeVedaConfig,
     EdgeVedaException,
@@ -297,7 +296,7 @@ class EdgeVeda {
         try {
           final promptPtr = prompt.toNativeUtf8();
           try {
-            final result = bindings.evGenerate(ctx!, promptPtr, paramsPtr, outputPtr);
+            final result = bindings.evGenerate(ctx, promptPtr, paramsPtr, outputPtr);
             if (result != 0) {
               final errorCode = NativeErrorCode.fromCode(result);
               final exception = errorCode.toException('Generation failed');
@@ -317,7 +316,7 @@ class EdgeVeda {
         }
       } finally {
         if (ctx != null && ctx != ffi.nullptr) {
-          bindings.evFree(ctx!);
+          bindings.evFree(ctx);
         }
         calloc.free(modelPathPtr);
         calloc.free(configPtr);
@@ -454,7 +453,7 @@ class EdgeVeda {
         }
 
         // Get memory stats
-        final result = bindings.evGetMemoryUsage(ctx!, statsPtr);
+        final result = bindings.evGetMemoryUsage(ctx, statsPtr);
         if (result != 0) {
           final errorCode = NativeErrorCode.fromCode(result);
           final exception = errorCode.toException('Memory stats query failed');
@@ -471,7 +470,7 @@ class EdgeVeda {
         );
       } finally {
         if (ctx != null && ctx != ffi.nullptr) {
-          bindings.evFree(ctx!);
+          bindings.evFree(ctx);
         }
         calloc.free(statsPtr);
         calloc.free(modelPathPtr);
