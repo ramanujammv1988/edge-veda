@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 1 of 4 (C++ Core + llama.cpp Integration)
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete
 Status: In progress
-Last activity: 2026-02-04 - Completed 01-01-PLAN.md (llama.cpp submodule integration)
+Last activity: 2026-02-04 - Completed 01-02-PLAN.md (Engine API Implementation)
 
-Progress: [##........] 10%
+Progress: [###.......] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 5 min
-- Total execution time: 0.08 hours
+- Total plans completed: 2
+- Average duration: 4.5 min
+- Total execution time: 0.15 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 1/4 | 5min | 5min |
+| 01 | 2/4 | 9min | 4.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5min)
-- Trend: N/A (first plan)
+- Last 5 plans: 01-01 (5min), 01-02 (4min)
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - (01-01) Use GGML_METAL not deprecated LLAMA_METAL
 - (01-01) Disabled all desktop SIMD (AVX/AVX2/FMA/F16C) to prevent binary bloat
 - (01-01) Enabled GGML_METAL_EMBED_LIBRARY for iOS shader embedding
+- (01-02) Use llama_batch_get_one for simple batching (single-shot, not streaming)
+- (01-02) Clear KV cache before each generation for stateless API design
+- (01-02) Sampler chain order: penalties -> top_k -> top_p -> temp -> dist
 
 ### Pending Todos
 
@@ -58,7 +61,7 @@ None yet.
 ### Blockers/Concerns
 
 **Phase 1 Risks:**
-- iOS memory management (jetsam) requires proactive monitoring - memory_guard.cpp exists but needs integration
+- ~~iOS memory management (jetsam) requires proactive monitoring - memory_guard.cpp exists but needs integration~~ RESOLVED in 01-02
 - ~~Metal backend configuration is error-prone - must verify build flags before first compile~~ RESOLVED in 01-01
 - ~~Binary size can explode with desktop SIMD - disable non-ARM optimizations in CMake~~ RESOLVED in 01-01
 
@@ -72,8 +75,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Completed 01-01-PLAN.md (llama.cpp submodule integration)
+Stopped at: Completed 01-02-PLAN.md (Engine API Implementation)
 Resume file: None
 
 ---
-*Next step: Execute 01-02-PLAN.md (Engine API Implementation)*
+*Next step: Execute 01-03-PLAN.md (Build Verification)*
