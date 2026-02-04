@@ -1,0 +1,299 @@
+# Release workflow for Edge Veda SDK
+#
+# Triggers on version tag push (v*)
+# Jobs:
+#   1. validate-release - Check version consistency across files
+#   2. build-and-release-xcframework - Build iOS binary and create GitHub Release
+#   3. publish-to-pub-dev - Validate with pana and publish to pub.dev
+#
+# Required secrets:
+#   - PUB_TOKEN: pub.dev publishing token (see user_setup in plan)
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  # Job 1: Validate version consistency before expensive builds
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Extract version from tag (removes 'v' prefix)
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Validate version consistency
+        run: |
+          chmod +x ./scripts/prepare-release.sh
+          ./scripts/prepare-release.sh ${{ steps.version.outputs.version }}
+        env:
+          CI: true
+
+      - name: Version validation failed
+        if: failure()
+        run: |
+          echo "::error::Version validation failed!"
+          echo "Ensure pubspec.yaml, podspec, and CHANGELOG.md all have version ${{ steps.version.outputs.version }}"
+          echo ""
+          echo "To fix:"
+          echo "  1. Update flutter/pubspec.yaml version"
+          echo "  2. Update flutter/ios/edge_veda.podspec s.version"
+          echo "  3. Add ## [${{ steps.version.outputs.version }}] section to flutter/CHANGELOG.md"
+          echo "  4. Delete the tag: git push --delete origin ${{ github.ref_name }}"
+          echo "  5. Re-run: ./scripts/prepare-release.sh ${{ steps.version.outputs.version }}"
+          echo "  6. Commit and re-create tag"
+          exit 1
+
+  # Job 2: Build XCFramework and create GitHub Release
+  build-and-release-xcframework:
+    name: Build & Release XCFramework
+    runs-on: macos-latest
+    timeout-minutes: 45
+    needs: validate-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install CMake and Ninja
+        run: brew install cmake ninja ccache
+
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ios-release
+
+      - name: Build XCFramework
+        run: |
+          chmod +x ./scripts/build-ios.sh
+          ./scripts/build-ios.sh --clean --release
+
+      - name: Verify XCFramework size
+        run: |
+          XCFRAMEWORK_PATH="flutter/ios/Frameworks/EdgeVedaCore.xcframework"
+          if [ ! -d "$XCFRAMEWORK_PATH" ]; then
+            echo "::error::XCFramework not found at $XCFRAMEWORK_PATH"
+            exit 1
+          fi
+
+          SIZE_KB=$(du -sk "$XCFRAMEWORK_PATH" | cut -f1)
+          SIZE_MB=$((SIZE_KB / 1024))
+          echo "XCFramework size: ${SIZE_MB}MB"
+
+          # Fail if exceeds 30MB (indicates bloat)
+          if [ $SIZE_KB -gt 30720 ]; then
+            echo "::error::XCFramework is too large: ${SIZE_MB}MB (limit: 30MB)"
+            echo "Check for unintended dependencies or debug symbols"
+            exit 1
+          fi
+
+          echo "XCFramework size OK: ${SIZE_MB}MB (limit: 30MB)"
+
+      - name: Create XCFramework ZIP archive
+        run: |
+          cd flutter/ios/Frameworks
+          zip -r EdgeVedaCore-ios.xcframework.zip EdgeVedaCore.xcframework
+          echo "Created archive: $(ls -lh EdgeVedaCore-ios.xcframework.zip)"
+
+      - name: Extract release notes from CHANGELOG
+        id: release_notes
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          # Extract section for this version from CHANGELOG.md
+          # Matches from ## [X.Y.Z] to the next ## [ or end of file
+          NOTES=$(awk "/^## \[$VERSION\]/,/^## \[/" flutter/CHANGELOG.md | head -n -1)
+
+          # If no notes found, use a default message
+          if [ -z "$NOTES" ]; then
+            cat > release_notes.md << 'DEFAULTEOF'
+          ## Release
+
+          See CHANGELOG.md for details.
+          DEFAULTEOF
+            # Add version and repo link
+            sed -i '' "s/## Release/## Release v$VERSION/" release_notes.md 2>/dev/null || \
+              sed -i "s/## Release/## Release v$VERSION/" release_notes.md
+          else
+            # Write extracted notes to file
+            echo "$NOTES" > release_notes.md
+          fi
+
+          echo "Release notes extracted:"
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: flutter/ios/Frameworks/EdgeVedaCore-ios.xcframework.zip
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(needs.validate-release.outputs.version, '-') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release creation failed
+        if: failure()
+        run: |
+          echo "::error::GitHub Release creation failed!"
+          echo ""
+          echo "Common causes:"
+          echo "  1. XCFramework build failed - check build logs above"
+          echo "  2. ZIP creation failed - check disk space"
+          echo "  3. GitHub API error - check repository permissions"
+          echo ""
+          echo "The tag still exists. To retry:"
+          echo "  1. Delete the draft release (if any) from GitHub UI"
+          echo "  2. Re-run this workflow from Actions tab"
+
+  # Job 3: Publish to pub.dev
+  publish-to-pub-dev:
+    name: Publish to pub.dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-and-release-xcframework
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+
+      - name: Get Flutter dependencies
+        working-directory: flutter
+        run: flutter pub get
+
+      - name: Install pana
+        run: dart pub global activate pana
+
+      - name: Run pana validation
+        working-directory: flutter
+        run: |
+          echo "Running pana analysis..."
+          dart pub global run pana --no-warning . | tee pana_output.txt
+
+          # Extract score from pana output
+          SCORE=$(grep -oE "Overall score: [0-9]+/[0-9]+" pana_output.txt | grep -oE "[0-9]+/[0-9]+" | head -1 || echo "0/0")
+          SCORE_NUM=$(echo "$SCORE" | cut -d'/' -f1)
+
+          echo "Pana score: $SCORE"
+
+          # pub.dev requires decent scores, warn if below 120
+          if [ "$SCORE_NUM" -lt 120 ]; then
+            echo "::warning::Pana score ($SCORE_NUM) is below 120. Package may have reduced visibility on pub.dev."
+          fi
+
+          # Fail if critical score issues (below 100)
+          if [ "$SCORE_NUM" -lt 100 ]; then
+            echo "::error::Pana score ($SCORE_NUM) is too low for pub.dev publishing!"
+            echo "Review pana_output.txt for improvement suggestions"
+            exit 1
+          fi
+
+      - name: Check PUB_TOKEN secret
+        run: |
+          if [ -z "${{ secrets.PUB_TOKEN }}" ]; then
+            echo "::error::PUB_TOKEN secret is not configured!"
+            echo ""
+            echo "To configure pub.dev authentication:"
+            echo "  1. Go to https://pub.dev"
+            echo "  2. Sign in -> Account -> Publishing Access"
+            echo "  3. Create a new token with 'Publish packages' permission"
+            echo "  4. Add the token as a GitHub secret named PUB_TOKEN"
+            echo "     Repository Settings -> Secrets and variables -> Actions -> New repository secret"
+            echo ""
+            echo "After adding the secret, re-run this workflow."
+            exit 1
+          fi
+          echo "PUB_TOKEN secret is configured"
+
+      - name: Setup pub.dev credentials
+        run: |
+          # Create pub credentials directory
+          mkdir -p ~/.pub-cache
+
+          # Create credentials.json with the token
+          # pub.dev uses OAuth2 tokens - the accessToken is sufficient for publishing
+          cat > ~/.pub-cache/credentials.json << EOF
+          {
+            "accessToken": "${{ secrets.PUB_TOKEN }}",
+            "refreshToken": "",
+            "tokenEndpoint": "https://accounts.google.com/o/oauth2/token",
+            "scopes": ["openid", "https://www.googleapis.com/auth/userinfo.email"],
+            "expiration": 9999999999999
+          }
+          EOF
+
+          echo "pub.dev credentials configured"
+
+      - name: Publish to pub.dev
+        working-directory: flutter
+        run: |
+          echo "Publishing to pub.dev..."
+          # --force skips interactive confirmation (required for CI)
+          dart pub publish --force
+
+      - name: Publish successful
+        run: |
+          VERSION="${{ needs.build-and-release-xcframework.outputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+          echo "Successfully published edge_veda v$VERSION to pub.dev!"
+          echo ""
+          echo "Package will be available at:"
+          echo "  https://pub.dev/packages/edge_veda"
+          echo ""
+          echo "It may take a few minutes for the package to appear."
+
+      - name: Publish failed
+        if: failure()
+        run: |
+          echo "::error::pub.dev publishing failed!"
+          echo ""
+          echo "Common causes:"
+          echo "  1. PUB_TOKEN is invalid or expired - regenerate at pub.dev"
+          echo "  2. Package already exists with this version - bump version"
+          echo "  3. Account doesn't have publish permission for this package"
+          echo "  4. Package validation failed - run 'dart pub publish --dry-run' locally"
+          echo ""
+          echo "To retry after fixing:"
+          echo "  1. Delete and re-create the tag (if version bump needed)"
+          echo "  2. Or re-run this workflow from Actions tab"
