@@ -59,7 +59,7 @@ Plans:
   3. Downloaded models cache locally and skip re-download on second init
   4. SHA256 checksum mismatch throws ModelValidationException
   5. All inference calls run in background isolate (UI never blocks)
-  6. Memory pressure callbacks from C++ propagate to Flutter layer
+  6. Memory stats API allows Flutter to monitor and respond to memory pressure
 
 **Key Risks**:
 - **Pitfall 3 (Critical)**: FFI blocks UI thread - Use Isolate.run() for all inference calls from start
@@ -67,13 +67,13 @@ Plans:
 - **Pitfall 6 (Critical)**: FFI memory leaks - Establish RAII wrapper pattern, clear ownership rules
 - **Pitfall 12 (Moderate)**: Incorrect download progress - Use chunked download with explicit progress calculation
 
-**Plans:** 4 plans
+**Plans:** 4 plans in 3 waves
 
 Plans:
-- [ ] 02-01-PLAN.md - Align FFI bindings to edge_veda.h and create RAII memory helpers
-- [ ] 02-02-PLAN.md - Harden model download with atomic temp file pattern and typed exceptions
-- [ ] 02-03-PLAN.md - Rewrite SDK implementation with Isolate.run() for non-blocking FFI
-- [ ] 02-04-PLAN.md - Add memory pressure handling and finalize public API exports
+- [x] 02-01-PLAN.md - Align FFI bindings to edge_veda.h and create RAII memory helpers (Wave 1)
+- [x] 02-02-PLAN.md - Harden model download with caching, atomic temp file, typed exceptions (Wave 1)
+- [ ] 02-03-PLAN.md - Rewrite SDK implementation with Isolate.run() for non-blocking FFI (Wave 2)
+- [ ] 02-04-PLAN.md - Add memory stats polling and finalize public API exports (Wave 3)
 
 ### Phase 3: Demo App + Polish
 **Goal**: Example Flutter app demonstrates working text generation with proper lifecycle handling
@@ -128,7 +128,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2026-02-04 |
-| 2. Flutter FFI + Model Management | 0/4 | Ready to execute | - |
+| 2. Flutter FFI + Model Management | 2/4 | In progress | - |
 | 3. Demo App + Polish | 0/? | Not started | - |
 | 4. Release | 0/? | Not started | - |
 
