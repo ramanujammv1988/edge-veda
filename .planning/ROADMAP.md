@@ -94,10 +94,13 @@ Plans:
 - **Pitfall 11 (Moderate)**: Flutter hot reload breaks FFI state - Implement dispose() that calls ev_free()
 - **Pitfall 14 (Minor)**: Simulator performance misleads - Benchmark on real device (iPhone 12)
 
-**Plans**: TBD
+**Plans:** 4 plans in 3 waves
 
 Plans:
-- [ ] Plan details to be defined during phase planning
+- [ ] 03-01-PLAN.md - Fix example app API usage and implement lifecycle observer (Wave 1)
+- [ ] 03-02-PLAN.md - Add real-time metrics display with Stopwatch measurement (Wave 1)
+- [ ] 03-03-PLAN.md - Run benchmarks on iPhone 12 and document results (Wave 2)
+- [ ] 03-04-PLAN.md - Write comprehensive README with setup, usage, performance (Wave 3)
 
 ### Phase 4: Release
 **Goal**: SDK published to pub.dev with complete documentation and CI/CD
@@ -129,12 +132,13 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2026-02-04 |
 | 2. Flutter FFI + Model Management | 4/4 | **Complete** | 2026-02-04 |
-| 3. Demo App + Polish | 0/? | Not started | - |
+| 3. Demo App + Polish | 0/4 | Ready to execute | - |
 | 4. Release | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-04*
 *Phase 1 planned: 2026-02-04*
 *Phase 2 planned: 2026-02-04*
+*Phase 3 planned: 2026-02-04*
 *Depth: comprehensive (from config.json)*
 *Coverage: 19/19 v1 requirements mapped*
