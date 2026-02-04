@@ -38,10 +38,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 - **Pitfall 2 (Critical)**: Metal not enabled in build - Verify LLAMA_METAL ON and LLAMA_METAL_EMBED_LIBRARY ON in CMake
 - **Pitfall 7 (Moderate)**: Binary size explosion - Disable desktop SIMD (AVX/AVX2), enable LTO, strip symbols
 
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
-- [ ] Plan details to be defined during phase planning
+- [ ] 01-01-PLAN.md - Add llama.cpp submodule and configure CMake for iOS Metal builds
+- [ ] 01-02-PLAN.md - Implement C++ inference engine with llama.cpp API calls
+- [ ] 01-03-PLAN.md - Build iOS static libraries and create XCFramework
+- [ ] 01-04-PLAN.md - Verify inference with smoke test and performance measurement
 
 ### Phase 2: Flutter FFI + Model Management
 **Goal**: Flutter developers can initialize SDK and download models with progress tracking
@@ -117,16 +120,17 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. C++ Core + llama.cpp Integration | 0/? | Not started | - |
+| 1. C++ Core + llama.cpp Integration | 0/4 | Ready to execute | - |
 | 2. Flutter FFI + Model Management | 0/? | Not started | - |
 | 3. Demo App + Polish | 0/? | Not started | - |
 | 4. Release | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-04*
+*Phase 1 planned: 2026-02-04*
 *Depth: comprehensive (from config.json)*
 *Coverage: 19/19 v1 requirements mapped*
