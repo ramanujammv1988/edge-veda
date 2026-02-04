@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 2 of 4 (Flutter FFI + Model Management)
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete
 Status: In progress
-Last activity: 2026-02-04 - Completed 02-01-PLAN.md (FFI bindings + memory helpers)
+Last activity: 2026-02-04 - Completed 02-02-PLAN.md (Atomic download pattern)
 
-Progress: [#####-----] 50% (Phase 1: 4/4, Phase 2: 1/4)
+Progress: [######----] 60% (Phase 1: 4/4, Phase 2: 2/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 5.8 min
-- Total execution time: 0.48 hours
+- Total plans completed: 6
+- Average duration: 6.3 min
+- Total execution time: 0.63 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 4/4 | 24min | 6.0min |
-| 02 | 1/4 | 5min | 5.0min |
+| 02 | 2/4 | 13min | 6.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4min), 01-03 (8min), 01-04 (7min), 02-01 (5min)
+- Last 5 plans: 01-02 (4min), 01-03 (8min), 01-04 (7min), 02-01 (5min), 02-02 (8min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -62,6 +62,10 @@ Recent decisions affecting current work:
 - (02-01) Dart enums use named value property for C interop (not ordinal)
 - (02-01) RAII scopes provide both free() and use() pattern for flexibility
 - (02-01) Memory ownership: Dart allocs -> calloc.free(), C++ allocs -> ev_free_string()
+- (02-02) ModelValidationException separate from ChecksumException (broader validation scope)
+- (02-02) NativeErrorCode.toException() returns nullable for success code handling
+- (02-02) 3 retries with exponential backoff (1s/2s/4s) for transient network errors
+- (02-02) Atomic temp file pattern: download to .tmp, verify checksum, rename
 
 ### Pending Todos
 
@@ -76,8 +80,8 @@ Recent decisions affecting current work:
 - ~~Binary size can explode with desktop SIMD - disable non-ARM optimizations in CMake~~ RESOLVED in 01-01
 
 **Phase 2 Risks:**
-- FFI threading violations will block UI - must use background isolate from start
-- File path sandbox violations on iOS - must use correct path_provider API
+- FFI threading violations will block UI - must use background isolate from start (addressed in 02-03)
+- ~~File path sandbox violations on iOS - must use correct path_provider API~~ RESOLVED in 02-02 (uses applicationSupportDirectory)
 - ~~FFI struct layout mismatch~~ ADDRESSED in 02-01 with exact edge_veda.h matching
 
 **Environment Notes:**
@@ -88,9 +92,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-04
-Stopped at: Completed 02-01-PLAN.md (FFI bindings + RAII memory helpers)
+Last session: 2026-02-04 11:58 UTC
+Stopped at: Completed 02-02-PLAN.md (Atomic download + typed exceptions)
 Resume file: None
 
 ---
-*Next step: Execute 02-02-PLAN.md (Model Download Manager)*
+*Next step: Execute 02-03-PLAN.md (Isolate.run() integration)*
