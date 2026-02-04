@@ -18,8 +18,14 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(MACOS TRUE)
 endif()
 
-# Backend options
-option(EDGE_VEDA_ENABLE_METAL "Enable Metal backend for iOS/macOS" ${IOS} OR ${MACOS})
+# Backend options - compute default values first
+if(IOS OR MACOS)
+    set(METAL_DEFAULT ON)
+else()
+    set(METAL_DEFAULT OFF)
+endif()
+
+option(EDGE_VEDA_ENABLE_METAL "Enable Metal backend for iOS/macOS" ${METAL_DEFAULT})
 option(EDGE_VEDA_ENABLE_VULKAN "Enable Vulkan backend for Android" ${ANDROID})
 option(EDGE_VEDA_ENABLE_CPU "Enable CPU backend (always available)" ON)
 option(EDGE_VEDA_BUILD_SHARED "Build shared library" ON)
@@ -77,14 +83,12 @@ set(EDGE_VEDA_HEADERS
     include/edge_veda.h
 )
 
-# Backend-specific sources (to be added later)
+# Backend compile definitions (actual backends handled by llama.cpp)
 if(EDGE_VEDA_ENABLE_METAL)
-    list(APPEND EDGE_VEDA_SOURCES src/backend_metal.cpp)
     add_compile_definitions(EDGE_VEDA_METAL_ENABLED)
 endif()
 
 if(EDGE_VEDA_ENABLE_VULKAN)
-    list(APPEND EDGE_VEDA_SOURCES src/backend_vulkan.cpp)
     add_compile_definitions(EDGE_VEDA_VULKAN_ENABLED)
 endif()
 
@@ -237,56 +241,25 @@ if(EDGE_VEDA_BUILD_STATIC)
     configure_edge_veda_target(edge_veda_static)
 endif()
 
-# Installation rules
+# Installation rules (simplified - no export since llama.cpp handles its own)
 if(EDGE_VEDA_BUILD_SHARED)
     install(TARGETS edge_veda
-        EXPORT edge_veda-targets
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin
         FRAMEWORK DESTINATION lib
-        INCLUDES DESTINATION include
     )
 endif()
 
 if(EDGE_VEDA_BUILD_STATIC)
     install(TARGETS edge_veda_static
-        EXPORT edge_veda-targets
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
-        INCLUDES DESTINATION include
     )
 endif()
 
 # Install headers
 install(FILES ${EDGE_VEDA_HEADERS} DESTINATION include)
-
-# Export targets
-install(EXPORT edge_veda-targets
-    FILE edge_veda-targets.cmake
-    NAMESPACE EdgeVeda::
-    DESTINATION lib/cmake/edge_veda
-)
-
-# Create config file
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/edge_veda-config-version.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-
-configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/edge_veda-config.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/edge_veda-config.cmake"
-    INSTALL_DESTINATION lib/cmake/edge_veda
-)
-
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/edge_veda-config.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/edge_veda-config-version.cmake"
-    DESTINATION lib/cmake/edge_veda
-)
 
 # Tests (optional)
 if(EDGE_VEDA_BUILD_TESTS)
