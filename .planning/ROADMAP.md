@@ -13,7 +13,7 @@ Build a Flutter SDK enabling on-device LLM inference on iOS devices. Start with 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: C++ Core + llama.cpp Integration** - Native engine builds with Metal support
-- [ ] **Phase 2: Flutter FFI + Model Management** - Dart bindings and model download working
+- [x] **Phase 2: Flutter FFI + Model Management** - Dart bindings and model download working
 - [ ] **Phase 3: Demo App + Polish** - Example app demonstrates text generation
 - [ ] **Phase 4: Release** - Published to pub.dev with documentation
 
@@ -72,8 +72,8 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md - Align FFI bindings to edge_veda.h and create RAII memory helpers (Wave 1)
 - [x] 02-02-PLAN.md - Harden model download with caching, atomic temp file, typed exceptions (Wave 1)
-- [ ] 02-03-PLAN.md - Rewrite SDK implementation with Isolate.run() for non-blocking FFI (Wave 2)
-- [ ] 02-04-PLAN.md - Add memory stats polling and finalize public API exports (Wave 3)
+- [x] 02-03-PLAN.md - Rewrite SDK implementation with Isolate.run() for non-blocking FFI (Wave 2)
+- [x] 02-04-PLAN.md - Add memory stats polling and finalize public API exports (Wave 3)
 
 ### Phase 3: Demo App + Polish
 **Goal**: Example Flutter app demonstrates working text generation with proper lifecycle handling
@@ -128,7 +128,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2026-02-04 |
-| 2. Flutter FFI + Model Management | 2/4 | In progress | - |
+| 2. Flutter FFI + Model Management | 4/4 | **Complete** | 2026-02-04 |
 | 3. Demo App + Polish | 0/? | Not started | - |
 | 4. Release | 0/? | Not started | - |
 

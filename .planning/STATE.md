@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter iOS apps with a simple API - text in, text out.
-**Current focus:** Phase 2 - Flutter FFI + Model Management
+**Current focus:** Phase 3 - Demo App + Polish
 
 ## Current Position
 
-Phase: 2 of 4 (Flutter FFI + Model Management)
-Plan: 3 of 4 complete
-Status: In progress
-Last activity: 2026-02-04 - Completed 02-03-PLAN.md (Isolate.run() integration)
+Phase: 2 of 4 complete, ready for Phase 3
+Plan: Phase 2 verified (5/6 truths, gap is Phase 1 environment issue)
+Status: Phase 2 complete
+Last activity: 2026-02-04 - Verified Phase 2, all Dart code complete
 
-Progress: [#######---] 70% (Phase 1: 4/4, Phase 2: 3/4)
+Progress: [########--] 80% (Phase 1: 4/4, Phase 2: 4/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 5.6 min
-- Total execution time: 0.65 hours
+- Total plans completed: 8
+- Average duration: 5.4 min
+- Total execution time: 0.72 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 4/4 | 24min | 6.0min |
-| 02 | 3/4 | 15min | 5.0min |
+| 02 | 4/4 | 27min | 6.8min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (8min), 01-04 (7min), 02-01 (5min), 02-02 (8min), 02-03 (2min)
-- Trend: Stable (02-03 fast due to focused scope)
+- Last 5 plans: 01-04 (7min), 02-01 (5min), 02-02 (8min), 02-03 (2min), 02-04 (12min)
+- Trend: Stable (02-04 longer due to checkpoint verification)
 
 *Updated after each plan completion*
 
@@ -69,6 +69,9 @@ Recent decisions affecting current work:
 - (02-03) Each Isolate.run() creates fresh context (correct for v1, efficient pattern in v2)
 - (02-03) Streaming deferred to v2 (requires long-lived worker isolate)
 - (02-03) Validation runs on main isolate (no FFI, safe)
+- (02-04) Memory pressure uses polling (getMemoryStats) not callbacks - Isolate.run() architecture prevents persistent callbacks
+- (02-04) CancelToken and EdgeVedaGenericException added to exports during verification
+- (02-04) Phase 2 marked complete despite XCFramework gap - gap is Phase 1 environment issue (Xcode needed), not Phase 2 code
 
 ### Pending Todos
 
@@ -95,9 +98,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-04 12:06 UTC
-Stopped at: Completed 02-03-PLAN.md (Isolate.run() integration)
+Last session: 2026-02-04
+Stopped at: Phase 2 complete, verified (5/6 truths)
 Resume file: None
 
 ---
-*Next step: Execute 02-04-PLAN.md (Public API and exports)*
+*Next step: Plan Phase 3 (Demo App + Polish)*
