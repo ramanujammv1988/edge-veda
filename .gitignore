@@ -183,3 +183,13 @@ callgrind.out.*
 # Submodules (optional - uncomment if not tracking)
 # third_party/llama.cpp/
 # third_party/whisper.cpp/
+
+# Internal / Planning
+.claude/
+.planning/
+prd.txt
+report.pdf
+EdgeVeda.xlsx
+Screenshot*
+test_obj/
+core/cmake_output.txt
