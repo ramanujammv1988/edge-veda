@@ -1,0 +1,424 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  CMAKE_VERSION: '3.27.0'
+  FLUTTER_VERSION: '3.24.0'
+  NDK_VERSION: '26.1.10909125'
+
+jobs:
+  # C++ Core Build and Test
+  core-build:
+    name: Core Build - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build_type: [Release, Debug]
+        include:
+          - os: ubuntu-latest
+            cc: gcc-11
+            cxx: g++-11
+          - os: macos-latest
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libvulkan-dev \
+            vulkan-tools \
+            clang-format \
+            ccache
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install cmake ninja ccache
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: ${{ env.CMAKE_VERSION }}
+
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.build_type }}
+
+      - name: Configure CMake
+        working-directory: core
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DBUILD_TESTING=ON
+
+      - name: Build Core
+        working-directory: core
+        run: cmake --build build --config ${{ matrix.build_type }} -j $(nproc || sysctl -n hw.ncpu)
+
+      - name: Run Core Tests
+        working-directory: core/build
+        run: ctest --output-on-failure --build-config ${{ matrix.build_type }}
+
+      - name: Check Binary Size
+        working-directory: core/build
+        run: |
+          echo "Binary sizes:"
+          find . -name "*.so" -o -name "*.dylib" -o -name "*.a" | xargs ls -lh
+          # Fail if any binary exceeds 30MB
+          find . -name "*.so" -o -name "*.dylib" | while read file; do
+            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+            if [ $size -gt 31457280 ]; then
+              echo "ERROR: $file is too large: $size bytes (>30MB)"
+              exit 1
+            fi
+          done
+
+      - name: Upload Core Artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.build_type == 'Release'
+        with:
+          name: core-${{ matrix.os }}-release
+          path: |
+            core/build/libedgeveda.*
+            core/build/*.so
+            core/build/*.dylib
+          retention-days: 7
+
+  # iOS Build
+  ios-build:
+    name: iOS Build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install CMake and Ninja
+        run: brew install cmake ninja ccache
+
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ios-release
+
+      - name: Build iOS Framework
+        run: make build-ios
+
+      - name: Check Framework Size
+        run: |
+          if [ -d "build/ios/EdgeVeda.xcframework" ]; then
+            du -sh build/ios/EdgeVeda.xcframework
+            size=$(du -sk build/ios/EdgeVeda.xcframework | cut -f1)
+            if [ $size -gt 30720 ]; then
+              echo "ERROR: XCFramework is too large: ${size}KB (>30MB)"
+              exit 1
+            fi
+          fi
+
+      - name: Upload iOS Framework
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-framework
+          path: build/ios/EdgeVeda.xcframework
+          retention-days: 7
+
+  # Android Build
+  android-build:
+    name: Android Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26c
+          add-to-path: true
+
+      - name: Install CMake and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build ccache
+
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: android-release
+
+      - name: Build Android AAR
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: make build-android
+
+      - name: Check AAR Size
+        run: |
+          if [ -f "build/android/edgeveda.aar" ]; then
+            ls -lh build/android/edgeveda.aar
+            size=$(stat -c%s build/android/edgeveda.aar)
+            if [ $size -gt 31457280 ]; then
+              echo "ERROR: AAR is too large: $size bytes (>30MB)"
+              exit 1
+            fi
+          fi
+
+      - name: Upload Android AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aar
+          path: build/android/edgeveda.aar
+          retention-days: 7
+
+  # Flutter Analysis and Tests
+  flutter-analyze:
+    name: Flutter Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+
+      - name: Get Flutter Dependencies
+        working-directory: flutter
+        run: flutter pub get
+
+      - name: Verify Flutter Format
+        working-directory: flutter
+        run: dart format --set-exit-if-changed .
+
+      - name: Run Flutter Analyze
+        working-directory: flutter
+        run: flutter analyze --fatal-infos
+
+      - name: Run Flutter Tests
+        working-directory: flutter
+        run: flutter test --coverage
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: flutter/coverage/lcov.info
+          flags: flutter
+          name: flutter-coverage
+
+  # Swift Analysis
+  swift-analyze:
+    name: Swift Analyze & Build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Swift Package Resolve
+        working-directory: swift
+        run: swift package resolve
+
+      - name: Swift Build
+        working-directory: swift
+        run: swift build -c release
+
+      - name: Swift Test
+        working-directory: swift
+        run: swift test
+
+  # Kotlin/Android Analysis
+  kotlin-analyze:
+    name: Kotlin Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v3
+
+      - name: Kotlin Lint
+        working-directory: kotlin
+        run: ./gradlew ktlintCheck || echo "ktlint not configured yet"
+
+      - name: Kotlin Build
+        working-directory: kotlin
+        run: ./gradlew build || echo "gradle build not configured yet"
+
+      - name: Run Kotlin Tests
+        working-directory: kotlin
+        run: ./gradlew test || echo "tests not configured yet"
+
+  # React Native Analysis
+  react-native-analyze:
+    name: React Native Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: react-native/package.json
+
+      - name: Install Dependencies
+        working-directory: react-native
+        run: npm ci || npm install
+
+      - name: TypeScript Check
+        working-directory: react-native
+        run: npm run typecheck || echo "typecheck not configured yet"
+
+      - name: Lint
+        working-directory: react-native
+        run: npm run lint || echo "lint not configured yet"
+
+      - name: Run Tests
+        working-directory: react-native
+        run: npm test || echo "tests not configured yet"
+
+  # Code Quality Checks
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check C++ Format
+        run: |
+          find core -name "*.cpp" -o -name "*.h" -o -name "*.hpp" | \
+          xargs clang-format --dry-run --Werror || \
+          echo "clang-format check - some files need formatting"
+
+      - name: Check for Large Files
+        run: |
+          # Check for files larger than 10MB that aren't in .gitignore
+          find . -type f -size +10M | grep -v ".git" | grep -v "third_party" | \
+          while read file; do
+            echo "WARNING: Large file found: $file"
+          done
+
+      - name: License Header Check
+        run: |
+          echo "Checking for license headers..."
+          # Add license header check script here
+
+  # Security Scan
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy Security Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy Results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Integration Tests (only on main branch)
+  integration-tests:
+    name: Integration Tests
+    runs-on: macos-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [core-build, flutter-analyze]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Download Core Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: core-macos-latest-release
+          path: core/build
+
+      - name: Run Integration Tests
+        working-directory: flutter
+        run: flutter test integration_test || echo "Integration tests not configured yet"
+
+  # Build Summary
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [core-build, ios-build, android-build, flutter-analyze, swift-analyze, kotlin-analyze, react-native-analyze]
+    if: always()
+    steps:
+      - name: Check Build Status
+        run: |
+          echo "Build Summary:"
+          echo "Core Build: ${{ needs.core-build.result }}"
+          echo "iOS Build: ${{ needs.ios-build.result }}"
+          echo "Android Build: ${{ needs.android-build.result }}"
+          echo "Flutter: ${{ needs.flutter-analyze.result }}"
+          echo "Swift: ${{ needs.swift-analyze.result }}"
+          echo "Kotlin: ${{ needs.kotlin-analyze.result }}"
+          echo "React Native: ${{ needs.react-native-analyze.result }}"

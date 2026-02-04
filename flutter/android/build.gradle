@@ -1,0 +1,137 @@
+// Edge Veda Flutter Plugin - Android Build Configuration
+group 'com.edgeveda.edge_veda'
+version '0.1.0'
+
+buildscript {
+    ext.kotlin_version = '1.9.0'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.edgeveda.edge_veda'
+    compileSdk 34
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        minSdkVersion 24
+        targetSdkVersion 34
+
+        // NDK configuration
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -frtti -fexceptions"
+                arguments "-DANDROID_STL=c++_shared",
+                          "-DANDROID_PLATFORM=android-24",
+                          "-DGGML_VULKAN=ON",
+                          "-DGGML_METAL=OFF"
+            }
+        }
+    }
+
+    // Native build configuration
+    externalNativeBuild {
+        cmake {
+            path "../../core/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            // Enable optimizations
+            ndk {
+                debugSymbolLevel 'SYMBOL_TABLE'
+            }
+        }
+
+        debug {
+            debuggable true
+        }
+    }
+
+    // Package native libraries
+    packagingOptions {
+        pickFirst 'lib/*/libedge_veda.so'
+        pickFirst 'lib/*/libc++_shared.so'
+    }
+
+    // Lint options
+    lintOptions {
+        disable 'InvalidPackage'
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+
+    // Vulkan support
+    implementation 'androidx.annotation:annotation:1.7.0'
+}
+
+// Copy native libraries to jniLibs
+task copyNativeLibs(type: Copy) {
+    from '../../core/build/android'
+    into 'src/main/jniLibs'
+    include '**/*.so'
+}
+
+// Generate CMake headers
+task generateHeaders(type: Exec) {
+    workingDir '../../core'
+    commandLine 'sh', '-c', 'mkdir -p include && echo "// Generated header placeholder" > include/edge_veda.h'
+    onlyIf { !file('../../core/include/edge_veda.h').exists() }
+}
+
+preBuild.dependsOn generateHeaders
+
+// Task to build native library
+task buildNative {
+    doLast {
+        println "Building Edge Veda native library for Android..."
+        println "Native library will be built via CMake during Gradle build"
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name == 'assembleRelease' || task.name == 'assembleDebug') {
+        task.dependsOn buildNative
+    }
+}
