@@ -31,6 +31,7 @@ import 'ffi/bindings.dart';
 import 'ffi/native_memory.dart' show NativeConfigScope, NativeParamsScope;
 import 'types.dart' show
     EdgeVedaConfig,
+    EdgeVedaException,
     GenerateOptions,
     GenerateResponse,
     MemoryStats,
