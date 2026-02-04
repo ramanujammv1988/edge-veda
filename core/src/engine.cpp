@@ -21,14 +21,13 @@
 
 // Memory guard function declarations (defined in memory_guard.cpp)
 extern "C" {
-    void memory_guard_set_limit(uint64_t limit_bytes);
-    uint64_t memory_guard_get_limit();
-    uint64_t memory_guard_get_current_usage();
-    uint64_t memory_guard_get_peak_usage();
-    bool memory_guard_is_over_limit();
-    uint64_t memory_guard_get_available();
+    void memory_guard_set_limit(size_t limit_bytes);
+    size_t memory_guard_get_limit();
+    size_t memory_guard_get_current_usage();
+    size_t memory_guard_get_peak_usage();
+    bool memory_guard_is_under_pressure();
     void memory_guard_cleanup();
-    void memory_guard_reset();
+    void memory_guard_reset_stats();
     void memory_guard_set_callback(void (*callback)(void*, size_t, size_t), void* user_data);
 }
 
