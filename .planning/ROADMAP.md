@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: C++ Core + llama.cpp Integration** - Native engine builds with Metal support
 - [x] **Phase 2: Flutter FFI + Model Management** - Dart bindings and model download working
-- [ ] **Phase 3: Demo App + Polish** - Example app demonstrates text generation
+- [x] **Phase 3: Demo App + Polish** - Example app demonstrates text generation
 - [ ] **Phase 4: Release** - Published to pub.dev with documentation
 
 ## Phase Details
@@ -97,10 +97,10 @@ Plans:
 **Plans:** 4 plans in 3 waves
 
 Plans:
-- [ ] 03-01-PLAN.md - Fix example app API usage and implement lifecycle observer (Wave 1)
-- [ ] 03-02-PLAN.md - Add real-time metrics display with Stopwatch measurement (Wave 1)
-- [ ] 03-03-PLAN.md - Run benchmarks on iPhone 12 and document results (Wave 2)
-- [ ] 03-04-PLAN.md - Write comprehensive README with setup, usage, performance (Wave 3)
+- [x] 03-01-PLAN.md - Fix example app API usage and implement lifecycle observer (Wave 1)
+- [x] 03-02-PLAN.md - Add real-time metrics display with Stopwatch measurement (Wave 1)
+- [x] 03-03-PLAN.md - Run benchmarks on iPhone 12 and document results (Wave 2)
+- [x] 03-04-PLAN.md - Write comprehensive README with setup, usage, performance (Wave 3)
 
 ### Phase 4: Release
 **Goal**: SDK published to pub.dev with complete documentation and CI/CD
@@ -118,10 +118,12 @@ Plans:
 **Key Risks**:
 - Low risk phase - primary failure mode is incomplete documentation
 
-**Plans**: TBD
+**Plans**: 3 plans in 3 waves
 
 Plans:
-- [ ] Plan details to be defined during phase planning
+- [ ] 04-01-PLAN.md - Version sync and podspec update for pub.dev compliance (Wave 1)
+- [ ] 04-02-PLAN.md - Release workflow CI/CD with XCFramework distribution (Wave 2)
+- [ ] 04-03-PLAN.md - Final validation, publish to pub.dev, verify installation (Wave 3)
 
 ## Progress
 
@@ -132,13 +134,14 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2026-02-04 |
 | 2. Flutter FFI + Model Management | 4/4 | **Complete** | 2026-02-04 |
-| 3. Demo App + Polish | 0/4 | Ready to execute | - |
-| 4. Release | 0/? | Not started | - |
+| 3. Demo App + Polish | 4/4 | **Complete** | 2026-02-04 |
+| 4. Release | 0/3 | Ready to execute | - |
 
 ---
 *Roadmap created: 2026-02-04*
 *Phase 1 planned: 2026-02-04*
 *Phase 2 planned: 2026-02-04*
 *Phase 3 planned: 2026-02-04*
+*Phase 4 planned: 2026-02-04*
 *Depth: comprehensive (from config.json)*
 *Coverage: 19/19 v1 requirements mapped*
