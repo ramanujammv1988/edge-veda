@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 
 ## Current Position
 
-Phase: 5 - Android CPU Build (and 6 can parallelize)
-Plan: Not started
-Status: Roadmap complete, awaiting phase planning
-Last activity: 2026-02-05 - v1.1 roadmap created
+Phase: 5 & 6 - Parallel execution in progress
+Plan: 06-02 complete (Dart FFI Streaming Bindings)
+Status: In progress
+Last activity: 2026-02-05 - Completed 06-02-PLAN.md
 
-Progress: [░░░░░░░░░░] 0% (0/14 v1.1 requirements)
+Progress: [█░░░░░░░░░] 12.5% (1/8 plans complete in Phase 5 & 6)
 
 ## Milestone Summary
 
@@ -24,11 +24,11 @@ Progress: [░░░░░░░░░░] 0% (0/14 v1.1 requirements)
 - iOS Metal GPU working
 
 **v1.1: Android + Streaming (Active)**
-- Phase 5: Android CPU Build (5 requirements)
-- Phase 6: Streaming C++ + Dart (5 requirements) - can parallelize with Phase 5
+- Phase 5: Android CPU Build (3 plans) - in progress
+- Phase 6: Streaming C++ + Dart (5 plans) - 06-02 complete
 - Phase 7: Android Vulkan + Demo (4 requirements) - depends on 5 and 6
 
-Total: 14 requirements across 3 phases
+Total: 8 plans across 2 parallel phases, then Phase 7
 
 ## Phase Dependencies
 
@@ -41,13 +41,23 @@ Phase 6 (Streaming)  ----+
 Phases 5 and 6 are independent and can run in parallel.
 Phase 7 depends on both 5 and 6 completing.
 
+## Phase 6 Progress
+
+| Plan | Name | Status |
+|------|------|--------|
+| 06-01 | C++ Streaming API | In progress (parallel) |
+| 06-02 | Dart FFI Bindings | **Complete** |
+| 06-03 | Worker Isolate | Pending |
+| 06-04 | StreamController Wrapper | Pending |
+| 06-05 | Integration Tests | Pending |
+
 ## Research Flags
 
-| Phase | Research Needed | Reason |
+| Phase | Research Needed | Status |
 |-------|-----------------|--------|
-| Phase 5 | No | Standard NDK patterns, well-documented |
-| Phase 6 | YES | Complex isolate threading, FFI callbacks, sparse examples |
-| Phase 7 | YES | Vulkan device compatibility unclear, GPU fallback strategies |
+| Phase 5 | No | Skipped (standard NDK patterns) |
+| Phase 6 | Yes | **Complete** (06-RESEARCH.md) |
+| Phase 7 | Yes | Pending (Vulkan compatibility) |
 
 ## Accumulated Context
 
@@ -66,6 +76,10 @@ v1.1 decisions (from research):
 - NativeCallable.listener for thread-safe callbacks (Dart 3.1+)
 - Android memory limit 800MB (more conservative than iOS 1.2GB)
 - NDK r27c LTS pinned (r28+ has 16KB page issues)
+
+Phase 6 Plan 2 decisions:
+- EvStreamImpl as opaque type matching C++ ev_stream_impl*
+- Pointer<Int32> for error codes matching ev_error_t*
 
 ### Pending Todos
 
@@ -106,8 +120,8 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: v1.1 roadmap creation complete
-Resume with: `/gsd:plan-phase 5` or `/gsd:plan-phase 6` (can parallelize)
+Stopped at: Completed 06-02-PLAN.md (Dart FFI Streaming Bindings)
+Resume with: `/gsd:execute-phase 6` to continue Phase 6, plan 3
 
 ---
-*v1.1 roadmap created. Next: Plan Phase 5 or 6 (parallelizable).*
+*Phase 6 Plan 2 complete. FFI bindings ready for worker isolate implementation.*
