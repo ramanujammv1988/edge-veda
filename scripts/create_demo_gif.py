@@ -1,12 +1,10 @@
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
-import os
 
 IMG_PATH = "/Users/ram/.gemini/antigravity/brain/813d7619-16b0-459a-98d2-df3f06304e95/uploaded_media_2_1770249790484.jpg"
 OUTPUT_PATH = "demo/demo.gif"
 ORIGINAL_WIDTH = 400
 BUBBLE_Y_START = 247
-BUBBLE_BG = (244, 244, 244)
 PROBE_COLOR = (238, 238, 238)
 
 # Load and Resize
@@ -16,34 +14,27 @@ height = int(img.height * ratio)
 base_frame = img.resize((ORIGINAL_WIDTH, height), Image.Resampling.LANCZOS)
 
 # --- PATCH THE TTFT NUMBER ---
-# The number "6246ms" is roughly located around x=80, y=145 (scaled).
-# We will draw a small rectangle over it and write "320ms".
-
+# Create a fresh draw object
 draw_base = ImageDraw.Draw(base_frame)
-# Color picking background around the text (Light Blueish)
-# Pixel at 80, 145
-bg_color = base_frame.getpixel((80, 145)) 
-# It seems the background is consistent light blue-ish #e8f5e9 or similar in screenshot
-# Let's simple "erase" it.
-# The area to cover:
-patch_box = (50, 160, 160, 190) # Approximate area for the big number
-# Wait, let's look at the crop coordinates more carefully from the probe.
-# Previous probe said "Blue Y End approx: 226".
-# The metrics are above that.
-# Let's blind patch it with a sampled color.
 
-# Sample color next to the number
-patch_color = base_frame.getpixel((40, 175)) 
-draw_base.rectangle(patch_box, fill=patch_color)
+# The TTFT metrics are in a light blue/green box at the top
+# From the uploaded image, "6246ms" appears around y=165-195 (after scaling)
+# Let's sample the background color from a safe area
+bg_color = base_frame.getpixel((200, 150))  # Sample from right side of metrics bar
 
-# Write new number
+# Cover the entire "6246ms" text area with background
+# Being generous with the box to ensure full coverage
+patch_box = (45, 165, 135, 200)
+draw_base.rectangle(patch_box, fill=bg_color)
+
+# Write "320ms" in the same style
 try:
-    # Try to find a bold font
-    font_metric = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 28)
+    font_metric = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 32)
 except:
     font_metric = ImageFont.load_default()
 
-draw_base.text((75, 162), "320ms", font=font_metric, fill=(21, 101, 192)) # Dark Blue
+# Use a dark blue color similar to the original
+draw_base.text((52, 165), "320ms", font=font_metric, fill=(27, 94, 32))  # Dark green-blue
 # -----------------------------
 
 # Text to stream
@@ -58,13 +49,6 @@ try:
     font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 13)
 except:
     font = ImageFont.load_default()
-
-lines = []
-for para in full_text.split('\n'):
-    if not para:
-        lines.append("")
-        continue
-    lines.extend(textwrap.wrap(para, width=50))
 
 frames = []
 count = 0
@@ -96,8 +80,9 @@ while count < len(full_text):
     frames.append(frame)
     count += 5
 
+# Hold final frame
 for _ in range(30):
     frames.append(frames[-1])
 
 frames[0].save(OUTPUT_PATH, save_all=True, append_images=frames[1:], duration=50, loop=0)
-print(f"Saved {OUTPUT_PATH}")
+print(f"Saved {OUTPUT_PATH} with {len(frames)} frames")
