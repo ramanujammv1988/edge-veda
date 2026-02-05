@@ -26,7 +26,7 @@ else()
 endif()
 
 option(EDGE_VEDA_ENABLE_METAL "Enable Metal backend for iOS/macOS" ${METAL_DEFAULT})
-option(EDGE_VEDA_ENABLE_VULKAN "Enable Vulkan backend for Android" ${ANDROID})
+option(EDGE_VEDA_ENABLE_VULKAN "Enable Vulkan backend for Android" OFF)  # Phase 5: CPU-only, Vulkan deferred to Phase 7
 option(EDGE_VEDA_ENABLE_CPU "Enable CPU backend (always available)" ON)
 option(EDGE_VEDA_BUILD_SHARED "Build shared library" ON)
 option(EDGE_VEDA_BUILD_STATIC "Build static library" OFF)
@@ -96,6 +96,22 @@ endif()
 
 if(EDGE_VEDA_ENABLE_CPU)
     add_compile_definitions(EDGE_VEDA_CPU_ENABLED)
+endif()
+
+# Android-specific llama.cpp configuration (BEFORE add_subdirectory)
+if(ANDROID)
+    # CRITICAL: CPU-only build for Phase 5 (Vulkan deferred to Phase 7)
+    set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+
+    # CRITICAL: Disable OpenMP - causes dlopen failures on many Android devices
+    # that don't ship libgomp. CPU backend works fine without it.
+    set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+
+    # Disable LLAMAFILE - x86 optimizations not needed on ARM64
+    set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+
+    # Enable NEON (ARM SIMD) - automatic on arm64 but be explicit
+    set(GGML_NEON ON CACHE BOOL "" FORCE)
 endif()
 
 # Include llama.cpp as subdirectory
