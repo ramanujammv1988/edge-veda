@@ -473,9 +473,10 @@ bool memory_guard_is_under_pressure() {
 /**
  * @brief Get recommended memory limit for device
  *
- * Returns a conservative memory limit based on total available memory.
- * Typically sets limit to 50-70% of total physical memory to leave
- * room for OS and other apps.
+ * Returns a conservative memory limit based on platform and device memory.
+ * - iOS: 1.2GB (iOS jetsam is relatively predictable)
+ * - Android: 800MB (LMK more aggressive, especially on 4GB devices)
+ * - Desktop: 60% of total (more headroom available)
  *
  * @return Recommended limit in bytes
  */
@@ -486,8 +487,29 @@ size_t memory_guard_get_recommended_limit() {
         return 0;
     }
 
-    // Use 60% of total memory as a safe default
+#if defined(__ANDROID__)
+    // Android LMK is more aggressive than iOS jetsam
+    // On 4GB devices, background apps get killed around 1GB foreground app usage
+    // Use 800MB as conservative default (per v1.1 research)
+    constexpr size_t ANDROID_DEFAULT_LIMIT = 800 * 1024 * 1024; // 800MB
+
+    // If device has lots of RAM (12GB+), allow more
+    if (total >= 12ULL * 1024 * 1024 * 1024) {
+        return 1200 * 1024 * 1024; // 1.2GB on flagship devices
+    } else if (total >= 8ULL * 1024 * 1024 * 1024) {
+        return 1000 * 1024 * 1024; // 1GB on 8GB devices
+    } else {
+        return ANDROID_DEFAULT_LIMIT; // 800MB on 4-6GB devices
+    }
+#elif defined(__APPLE__)
+    // iOS: Use 1.2GB default (validated in v1.0)
+    // This is more generous because iOS jetsam warnings give time to react
+    constexpr size_t IOS_DEFAULT_LIMIT = 1200 * 1024 * 1024; // 1.2GB
+    return IOS_DEFAULT_LIMIT;
+#else
+    // Desktop: Use 60% of total memory
     return static_cast<size_t>(total * 0.6);
+#endif
 }
 
 } // extern "C"
@@ -531,6 +553,20 @@ void memory_guard_get_android_meminfo(
     }
 
     fclose(file);
+}
+
+/**
+ * @brief Get Android available memory from /proc/meminfo
+ *
+ * MemAvailable is the kernel's estimate of memory available for new
+ * allocations without triggering swap or OOM. More accurate than MemFree.
+ *
+ * @return Available memory in bytes, or 0 if unavailable
+ */
+size_t memory_guard_get_android_available() {
+    size_t available = 0;
+    memory_guard_get_android_meminfo(nullptr, &available, nullptr);
+    return available;
 }
 
 } // extern "C"
