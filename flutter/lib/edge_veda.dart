@@ -14,9 +14,28 @@
 /// ## Features
 ///
 /// - On-device LLM inference with llama.cpp and Metal acceleration
+/// - Streaming token-by-token generation with cancellation support
 /// - Model download with progress tracking and caching
 /// - Memory-safe operations with configurable limits
 /// - Zero server costs and 100% offline operation
+///
+/// ## Streaming Generation
+///
+/// ```dart
+/// final cancelToken = CancelToken();
+/// final stream = edgeVeda.generateStream(
+///   'Tell me a story',
+///   cancelToken: cancelToken,
+/// );
+///
+/// await for (final chunk in stream) {
+///   stdout.write(chunk.token);
+///   if (chunk.isFinal) break;
+/// }
+///
+/// // To cancel mid-stream:
+/// cancelToken.cancel();
+/// ```
 ///
 /// ## Model Management
 ///
