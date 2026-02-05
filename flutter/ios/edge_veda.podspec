@@ -68,6 +68,8 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
   # The xcframework contains ios-arm64 for device and ios-arm64-simulator for simulator.
   s.user_target_xcconfig = {
     'OTHER_LDFLAGS[sdk=iphoneos*]' => [
+      '$(inherited)',
+      '-framework Metal', '-framework MetalPerformanceShaders', '-framework Accelerate',
       '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/ios/Frameworks/EdgeVedaCore.xcframework/ios-arm64/libedge_veda_full.a"',
       '-Wl,-u,_ev_version', '-Wl,-exported_symbol,_ev_version',
       '-Wl,-u,_ev_init', '-Wl,-exported_symbol,_ev_init',
@@ -96,6 +98,8 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_free_string', '-Wl,-exported_symbol,_ev_free_string',
     ].join(' '),
     'OTHER_LDFLAGS[sdk=iphonesimulator*]' => [
+      '$(inherited)',
+      '-framework Metal', '-framework MetalPerformanceShaders', '-framework Accelerate',
       '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/ios/Frameworks/EdgeVedaCore.xcframework/ios-arm64-simulator/libedge_veda_full.a"',
       '-Wl,-u,_ev_version', '-Wl,-exported_symbol,_ev_version',
       '-Wl,-u,_ev_init', '-Wl,-exported_symbol,_ev_init',
