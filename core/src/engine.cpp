@@ -643,23 +643,114 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
 
     std::lock_guard<std::mutex> lock(stream->mutex);
 
+    // Check cancellation FIRST (before any work)
+    if (stream->check_cancelled()) {
+        stream->ended = true;
+        if (error) *error = EV_ERROR_STREAM_ENDED;
+        return nullptr;
+    }
+
     if (stream->ended) {
         if (error) *error = EV_ERROR_STREAM_ENDED;
         return nullptr;
     }
 
-    // TODO: Generate next token with llama.cpp
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // Generate and return next token
-    // ...
+    ev_context ctx = stream->ctx;
+
+    // Lock context for thread safety (context shared across streams)
+    std::lock_guard<std::mutex> ctx_lock(ctx->mutex);
+
+    // First call: evaluate prompt and clear KV cache
+    if (!stream->prompt_evaluated) {
+        // Clear KV cache for fresh generation
+        llama_kv_cache_clear(ctx->llama_ctx);
+
+        // Evaluate prompt tokens
+        llama_batch batch = llama_batch_get_one(
+            stream->prompt_tokens.data(),
+            static_cast<int32_t>(stream->prompt_tokens.size())
+        );
+        if (llama_decode(ctx->llama_ctx, batch) != 0) {
+            stream->ended = true;
+            if (error) *error = EV_ERROR_INFERENCE_FAILED;
+            return nullptr;
+        }
+
+        stream->n_cur = static_cast<int>(stream->prompt_tokens.size());
+        stream->prompt_evaluated = true;
+    }
+
+    // Check max tokens limit
+    int generated_count = stream->n_cur - static_cast<int>(stream->prompt_tokens.size());
+    if (generated_count >= stream->params.max_tokens) {
+        stream->ended = true;
+        if (error) *error = EV_SUCCESS;  // Natural end, not an error
+        return nullptr;
+    }
+
+    // Check cancellation again before expensive sampling
+    if (stream->check_cancelled()) {
+        stream->ended = true;
+        if (error) *error = EV_ERROR_STREAM_ENDED;
+        return nullptr;
+    }
+
+    // Sample next token
+    llama_token new_token = llama_sampler_sample(stream->sampler, ctx->llama_ctx, -1);
+
+    // Check for EOS
+    const llama_vocab* vocab = llama_model_get_vocab(ctx->model);
+    if (llama_vocab_is_eog(vocab, new_token)) {
+        stream->ended = true;
+        if (error) *error = EV_SUCCESS;  // Natural end
+        return nullptr;
+    }
+
+    // Convert token to text
+    char buf[256];
+    int n = llama_token_to_piece(vocab, new_token, buf, sizeof(buf), 0, true);
+    if (n <= 0) {
+        // Empty token (can happen with special tokens), continue
+        stream->n_cur++;
+        if (error) *error = EV_SUCCESS;
+
+        // Decode the empty token to maintain KV cache consistency
+        llama_batch batch = llama_batch_get_one(&new_token, 1);
+        llama_decode(ctx->llama_ctx, batch);
+
+        // Return empty string (caller should continue calling)
+        char* result = static_cast<char*>(std::malloc(1));
+        if (result) result[0] = '\0';
+        return result;
+    }
+
+    // Decode next token to update KV cache
+    llama_batch batch = llama_batch_get_one(&new_token, 1);
+    if (llama_decode(ctx->llama_ctx, batch) != 0) {
+        stream->ended = true;
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
+
+    stream->n_cur++;
+
+    // Allocate and return token string
+    char* result = static_cast<char*>(std::malloc(static_cast<size_t>(n) + 1));
+    if (!result) {
+        if (error) *error = EV_ERROR_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    std::memcpy(result, buf, static_cast<size_t>(n));
+    result[n] = '\0';
 
     if (error) *error = EV_SUCCESS;
-    // return token_string;
-#endif
-
+    return result;
+#else
     stream->ended = true;
     if (error) *error = EV_ERROR_NOT_IMPLEMENTED;
     return nullptr;
+#endif
 }
 
 bool ev_stream_has_next(ev_stream stream) {
