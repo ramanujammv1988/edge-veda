@@ -605,11 +605,30 @@ ev_stream ev_generate_stream(
         return nullptr;
     }
 
-    // TODO: Initialize streaming with llama.cpp
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // Tokenize and prepare for streaming
-    // stream->tokens = llama_tokenize(ctx->ctx, prompt, true);
-    // stream->current_token_idx = 0;
+    // Tokenize prompt for later evaluation
+    stream->prompt_tokens = tokenize_prompt(ctx->model, prompt, true);
+    if (stream->prompt_tokens.empty()) {
+        delete stream;
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
+
+    // Check context size
+    int n_ctx = static_cast<int>(llama_n_ctx(ctx->llama_ctx));
+    if (static_cast<int>(stream->prompt_tokens.size()) > n_ctx - 4) {
+        delete stream;
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
+
+    // Create sampler (owned by stream)
+    stream->sampler = create_sampler(stream->params);
+    if (!stream->sampler) {
+        delete stream;
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
 #endif
 
     if (error) *error = EV_SUCCESS;
