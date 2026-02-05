@@ -13,6 +13,7 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include <atomic>
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
 #include "llama.h"
@@ -85,25 +86,49 @@ struct ev_context_impl {
 };
 
 struct ev_stream_impl {
-    ev_context ctx;
-    std::string prompt;
-    ev_generation_params params;
-    bool ended;
-    std::mutex mutex;
+    ev_context ctx;                    // Parent context (shared, NOT owned)
+    std::string prompt;                // Original prompt
+    ev_generation_params params;       // Generation parameters
+    bool ended;                        // Stream completion flag
+    std::atomic<bool> cancelled{false}; // Thread-safe cancel flag
 
-    // TODO: Add llama.cpp streaming state
-    // std::vector<llama_token> tokens;
-    // size_t current_token_idx;
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    // llama.cpp streaming state
+    llama_sampler* sampler = nullptr;        // Token sampler (owned by stream)
+    std::vector<llama_token> prompt_tokens;  // Tokenized prompt
+    int n_cur = 0;                           // Current position in generation
+    bool prompt_evaluated = false;           // Whether prompt has been processed
+#endif
+
+    std::mutex mutex;
 
     ev_stream_impl(ev_context context, const char* p, const ev_generation_params* prms)
         : ctx(context)
         , prompt(p ? p : "")
-        , ended(false) {
+        , ended(false)
+        , cancelled(false) {
         if (prms) {
             params = *prms;
         } else {
             ev_generation_params_default(&params);
         }
+    }
+
+    ~ev_stream_impl() {
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+        if (sampler) {
+            llama_sampler_free(sampler);
+            sampler = nullptr;
+        }
+#endif
+    }
+
+    bool check_cancelled() {
+        return cancelled.load(std::memory_order_acquire);
+    }
+
+    void request_cancel() {
+        cancelled.store(true, std::memory_order_release);
     }
 };
 
