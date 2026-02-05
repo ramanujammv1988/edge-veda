@@ -557,20 +557,48 @@ class EdgeVedaGenericException extends EdgeVedaException {
   const EdgeVedaGenericException(super.message, {super.details, super.originalError});
 }
 
-/// Token for cancelling ongoing operations (downloads, generation)
+/// Token for cancelling ongoing operations (downloads, streaming generation)
+///
+/// For streaming, the CancelToken notifies listeners when cancel() is called,
+/// allowing the worker isolate to be notified immediately.
 class CancelToken {
   bool _isCancelled = false;
+  final List<void Function()> _listeners = [];
 
   /// Whether cancellation has been requested
   bool get isCancelled => _isCancelled;
 
   /// Request cancellation of the operation
+  ///
+  /// Notifies all registered listeners synchronously.
   void cancel() {
+    if (_isCancelled) return;
     _isCancelled = true;
+    for (final listener in _listeners) {
+      listener();
+    }
+  }
+
+  /// Add a listener to be notified when cancel() is called
+  ///
+  /// If the token is already cancelled, the listener is called immediately.
+  void addListener(void Function() listener) {
+    _listeners.add(listener);
+    if (_isCancelled) {
+      listener();
+    }
+  }
+
+  /// Remove a previously added listener
+  void removeListener(void Function() listener) {
+    _listeners.remove(listener);
   }
 
   /// Reset the token for reuse
+  ///
+  /// Clears the cancelled state and removes all listeners.
   void reset() {
     _isCancelled = false;
+    _listeners.clear();
   }
 }
