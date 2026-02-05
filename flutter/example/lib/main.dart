@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 void main() {
@@ -33,6 +37,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final ModelManager _modelManager = ModelManager();
   final TextEditingController _promptController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  // Android memory pressure EventChannel
+  static const _memoryPressureChannel = EventChannel(
+    'com.edgeveda.edge_veda/memory_pressure',
+  );
+  StreamSubscription<dynamic>? _memorySubscription;
+  String? _memoryPressureLevel;
 
   bool _isInitialized = false;
   bool _isLoading = false;
@@ -71,13 +82,54 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.initState();
     // Register lifecycle observer for iOS background handling (Pitfall 5 - Critical)
     WidgetsBinding.instance.addObserver(this);
+    _setupMemoryPressureListener();
     _checkAndDownloadModel();
+  }
+
+  /// Set up Android memory pressure listener via EventChannel
+  /// This receives onTrimMemory events from EdgeVedaPlugin.kt
+  void _setupMemoryPressureListener() {
+    if (Platform.isAndroid) {
+      _memorySubscription = _memoryPressureChannel
+          .receiveBroadcastStream()
+          .listen((event) {
+        if (event is Map) {
+          final level = event['pressureLevel'] as String?;
+          debugPrint('EdgeVeda: Memory pressure event: $level');
+
+          setState(() {
+            _memoryPressureLevel = level;
+          });
+
+          // Show warning for critical memory pressure
+          if (level == 'critical' || level == 'running_critical') {
+            setState(() {
+              _statusMessage = 'Memory pressure: $level - consider restarting';
+            });
+
+            // Show snackbar warning
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Memory pressure: $level'),
+                  backgroundColor: Colors.orange,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        }
+      }, onError: (error) {
+        debugPrint('EdgeVeda: Memory pressure stream error: $error');
+      });
+    }
   }
 
   @override
   void dispose() {
     // CRITICAL: Remove observer FIRST to prevent callbacks after disposal
     WidgetsBinding.instance.removeObserver(this);
+    _memorySubscription?.cancel();
     _edgeVeda.dispose();
     _modelManager.dispose();
     _promptController.dispose();
@@ -602,12 +654,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Platform info
+                        Text('Platform: ${Platform.isAndroid ? "Android" : Platform.isIOS ? "iOS" : "Other"}'),
+                        Text('Backend: ${Platform.isAndroid ? "CPU" : "Metal GPU"}'),
+                        const Divider(),
                         Text('Memory: ${memoryMb.toStringAsFixed(1)} MB'),
                         Text('Usage: $usagePercent%'),
                         if (memStats.isHighPressure)
                           const Text(
                             'High memory pressure',
                             style: TextStyle(color: Colors.orange),
+                          ),
+                        if (_memoryPressureLevel != null)
+                          Text(
+                            'System pressure: $_memoryPressureLevel',
+                            style: const TextStyle(color: Colors.orange),
                           ),
                         const SizedBox(height: 8),
                         if (_tokensPerSecond != null)
