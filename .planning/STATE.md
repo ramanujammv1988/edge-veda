@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 5 & 6 - Parallel execution in progress
-Plan: 4/8 plans complete (05-01, 05-02, 06-01, 06-02)
+Plan: 6/8 plans complete (05-01, 05-02, 06-01, 06-02, 06-03, 06-04)
 Status: In progress
-Last activity: 2026-02-05 - Completed 06-01-PLAN.md (C++ Streaming Core)
+Last activity: 2026-02-05 - Completed 06-04-PLAN.md (Public Streaming API)
 
-Progress: [####......] 50% (4/8 plans complete in Phase 5 & 6)
+Progress: [######....] 75% (6/8 plans complete in Phase 5 & 6)
 
 ## Milestone Summary
 
@@ -55,8 +55,8 @@ Phase 7 depends on both 5 and 6 completing.
 |------|------|--------|
 | 06-01 | C++ Streaming API | **Complete** |
 | 06-02 | Dart FFI Bindings | **Complete** |
-| 06-03 | Worker Isolate | Pending |
-| 06-04 | StreamController Wrapper | Pending |
+| 06-03 | Worker Isolate | **Complete** (via 06-04 blocking fix) |
+| 06-04 | Public Streaming API | **Complete** |
 | 06-05 | Integration Tests | Pending |
 
 ## Research Flags
@@ -100,6 +100,12 @@ Phase 6 Plan 2 decisions:
 - EvStreamImpl as opaque type matching C++ ev_stream_impl*
 - Pointer<Int32> for error codes matching ev_error_t*
 
+Phase 6 Plan 4 decisions:
+- CancelToken uses listener pattern for cancellation propagation to worker
+- Final TokenChunk has empty token with isFinal=true to signal stream end
+- Single streaming session at a time (throws if generateStream called during active stream)
+- Worker isolate reused across streaming sessions for efficiency
+
 ### Pending Todos
 
 Carried from v1.0:
@@ -128,9 +134,9 @@ None currently.
 - P4: dlopen fails - build arm64-v8a, verify in APK [CONFIGURED 05-01]
 
 **Phase 6 (Streaming):**
-- P5: Wrong callback API crashes - use NativeCallable.listener
-- P6: Isolate.run() insufficient - refactor to Isolate.spawn()
-- P8: High-volume callbacks deadlock - batch tokens
+- P5: Wrong callback API crashes - use NativeCallable.listener [AVOIDED via pull-based design]
+- P6: Isolate.run() insufficient - refactor to Isolate.spawn() [IMPLEMENTED 06-03/06-04]
+- P8: High-volume callbacks deadlock - batch tokens [AVOIDED via pull-based design]
 - Pull-based streaming implemented in C++ (06-01) - avoids callback issues
 
 **Phase 7 (Vulkan + Demo):**
@@ -140,8 +146,8 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: Completed 06-01-PLAN.md (C++ Streaming Core)
-Resume with: `/gsd:execute-phase 5` for 05-03, or `/gsd:execute-phase 6` for 06-03+
+Stopped at: Completed 06-04-PLAN.md (Public Streaming API)
+Resume with: `/gsd:execute-phase 5` for 05-03, or `/gsd:execute-phase 6` for 06-05
 
 ---
-*Phase 5 & 6 executing in parallel. 4/8 plans complete (50%).*
+*Phase 5 & 6 executing in parallel. 6/8 plans complete (75%).*

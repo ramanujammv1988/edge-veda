@@ -50,6 +50,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isGenerating = false; // Track active generation for lifecycle cancellation
   bool _isDownloading = false;
   bool _runningBenchmark = false;
+
+  // Streaming state
+  bool _isStreaming = false;
+  CancelToken? _cancelToken;
+  int _streamingTokenCount = 0;
   double _downloadProgress = 0.0;
   String? _modelPath;
   String _statusMessage = 'Ready to initialize';
@@ -323,6 +328,154 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _showError('Generation failed: ${e.toString()}');
     } finally {
       _isGenerating = false; // Always clear generation flag
+    }
+  }
+
+  /// Streaming generation with progressive token display
+  ///
+  /// Uses generateStream() to receive tokens one-by-one and display them
+  /// progressively. Supports cancellation via the Stop button.
+  Future<void> _generateStreaming() async {
+    if (!_isInitialized) {
+      _showError('Please initialize Edge Veda first');
+      return;
+    }
+
+    if (_isStreaming) {
+      return; // Already streaming
+    }
+
+    final prompt = _promptController.text.trim();
+    if (prompt.isEmpty) {
+      _showError('Please enter a prompt');
+      return;
+    }
+
+    _promptController.clear();
+    _addUserMessage(prompt);
+
+    setState(() {
+      _isStreaming = true;
+      _isLoading = true;
+      _cancelToken = CancelToken();
+      _streamingTokenCount = 0;
+      _timeToFirstTokenMs = null;
+      _tokensPerSecond = null;
+      _statusMessage = 'Starting stream...';
+    });
+
+    final buffer = StringBuffer();
+    final stopwatch = Stopwatch()..start();
+    bool receivedFirstToken = false;
+
+    try {
+      await for (final chunk in _edgeVeda.generateStream(
+        prompt,
+        options: const GenerateOptions(
+          maxTokens: 256,
+          temperature: 0.7,
+          topP: 0.9,
+        ),
+        cancelToken: _cancelToken,
+      )) {
+        // Check if cancelled
+        if (_cancelToken?.isCancelled == true) {
+          setState(() {
+            _statusMessage = 'Cancelled (${_streamingTokenCount} tokens)';
+          });
+          break;
+        }
+
+        if (chunk.isFinal) {
+          // Stream completed naturally
+          stopwatch.stop();
+          _tokensPerSecond = _streamingTokenCount / (stopwatch.elapsedMilliseconds / 1000);
+
+          setState(() {
+            _statusMessage = 'Complete (${_streamingTokenCount} tokens, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s)';
+          });
+          break;
+        }
+
+        // Record TTFT on first token
+        if (!receivedFirstToken) {
+          _timeToFirstTokenMs = stopwatch.elapsedMilliseconds;
+          receivedFirstToken = true;
+        }
+
+        buffer.write(chunk.token);
+        _streamingTokenCount++;
+
+        // Update UI every few tokens to avoid excessive rebuilds
+        if (_streamingTokenCount % 3 == 0 || chunk.token.contains('\n')) {
+          setState(() {
+            _statusMessage = 'Streaming... (${_streamingTokenCount} tokens)';
+          });
+          // Update the last assistant message in-place
+          _updateStreamingMessage(buffer.toString());
+        }
+      }
+
+      // Final update with complete text
+      if (buffer.isNotEmpty) {
+        _updateStreamingMessage(buffer.toString());
+      }
+
+      // Get memory stats after streaming
+      final memStats = await _edgeVeda.getMemoryStats();
+      _memoryMb = memStats.currentBytes / (1024 * 1024);
+      _tokenCount = _streamingTokenCount;
+
+      print('EdgeVeda: Streaming complete - ${_streamingTokenCount} tokens');
+      print('EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s');
+    } catch (e) {
+      stopwatch.stop();
+      setState(() {
+        _statusMessage = 'Stream error';
+      });
+      _showError('Streaming failed: ${e.toString()}');
+      print('EdgeVeda: Streaming error: $e');
+    } finally {
+      setState(() {
+        _isStreaming = false;
+        _isLoading = false;
+        _cancelToken = null;
+      });
+    }
+  }
+
+  /// Update or add the streaming response message
+  void _updateStreamingMessage(String text) {
+    setState(() {
+      // Find the last assistant message (non-system, non-user)
+      final lastIndex = _messages.lastIndexWhere(
+        (m) => !m.isUser && !m.isSystem,
+      );
+
+      if (lastIndex >= 0 && _isStreaming) {
+        // Update existing message
+        _messages[lastIndex] = ChatMessage(
+          text: text,
+          isUser: false,
+          timestamp: _messages[lastIndex].timestamp,
+        );
+      } else {
+        // Add new message
+        _messages.add(ChatMessage(
+          text: text,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      }
+    });
+    _scrollToBottom();
+  }
+
+  /// Cancel the current streaming generation
+  void _cancelGeneration() {
+    if (_isStreaming && _cancelToken != null) {
+      _cancelToken!.cancel();
+      print('EdgeVeda: Cancellation requested');
     }
   }
 
@@ -771,30 +924,79 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
             padding: const EdgeInsets.all(8),
             child: SafeArea(
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _promptController,
-                      decoration: const InputDecoration(
-                        hintText: 'Type a message...',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _promptController,
+                          decoration: const InputDecoration(
+                            hintText: 'Type a message...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          maxLines: null,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _generateStreaming(),
+                          enabled: _isInitialized && !_isLoading && !_isStreaming,
                         ),
                       ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                      enabled: _isInitialized && !_isLoading,
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: _isInitialized && !_isLoading ? _sendMessage : null,
-                    color: Theme.of(context).primaryColor,
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Non-streaming generate button
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.send, size: 18),
+                        label: const Text('Generate'),
+                        onPressed: _isInitialized && !_isLoading && !_isStreaming
+                            ? _sendMessage
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      // Streaming generate button
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.stream, size: 18),
+                        label: const Text('Generate (Stream)'),
+                        onPressed: _isInitialized && !_isLoading && !_isStreaming
+                            ? _generateStreaming
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      // Stop button (only enabled during streaming)
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.stop, size: 18),
+                        label: const Text('Stop'),
+                        onPressed: _isStreaming ? _cancelGeneration : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
