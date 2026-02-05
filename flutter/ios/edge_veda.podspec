@@ -63,9 +63,40 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
   # Use absolute path for force_load to avoid BUILD_DIR mismatch issues
   # Use BOTH -u (to force inclusion) AND -exported_symbol (to keep global visibility for dlsym)
   # Without -exported_symbol, the linker marks symbols as local (t) instead of global (T)
+  #
+  # Note: We use conditional force_load based on SDK to support both device and simulator builds.
+  # The xcframework contains ios-arm64 for device and ios-arm64-simulator for simulator.
   s.user_target_xcconfig = {
-    'OTHER_LDFLAGS' => [
+    'OTHER_LDFLAGS[sdk=iphoneos*]' => [
       '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/ios/Frameworks/EdgeVedaCore.xcframework/ios-arm64/libedge_veda_full.a"',
+      '-Wl,-u,_ev_version', '-Wl,-exported_symbol,_ev_version',
+      '-Wl,-u,_ev_init', '-Wl,-exported_symbol,_ev_init',
+      '-Wl,-u,_ev_free', '-Wl,-exported_symbol,_ev_free',
+      '-Wl,-u,_ev_is_valid', '-Wl,-exported_symbol,_ev_is_valid',
+      '-Wl,-u,_ev_generate', '-Wl,-exported_symbol,_ev_generate',
+      '-Wl,-u,_ev_generate_stream', '-Wl,-exported_symbol,_ev_generate_stream',
+      '-Wl,-u,_ev_stream_next', '-Wl,-exported_symbol,_ev_stream_next',
+      '-Wl,-u,_ev_stream_has_next', '-Wl,-exported_symbol,_ev_stream_has_next',
+      '-Wl,-u,_ev_stream_cancel', '-Wl,-exported_symbol,_ev_stream_cancel',
+      '-Wl,-u,_ev_stream_free', '-Wl,-exported_symbol,_ev_stream_free',
+      '-Wl,-u,_ev_config_default', '-Wl,-exported_symbol,_ev_config_default',
+      '-Wl,-u,_ev_generation_params_default', '-Wl,-exported_symbol,_ev_generation_params_default',
+      '-Wl,-u,_ev_error_string', '-Wl,-exported_symbol,_ev_error_string',
+      '-Wl,-u,_ev_get_last_error', '-Wl,-exported_symbol,_ev_get_last_error',
+      '-Wl,-u,_ev_backend_name', '-Wl,-exported_symbol,_ev_backend_name',
+      '-Wl,-u,_ev_detect_backend', '-Wl,-exported_symbol,_ev_detect_backend',
+      '-Wl,-u,_ev_is_backend_available', '-Wl,-exported_symbol,_ev_is_backend_available',
+      '-Wl,-u,_ev_get_memory_usage', '-Wl,-exported_symbol,_ev_get_memory_usage',
+      '-Wl,-u,_ev_set_memory_limit', '-Wl,-exported_symbol,_ev_set_memory_limit',
+      '-Wl,-u,_ev_set_memory_pressure_callback', '-Wl,-exported_symbol,_ev_set_memory_pressure_callback',
+      '-Wl,-u,_ev_memory_cleanup', '-Wl,-exported_symbol,_ev_memory_cleanup',
+      '-Wl,-u,_ev_get_model_info', '-Wl,-exported_symbol,_ev_get_model_info',
+      '-Wl,-u,_ev_set_verbose', '-Wl,-exported_symbol,_ev_set_verbose',
+      '-Wl,-u,_ev_reset', '-Wl,-exported_symbol,_ev_reset',
+      '-Wl,-u,_ev_free_string', '-Wl,-exported_symbol,_ev_free_string',
+    ].join(' '),
+    'OTHER_LDFLAGS[sdk=iphonesimulator*]' => [
+      '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/ios/Frameworks/EdgeVedaCore.xcframework/ios-arm64-simulator/libedge_veda_full.a"',
       '-Wl,-u,_ev_version', '-Wl,-exported_symbol,_ev_version',
       '-Wl,-u,_ev_init', '-Wl,-exported_symbol,_ev_init',
       '-Wl,-u,_ev_free', '-Wl,-exported_symbol,_ev_free',
