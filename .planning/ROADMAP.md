@@ -1,8 +1,13 @@
-# Roadmap: Edge Veda Flutter iOS SDK v1.0
+# Roadmap: Edge Veda SDK
 
 ## Overview
 
-Build a Flutter SDK enabling on-device LLM inference on iOS devices. Start with C++ core integrating llama.cpp with Metal GPU acceleration, wrap with Flutter FFI bindings and model management, deliver a working demo app, then publish to pub.dev. Each phase delivers a verifiable capability that unblocks the next.
+Build a Flutter SDK enabling on-device LLM inference on iOS and Android devices. v1.0 delivered iOS with Metal GPU acceleration, Flutter FFI bindings, and pub.dev publication. v1.1 extends to Android with Vulkan GPU support and adds streaming token-by-token responses on both platforms. Each phase delivers a verifiable capability that unblocks the next.
+
+## Milestones
+
+- **v1.0 (Complete):** iOS SDK with Metal GPU, published to pub.dev
+- **v1.1 (Active):** Android support with Vulkan, streaming responses
 
 ## Phases
 
@@ -12,14 +17,22 @@ Build a Flutter SDK enabling on-device LLM inference on iOS devices. Start with 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
+### v1.0 Phases (Complete)
+
 - [x] **Phase 1: C++ Core + llama.cpp Integration** - Native engine builds with Metal support
 - [x] **Phase 2: Flutter FFI + Model Management** - Dart bindings and model download working
 - [x] **Phase 3: Demo App + Polish** - Example app demonstrates text generation
 - [x] **Phase 4: Release** - Published to pub.dev with documentation
 
+### v1.1 Phases (Active)
+
+- [ ] **Phase 5: Android CPU Build** - Android NDK builds and loads native library with CPU inference
+- [ ] **Phase 6: Streaming C++ + Dart Integration** - Token-by-token streaming works on iOS with long-lived isolate
+- [ ] **Phase 7: Android Vulkan + Demo Update** - Vulkan GPU enabled, streaming on both platforms, demo updated
+
 ## Phase Details
 
-### Phase 1: C++ Core + llama.cpp Integration
+### Phase 1: C++ Core + llama.cpp Integration (Complete)
 **Goal**: Native C++ engine performs on-device inference with Metal GPU acceleration
 
 **Depends on**: Nothing (first phase)
@@ -38,15 +51,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - **Pitfall 2 (Critical)**: Metal not enabled in build - Verify LLAMA_METAL ON and LLAMA_METAL_EMBED_LIBRARY ON in CMake
 - **Pitfall 7 (Moderate)**: Binary size explosion - Disable desktop SIMD (AVX/AVX2), enable LTO, strip symbols
 
-**Plans:** 4 plans
+**Plans:** 4/4 complete
 
-Plans:
-- [x] 01-01-PLAN.md - Add llama.cpp submodule and configure CMake for iOS Metal builds
-- [x] 01-02-PLAN.md - Implement C++ inference engine with llama.cpp API calls
-- [x] 01-03-PLAN.md - Build iOS static libraries and create XCFramework
-- [x] 01-04-PLAN.md - Verify inference with smoke test and performance measurement
-
-### Phase 2: Flutter FFI + Model Management
+### Phase 2: Flutter FFI + Model Management (Complete)
 **Goal**: Flutter developers can initialize SDK and download models with progress tracking
 
 **Depends on**: Phase 1
@@ -67,15 +74,9 @@ Plans:
 - **Pitfall 6 (Critical)**: FFI memory leaks - Establish RAII wrapper pattern, clear ownership rules
 - **Pitfall 12 (Moderate)**: Incorrect download progress - Use chunked download with explicit progress calculation
 
-**Plans:** 4 plans in 3 waves
+**Plans:** 4/4 complete
 
-Plans:
-- [x] 02-01-PLAN.md - Align FFI bindings to edge_veda.h and create RAII memory helpers (Wave 1)
-- [x] 02-02-PLAN.md - Harden model download with caching, atomic temp file, typed exceptions (Wave 1)
-- [x] 02-03-PLAN.md - Rewrite SDK implementation with Isolate.run() for non-blocking FFI (Wave 2)
-- [x] 02-04-PLAN.md - Add memory stats polling and finalize public API exports (Wave 3)
-
-### Phase 3: Demo App + Polish
+### Phase 3: Demo App + Polish (Complete)
 **Goal**: Example Flutter app demonstrates working text generation with proper lifecycle handling
 
 **Depends on**: Phase 2
@@ -94,15 +95,9 @@ Plans:
 - **Pitfall 11 (Moderate)**: Flutter hot reload breaks FFI state - Implement dispose() that calls ev_free()
 - **Pitfall 14 (Minor)**: Simulator performance misleads - Benchmark on real device (iPhone 12)
 
-**Plans:** 4 plans in 3 waves
+**Plans:** 4/4 complete
 
-Plans:
-- [x] 03-01-PLAN.md - Fix example app API usage and implement lifecycle observer (Wave 1)
-- [x] 03-02-PLAN.md - Add real-time metrics display with Stopwatch measurement (Wave 1)
-- [x] 03-03-PLAN.md - Run benchmarks on iPhone 12 and document results (Wave 2)
-- [x] 03-04-PLAN.md - Write comprehensive README with setup, usage, performance (Wave 3)
-
-### Phase 4: Release
+### Phase 4: Release (Complete)
 **Goal**: SDK published to pub.dev with complete documentation and CI/CD
 
 **Depends on**: Phase 3
@@ -118,17 +113,105 @@ Plans:
 **Key Risks**:
 - Low risk phase - primary failure mode is incomplete documentation
 
-**Plans**: 3 plans in 3 waves
+**Plans:** 3/3 complete
+
+---
+
+### Phase 5: Android CPU Build
+**Goal**: Android NDK builds native library and existing generate() API works on Android with CPU backend
+
+**Depends on**: Phase 4 (v1.0 complete)
+
+**Requirements**: R7.1, R7.3, R7.4, R7.5, R7.6
+
+**Success Criteria** (what must be TRUE):
+  1. User can run flutter example app on Android device and see model download progress
+  2. User can type prompt on Android and receive generated response (CPU backend)
+  3. App survives Android Low Memory Killer on 4GB device after 10 consecutive generations
+  4. Model caches in Android app-appropriate directory and skips re-download on restart
+  5. App recovers gracefully after process kill - model reloads on next launch
+
+**Key Risks**:
+- **P1 (Critical)**: Android LMK differs from iOS jetsam - Start with 800MB limit, test on 4GB devices
+- **P2 (Critical)**: llama.cpp version compatibility - Keep pinned to b4658, build with GGML_OPENMP=OFF
+- **P4 (Critical)**: Native library loading fails - Build arm64-v8a only, verify .so in APK
+- **P7 (Moderate)**: NDK version mismatch - Pin NDK r27c explicitly in build.gradle
+- **P9 (Moderate)**: mmap memory accounting differs - Consider --no-mmap or pre-touch pages
+
+**Research flag**: Standard patterns - skip phase research
+
+**Plans:** 3 plans
 
 Plans:
-- [x] 04-01-PLAN.md - Version sync and podspec update for pub.dev compliance (Wave 1)
-- [x] 04-02-PLAN.md - Release workflow CI/CD with XCFramework distribution (Wave 2)
-- [x] 04-03-PLAN.md - Final validation, publish to pub.dev, verify installation (Wave 3)
+- [ ] 05-01-PLAN.md - NDK build configuration (CMakeLists.txt, build.gradle, plugin)
+- [ ] 05-02-PLAN.md - Android memory handling (onTrimMemory, caching, 800MB limit)
+- [ ] 05-03-PLAN.md - Integration verification (build APK, test on device)
+
+### Phase 6: Streaming C++ + Dart Integration
+**Goal**: Users see tokens appear one-by-one as they are generated, with ability to cancel mid-stream
+
+**Depends on**: Phase 4 (can parallelize with Phase 5)
+
+**Requirements**: R6.1, R6.2, R6.3, R6.4, R8.3
+
+**Success Criteria** (what must be TRUE):
+  1. User calls generateStream(prompt) and sees tokens appear progressively in UI (not all at once)
+  2. User can tap "Stop" button and generation halts within 500ms, stream closes cleanly
+  3. When generation completes naturally, final TokenChunk has isFinal=true
+  4. If native error occurs during streaming, error surfaces via stream error (not silent failure)
+  5. Same exception types thrown on iOS and Android for identical error conditions
+
+**Key Risks**:
+- **P5 (Critical)**: Streaming callbacks crash with wrong API - Use NativeCallable.listener exclusively
+- **P6 (Critical)**: Long-lived worker isolate required - Refactor from Isolate.run() to Isolate.spawn()
+- **P8 (Moderate)**: High-volume callbacks cause deadlocks - Batch tokens every 16ms
+- **P11 (Moderate)**: GC freezes with isolates - Minimize Dart heap data in worker
+- **P12 (Moderate)**: Cancel token complexity - Use atomic flag in native, test cancel at various points
+
+**Research flag**: Research complete (06-RESEARCH.md)
+
+**Plans:** 5 plans
+
+Plans:
+- [ ] 06-01-PLAN.md - C++ streaming implementation (ev_stream_impl, atomic cancellation)
+- [ ] 06-02-PLAN.md - Dart FFI streaming bindings (EvStreamImpl, ev_stream_* functions)
+- [ ] 06-03-PLAN.md - Worker isolate infrastructure (long-lived isolate, typed messages)
+- [ ] 06-04-PLAN.md - Public streaming API (generateStream(), CancelToken enhancement)
+- [ ] 06-05-PLAN.md - Integration verification (demo app streaming UI, human verification)
+
+### Phase 7: Android Vulkan + Demo Update
+**Goal**: Android achieves GPU-accelerated performance, demo app showcases streaming on both platforms
+
+**Depends on**: Phase 5, Phase 6
+
+**Requirements**: R6.5, R7.2, R8.1, R8.2
+
+**Success Criteria** (what must be TRUE):
+  1. User on Vulkan-capable Android device sees >10 tok/sec (GPU accelerated)
+  2. User on non-Vulkan device still works (CPU fallback, slower but stable)
+  3. Final TokenChunk includes generation metrics: tokens/sec, total tokens, elapsed time
+  4. Demo app on Android shows streaming tokens appearing in real-time (same UX as iOS)
+  5. Same EdgeVeda Dart API works identically on iOS and Android (no platform-specific code in user app)
+
+**Key Risks**:
+- **P3 (Critical)**: Vulkan support incomplete - Default to CPU, maintain device allowlist for Vulkan
+- **P10 (Moderate)**: Feature parity differences - Create platform-parity test suite, use deterministic settings
+
+**Research flag**: NEEDS RESEARCH - Vulkan device compatibility matrix, GPU fallback strategies
+
+**Plans:** TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+- v1.0: 1 -> 2 -> 3 -> 4 (complete)
+- v1.1: 5 and 6 can parallelize, then 7
+
+```
+Phase 5 (Android CPU) ----+
+                          +--> Phase 7 (Vulkan + Demo)
+Phase 6 (Streaming)  ----+
+```
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -136,12 +219,15 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 2. Flutter FFI + Model Management | 4/4 | **Complete** | 2026-02-04 |
 | 3. Demo App + Polish | 4/4 | **Complete** | 2026-02-04 |
 | 4. Release | 3/3 | **Complete** | 2026-02-04 |
+| 5. Android CPU Build | 0/3 | **Planned** | — |
+| 6. Streaming C++ + Dart Integration | 0/5 | **Planned** | — |
+| 7. Android Vulkan + Demo Update | 0/? | Pending | — |
 
 ---
 *Roadmap created: 2026-02-04*
-*Phase 1 planned: 2026-02-04*
-*Phase 2 planned: 2026-02-04*
-*Phase 3 planned: 2026-02-04*
-*Phase 4 planned: 2026-02-04*
+*v1.1 phases added: 2026-02-05*
+*Phase 5 planned: 2026-02-05*
+*Phase 6 planned: 2026-02-05*
 *Depth: comprehensive (from config.json)*
-*Coverage: 19/19 v1 requirements mapped*
+*v1.0 Coverage: 19/19 requirements mapped*
+*v1.1 Coverage: 14/14 requirements mapped*

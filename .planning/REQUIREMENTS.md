@@ -1,65 +1,68 @@
-# Requirements: Edge Veda Flutter iOS SDK v1
+# Requirements: Edge Veda SDK v1.1
 
-**Milestone:** v1.0 - Flutter iOS On-Device LLM Inference
-**Target:** Developers can run Llama 3.2 1B on iOS devices via Flutter
+**Milestone:** v1.1 - Android Support + Streaming Responses
+**Target:** Developers can run Llama 3.2 1B on iOS and Android with streaming token output
 
 ---
 
 ## Success Criteria
 
-1. **Working inference:** `generate(prompt)` returns coherent text from Llama 3.2 1B
-2. **Acceptable performance:** >10 tokens/sec on iPhone 12+ with Metal
-3. **Stable memory:** No jetsam kills on 4GB devices (iPhone 11/SE)
-4. **Simple integration:** `flutter pub add edge_veda` → working in <30 minutes
-5. **Demo proof:** Example app demonstrates text in → text out
+1. **Cross-platform inference:** `generate(prompt)` works on both iOS and Android
+2. **Streaming output:** `generateStream(prompt)` yields tokens in real-time
+3. **Acceptable Android performance:** >10 tokens/sec on Pixel 6a with Vulkan
+4. **Stable Android memory:** No LMK kills on 6GB devices
+5. **Cancel support:** User can abort generation mid-stream
 
 ---
 
-## Functional Requirements
+## v1.0 Requirements (Validated)
 
-### R1: Core Inference (Must Have)
+These requirements shipped in v1.0 and are now validated:
 
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| R1.1 | Load GGUF model from file path | `EdgeVeda.create(modelPath)` succeeds with valid GGUF |
-| R1.2 | Generate text from prompt | `generate(prompt)` returns non-empty string |
-| R1.3 | System prompt support | System prompt affects generation behavior |
-| R1.4 | Configurable max tokens | Generation stops at specified token limit |
-| R1.5 | Sampling parameters | Temperature, top-p, top-k affect output randomness |
+| ID | Requirement | Status |
+|----|-------------|--------|
+| R1.1 | Load GGUF model from file path | Complete |
+| R1.2 | Generate text from prompt | Complete |
+| R1.3 | System prompt support | Complete |
+| R1.4 | Configurable max tokens | Complete |
+| R1.5 | Sampling parameters (temp, top-p, top-k) | Complete |
+| R2.1-R2.4 | Model download, progress, caching, checksum | Complete |
+| R3.1-R3.3 | Memory tracking, cleanup, iOS pressure handling | Complete |
+| R4.1-R4.4 | Typed exceptions, clear messages | Complete |
+| R5.1-R5.3 | Metal GPU, performance, CPU fallback | Complete |
 
-### R2: Model Management (Must Have)
+---
 
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| R2.1 | Download model from URL | `ModelManager.download(url)` retrieves GGUF file |
-| R2.2 | Progress reporting | Download emits progress 0-100% |
-| R2.3 | Local caching | Re-download skipped if model exists locally |
-| R2.4 | Checksum verification | SHA256 mismatch throws `ModelValidationException` |
+## v1.1 Functional Requirements
 
-### R3: Resource Management (Must Have)
-
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| R3.1 | Memory usage tracking | `getMemoryUsage()` returns current bytes used |
-| R3.2 | Proper cleanup | `dispose()` frees all native resources |
-| R3.3 | Memory pressure handling | SDK responds to iOS memory warnings |
-
-### R4: Error Handling (Must Have)
+### R6: Streaming Inference (Must Have)
 
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
-| R4.1 | Typed exceptions | All errors are typed (not generic Exception) |
-| R4.2 | Clear error messages | Exceptions include actionable message text |
-| R4.3 | Initialization errors | Bad model path throws `ModelLoadException` |
-| R4.4 | Generation errors | OOM during inference throws `GenerationException` |
+| R6.1 | Token-by-token streaming | `generateStream(prompt)` yields tokens as generated |
+| R6.2 | Stream completion signal | TokenChunk.isFinal is true on last token |
+| R6.3 | Cancel generation mid-stream | CancelToken aborts generation, stream closes cleanly |
+| R6.4 | Error propagation in stream | Errors during generation surface via stream error |
+| R6.5 | Generation metrics at stream end | Final TokenChunk includes tok/sec, token counts |
 
-### R5: GPU Acceleration (Must Have)
+### R7: Android Platform Support (Must Have)
 
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
-| R5.1 | Metal backend enabled | GPU layers > 0 when `useGpu: true` |
-| R5.2 | Performance target | >10 tok/sec on A14+ chips (iPhone 12+) |
-| R5.3 | Graceful CPU fallback | Works (slower) if Metal unavailable |
+| R7.1 | Android API 24+ compatibility | SDK works on Android 7.0+ devices |
+| R7.2 | Vulkan GPU acceleration | GPU layers used when Vulkan available |
+| R7.3 | CPU fallback on Android | Works (slower) if Vulkan unavailable |
+| R7.4 | Android memory pressure handling | SDK responds to onTrimMemory() callbacks |
+| R7.5 | Android model caching | Models cached in app-appropriate directory |
+| R7.6 | Background kill recovery | Model reloads gracefully after LMK kill |
+
+### R8: Cross-Platform Parity (Must Have)
+
+| ID | Requirement | Acceptance Criteria |
+|----|-------------|---------------------|
+| R8.1 | Same Dart API on both platforms | EdgeVeda API identical on iOS and Android |
+| R8.2 | Streaming works on both platforms | generateStream() works on iOS and Android |
+| R8.3 | Same exception types | All exceptions consistent across platforms |
 
 ---
 
@@ -67,43 +70,44 @@
 
 ### Performance
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Token generation | >10 tok/sec | Measured on iPhone 12 with Llama 3.2 1B Q4_K_M |
-| Time to first token | <2 seconds | From generate() call to first output |
-| Model load time | <5 seconds | From create() to ready state |
-| Memory ceiling | <1.2 GB | Total SDK memory including model |
+| Metric | iOS Target | Android Target | Measurement |
+|--------|------------|----------------|-------------|
+| Token generation | >10 tok/sec | >10 tok/sec | Llama 3.2 1B Q4_K_M |
+| Time to first token | <500ms | <500ms | From generateStream() to first token |
+| Model load time | <5 seconds | <5 seconds | From create() to ready state |
+| Memory ceiling | <1.2 GB | <1.0 GB | Android more conservative |
 
 ### Compatibility
 
-| Requirement | Target |
-|-------------|--------|
-| iOS version | 13.0+ |
-| Flutter version | 3.16.0+ |
-| Dart version | 3.2.0+ |
-| Architectures | arm64 only |
+| Requirement | iOS | Android |
+|-------------|-----|---------|
+| OS version | 15.0+ | API 24+ (7.0+) |
+| Flutter version | 3.16.0+ | 3.16.0+ |
+| Dart version | 3.1.0+ | 3.1.0+ |
+| Architectures | arm64 | arm64-v8a |
 
 ### Binary Size
 
-| Component | Target |
-|-----------|--------|
-| XCFramework | <15 MB |
-| Total plugin overhead | <20 MB |
+| Component | iOS Target | Android Target |
+|-----------|------------|----------------|
+| Native library | <15 MB | <20 MB |
+| Total plugin overhead | <20 MB | <25 MB |
 
 ---
 
-## Out of Scope (v1)
+## Out of Scope (v1.1)
 
-These are explicitly NOT in v1:
+These are explicitly NOT in v1.1:
 
-- **Streaming responses** - Deferred to v2
-- **Multi-turn chat history** - Deferred to v2
-- **Android support** - Deferred to v2
+- **Multi-turn chat history** - Deferred to v1.2
 - **Stop sequences** - Low priority
-- **Token counting API** - Nice to have, not blocking
-- **Multiple simultaneous models** - Not needed for v1
-- **Background inference** - iOS restrictions make this complex
-- **Cloud fallback** - Violates on-device promise
+- **Token counting API** - Nice to have
+- **Multiple simultaneous models** - Not needed
+- **Background inference** - Platform restrictions
+- **x86/x86_64 Android** - arm64-v8a only for v1.1
+- **OpenCL backend** - Vulkan + CPU sufficient
+- **Thermal throttling awareness** - Complex, defer
+- **NPU exploration** - Requires different framework
 
 ---
 
@@ -111,111 +115,113 @@ These are explicitly NOT in v1:
 
 ### Technical Constraints
 
-1. **llama.cpp dependency:** Must use llama.cpp as inference engine (no alternatives)
-2. **GGUF only:** Only GGUF model format supported (no ONNX, TFLite, etc.)
-3. **Foreground only:** Inference must run in foreground (iOS background limits)
+1. **llama.cpp dependency:** Must use llama.cpp b4658 (pinned for stability)
+2. **GGUF only:** Only GGUF model format supported
+3. **Foreground only:** Inference runs in foreground on both platforms
 4. **Single instance:** One EdgeVeda instance at a time per app
+5. **NativeCallable.listener:** Required for streaming callbacks (Dart 3.1+)
 
 ### Resource Constraints
 
-1. **Memory budget:** Hard limit 1.2GB, warning at 900MB
-2. **Context window:** Default 2048 tokens (memory-safe)
-3. **Thread count:** Default to device cores - 2 (leave headroom)
+| Platform | Memory Budget | Warning Threshold |
+|----------|---------------|-------------------|
+| iOS | 1.2 GB | 900 MB |
+| Android | 1.0 GB | 800 MB |
 
-### Platform Constraints
+### Build Constraints
 
-1. **No bitcode:** llama.cpp incompatible with bitcode
-2. **arm64 only:** No 32-bit support
-3. **Metal required:** For performance targets (CPU fallback exists but slow)
+1. **Android NDK:** r27c LTS (avoid r28+ 16KB page issues)
+2. **Vulkan:** 1.1+ with VK_USE_PLATFORM_ANDROID_KHR
+3. **CMake flags:** GGML_VULKAN=ON, GGML_OPENMP=OFF, GGML_LLAMAFILE=OFF
 
 ---
 
 ## Dependencies
 
-### External Dependencies
+### New Dependencies for v1.1
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| llama.cpp | Pinned commit (verify latest stable) | Inference engine |
+| Android NDK | r27c | Native Android build |
+| Vulkan SDK | 1.1+ | GPU acceleration |
+
+### Existing Dependencies (from v1.0)
+
+| Dependency | Version | Purpose |
+|------------|---------|---------|
+| llama.cpp | b4658 | Inference engine |
 | Flutter ffi | ^2.1.0 | Native bindings |
 | path_provider | ^2.1.0 | File system paths |
 | http | ^1.2.0 | Model download |
 | crypto | ^3.0.3 | SHA256 checksum |
-
-### Build Dependencies
-
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| CMake | 3.15+ | C++ build |
-| Xcode | 15+ | iOS compilation |
-| CocoaPods | Latest | iOS package management |
 
 ---
 
 ## Validation Plan
 
 ### Unit Tests
-- FFI binding correctness
-- Memory management (no leaks)
-- Error handling paths
+- Streaming callback correctness
+- Cancel token behavior
+- Cross-platform FFI binding tests
 
 ### Integration Tests
-- Full inference pipeline
-- Model download and caching
-- Memory pressure response
+- Full streaming pipeline (iOS + Android)
+- Memory pressure response on both platforms
+- Model caching on Android
 
 ### Device Tests (Manual)
-- iPhone 11 (4GB RAM) - Memory stability
-- iPhone 12 (4GB RAM) - Performance baseline
-- iPhone 13 Pro (6GB RAM) - Performance target
-- iOS Simulator - Development workflow
 
-### Acceptance Test
-- Demo app: User types prompt → sees generated response
-- Performance: >10 tok/sec logged in console
-- Memory: No crashes after 10 consecutive generations
+**iOS:**
+- iPhone 12 (4GB RAM) - Streaming performance baseline
+- iPhone 13 Pro (6GB RAM) - Performance target
+
+**Android:**
+- Pixel 6a (6GB RAM) - Mid-range baseline
+- Galaxy A54 (6GB RAM) - Samsung validation
+- Pixel 8 Pro (12GB RAM) - Flagship performance
+
+### Acceptance Tests
+- Demo app: User types prompt -> sees tokens stream in real-time
+- Cancel: User taps stop -> generation aborts cleanly
+- Performance: >10 tok/sec on Pixel 6a logged in console
+- Memory: No crashes after 10 consecutive streaming generations
 
 ---
 
 ## Traceability
 
-### Requirement to Source
-
-| Requirement | Source |
-|-------------|--------|
-| R1.* Core Inference | PRD Section 3.1, Research FEATURES.md |
-| R2.* Model Management | PRD Section 3.2, User input (download on first use) |
-| R3.* Resource Management | Research PITFALLS.md (jetsam prevention) |
-| R4.* Error Handling | Research ARCHITECTURE.md |
-| R5.* GPU Acceleration | PRD performance targets, Research STACK.md |
-
 ### Requirement to Phase (Roadmap Mapping)
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| R1.1 | Phase 1 | Not started |
-| R1.2 | Phase 1 | Not started |
-| R1.3 | Phase 1 | Not started |
-| R1.4 | Phase 1 | Not started |
-| R1.5 | Phase 1 | Not started |
-| R2.1 | Phase 2 | Not started |
-| R2.2 | Phase 2 | Not started |
-| R2.3 | Phase 2 | Not started |
-| R2.4 | Phase 2 | Not started |
-| R3.1 | Phase 1 | Not started |
-| R3.2 | Phase 1 | Not started |
-| R3.3 | Phase 2 | Not started |
-| R4.1 | Phase 2 | Not started |
-| R4.2 | Phase 2 | Not started |
-| R4.3 | Phase 1 | Not started |
-| R4.4 | Phase 2 | Not started |
-| R5.1 | Phase 1 | Not started |
-| R5.2 | Phase 1 | Not started |
-| R5.3 | Phase 1 | Not started |
+| R6.1 | Phase 6 | Pending |
+| R6.2 | Phase 6 | Pending |
+| R6.3 | Phase 6 | Pending |
+| R6.4 | Phase 6 | Pending |
+| R6.5 | Phase 7 | Pending |
+| R7.1 | Phase 5 | Pending |
+| R7.2 | Phase 7 | Pending |
+| R7.3 | Phase 5 | Pending |
+| R7.4 | Phase 5 | Pending |
+| R7.5 | Phase 5 | Pending |
+| R7.6 | Phase 5 | Pending |
+| R8.1 | Phase 7 | Pending |
+| R8.2 | Phase 7 | Pending |
+| R8.3 | Phase 6 | Pending |
 
-**Coverage:** 19/19 requirements mapped (100%)
+**Coverage:** 14/14 v1.1 requirements mapped (100%)
+
+### Phase Summary
+
+| Phase | Requirements | Count |
+|-------|--------------|-------|
+| Phase 5: Android CPU Build | R7.1, R7.3, R7.4, R7.5, R7.6 | 5 |
+| Phase 6: Streaming C++ + Dart | R6.1, R6.2, R6.3, R6.4, R8.3 | 5 |
+| Phase 7: Android Vulkan + Demo | R6.5, R7.2, R8.1, R8.2 | 4 |
+| **Total** | | **14** |
 
 ---
 
-*Requirements derived from project research and user inputs during /gsd:new-project.*
-*Traceability updated: 2026-02-04*
+*Requirements defined: 2026-02-04*
+*Traceability updated: 2026-02-05*
+*Based on research: STACK_v1.1.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md*
