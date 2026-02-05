@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 5 & 6 - Parallel execution in progress
-Plan: 06-02 complete (Dart FFI Streaming Bindings)
+Plan: 4/8 plans complete (05-01, 05-02, 06-01, 06-02)
 Status: In progress
-Last activity: 2026-02-05 - Completed 06-02-PLAN.md
+Last activity: 2026-02-05 - Completed 06-01-PLAN.md (C++ Streaming Core)
 
-Progress: [█░░░░░░░░░] 12.5% (1/8 plans complete in Phase 5 & 6)
+Progress: [####......] 50% (4/8 plans complete in Phase 5 & 6)
 
 ## Milestone Summary
 
@@ -24,8 +24,8 @@ Progress: [█░░░░░░░░░] 12.5% (1/8 plans complete in Phase 5 
 - iOS Metal GPU working
 
 **v1.1: Android + Streaming (Active)**
-- Phase 5: Android CPU Build (3 plans) - in progress
-- Phase 6: Streaming C++ + Dart (5 plans) - 06-02 complete
+- Phase 5: Android CPU Build (3 plans) - 05-01, 05-02 complete
+- Phase 6: Streaming C++ + Dart (5 plans) - 06-01, 06-02 complete
 - Phase 7: Android Vulkan + Demo (4 requirements) - depends on 5 and 6
 
 Total: 8 plans across 2 parallel phases, then Phase 7
@@ -41,11 +41,19 @@ Phase 6 (Streaming)  ----+
 Phases 5 and 6 are independent and can run in parallel.
 Phase 7 depends on both 5 and 6 completing.
 
+## Phase 5 Progress
+
+| Plan | Name | Status |
+|------|------|--------|
+| 05-01 | Android CMake Build | **Complete** |
+| 05-02 | Memory Pressure Handling | **Complete** |
+| 05-03 | APK Build & Verification | Pending |
+
 ## Phase 6 Progress
 
 | Plan | Name | Status |
 |------|------|--------|
-| 06-01 | C++ Streaming API | In progress (parallel) |
+| 06-01 | C++ Streaming API | **Complete** |
 | 06-02 | Dart FFI Bindings | **Complete** |
 | 06-03 | Worker Isolate | Pending |
 | 06-04 | StreamController Wrapper | Pending |
@@ -77,6 +85,17 @@ v1.1 decisions (from research):
 - Android memory limit 800MB (more conservative than iOS 1.2GB)
 - NDK r27c LTS pinned (r28+ has 16KB page issues)
 
+Phase 5 Plan 2 decisions:
+- 800MB default for 4-6GB Android devices, 1GB for 8GB, 1.2GB for 12GB+
+- iOS keeps 1.2GB (jetsam more predictable than LMK)
+- EventChannel for platform-to-Dart memory pressure events
+
+Phase 6 Plan 1 decisions:
+- Pull-based streaming design (Dart calls ev_stream_next in loop) avoids callback threading issues
+- Stream does NOT own context - context is shared, stream only owns sampler
+- Atomic cancellation uses std::atomic<bool> with release/acquire memory ordering
+- Natural end returns nullptr + EV_SUCCESS, cancellation returns nullptr + EV_ERROR_STREAM_ENDED
+
 Phase 6 Plan 2 decisions:
 - EvStreamImpl as opaque type matching C++ ev_stream_impl*
 - Pointer<Int32> for error codes matching ev_error_t*
@@ -104,14 +123,15 @@ None currently.
 ## Key Pitfalls by Phase
 
 **Phase 5 (Android CPU):**
-- P1: Android LMK differs from iOS - use 800MB limit
-- P2: llama.cpp version - keep b4658, GGML_OPENMP=OFF
-- P4: dlopen fails - build arm64-v8a, verify in APK
+- P1: Android LMK differs from iOS - use 800MB limit [IMPLEMENTED 05-02]
+- P2: llama.cpp version - keep b4658, GGML_OPENMP=OFF [IMPLEMENTED 05-01]
+- P4: dlopen fails - build arm64-v8a, verify in APK [CONFIGURED 05-01]
 
 **Phase 6 (Streaming):**
 - P5: Wrong callback API crashes - use NativeCallable.listener
 - P6: Isolate.run() insufficient - refactor to Isolate.spawn()
 - P8: High-volume callbacks deadlock - batch tokens
+- Pull-based streaming implemented in C++ (06-01) - avoids callback issues
 
 **Phase 7 (Vulkan + Demo):**
 - P3: Vulkan incomplete - CPU fallback, device allowlist
@@ -120,8 +140,8 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: Completed 06-02-PLAN.md (Dart FFI Streaming Bindings)
-Resume with: `/gsd:execute-phase 6` to continue Phase 6, plan 3
+Stopped at: Completed 06-01-PLAN.md (C++ Streaming Core)
+Resume with: `/gsd:execute-phase 5` for 05-03, or `/gsd:execute-phase 6` for 06-03+
 
 ---
-*Phase 6 Plan 2 complete. FFI bindings ready for worker isolate implementation.*
+*Phase 5 & 6 executing in parallel. 4/8 plans complete (50%).*
