@@ -1,313 +1,316 @@
-# Feature Landscape: On-Device LLM Inference SDK
+# Feature Landscape: v1.1 Android + Streaming
 
-**Domain:** Flutter SDK for on-device LLM inference (iOS first)
+**Project:** Edge Veda SDK - Flutter On-Device LLM Inference
+**Milestone:** v1.1 (Android + Streaming)
 **Researched:** 2026-02-04
-**Confidence:** MEDIUM (based on training data + existing codebase analysis; WebSearch unavailable for verification)
+**Confidence:** HIGH (verified via official docs and multiple sources)
+
+---
 
 ## Executive Summary
 
-On-device LLM inference SDKs exist in a nascent space. The major players (llama.cpp, MediaPipe LLM Inference, MLC-LLM) establish baseline expectations but Flutter-specific solutions are rare. Edge Veda's existing API design already covers most table stakes features. The key insight: **simplicity IS the differentiator** in this space - most existing solutions require complex setup.
+v1.1 adds two major capabilities to Edge Veda: Android platform support with Vulkan GPU acceleration and streaming token-by-token responses. These features are now table stakes - users trained by ChatGPT/Claude expect real-time streaming, and Android represents the largest mobile platform.
+
+**Key insight:** Streaming is no longer optional - "users see tokens appear in real-time, creating the illusion of instant response even when generation takes just as long" (industry consensus). The perceived latency drops from seconds to milliseconds.
 
 ---
 
-## Table Stakes
+## Streaming Features
 
-Features users absolutely expect. Missing any of these = SDK is not production-ready.
+### Table Stakes
 
-### 1. Basic Text Generation
+Features users expect from any LLM streaming implementation. Missing = product feels broken.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **`generate(prompt) -> text`** | Core value proposition | Medium | Already designed in EdgeVeda API |
-| **System prompt support** | Required for persona/behavior control | Low | Standard LLM feature |
-| **Max tokens limit** | Prevent runaway generation | Low | Already in GenerateOptions |
-| **Model loading** | Must load GGUF models | High | llama.cpp integration |
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| **Token-by-token emission** | ChatGPT/Claude trained users to expect real-time text appearance | Medium | Long-lived isolate | Core streaming UX baseline |
+| **Cancel/abort generation** | Users must be able to stop generation mid-stream | Medium | CancelToken integration | "Stop generating" is mandatory |
+| **Consistent token cadence** | Bursty token delivery feels janky; steady flow expected | Low | Native callback timing | Avoid dumping multiple tokens at once |
+| **TTFT < 500ms** | Time-to-first-token under 500ms feels responsive | High | GPU acceleration | PRD target: <500ms TTFT |
+| **Stream completion signal** | Clear indication when generation is done | Low | isFinal flag in TokenChunk | Existing TokenChunk.isFinal supports this |
+| **Error propagation in stream** | Errors during generation must surface to UI | Medium | Stream error handling | StreamController.addError() pattern |
+| **Pause/resume subscription** | Dart Stream contract requires pause behavior | Medium | Stream backpressure | async* generator auto-pauses at yield |
 
-**v1 MVP:** All of these are non-negotiable.
+### Differentiators
 
-### 2. Configuration
+Features that set the SDK apart. Not strictly required, but add significant value.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Thread count control** | Performance tuning for device | Low | Already in EdgeVedaConfig |
-| **Context length setting** | Memory/quality tradeoff | Low | Already designed (default 2048) |
-| **GPU toggle** | Enable/disable Metal acceleration | Low | Already designed (useGpu flag) |
-| **Memory limit** | Prevent OOM crashes | Medium | Critical for mobile - already designed |
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| **Token count in stream** | Emit running token count during generation | Low | Native token counter | Useful for quota/limit tracking |
+| **Generation metrics at completion** | Return full GenerateResponse at stream end | Medium | Wrap stream with completion | tok/sec, prompt tokens, completion tokens |
+| **Coalesced token batching** | Batch 2-3 tokens per UI update for performance | Low | Configurable buffer | Prevents render-every-token overhead |
+| **Memory pressure events during stream** | Emit warnings if approaching limits | High | Long-lived isolate memory monitoring | Proactive user notification |
+| **Intertoken latency reporting** | Report ITL for performance debugging | Low | Timestamp each token | Developer-facing metric |
 
-**v1 MVP:** All present in current design.
+### Anti-Features
 
-### 3. Sampling Parameters
+Features to deliberately NOT build. Common mistakes in streaming implementations.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Temperature** | Control randomness | Low | Already in GenerateOptions |
-| **Top-p (nucleus)** | Standard sampling control | Low | Already designed |
-| **Top-k** | Standard sampling control | Low | Already designed |
-| **Repeat penalty** | Prevent loops | Low | Already designed |
-
-**v1 MVP:** All present. These are standard llama.cpp parameters.
-
-### 4. Model Management
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Download from URL** | Models are large (500MB-2GB) | Medium | Already in ModelManager |
-| **Download progress** | UX requirement for large files | Low | Already designed |
-| **Local caching** | Don't re-download | Low | Already designed |
-| **Checksum verification** | Security/integrity | Medium | Already designed |
-
-**v1 MVP:** All present in ModelManager design.
-
-### 5. Resource Management
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Memory usage tracking** | Debug/monitoring | Low | getMemoryUsage() designed |
-| **Proper cleanup (dispose)** | Prevent memory leaks | Medium | dispose() designed |
-| **One instance per session** | Resource constraint | Low | Documented best practice |
-
-**v1 MVP:** All present.
-
-### 6. Error Handling
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Typed exceptions** | Dart idioms | Low | Full hierarchy designed |
-| **Initialization errors** | Know when setup fails | Low | InitializationException |
-| **Generation errors** | Know when inference fails | Low | GenerationException |
-| **Model load errors** | Know when model is bad | Low | ModelLoadException |
-
-**v1 MVP:** All present in types.dart.
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Render every single token** | Causes UI jank, excessive rebuilds | Coalesce into small batches (2-3 tokens) |
+| **WebSocket-style bidirectional streaming** | Unnecessary complexity for on-device inference | Simple async* generator is sufficient |
+| **Automatic retry on error** | Users expect control over when to retry | Expose error, let caller decide retry |
+| **Progress percentage** | Streaming length is unpredictable; percentage is misleading | Show token count instead |
+| **Background streaming service** | Adds Android Foreground Service complexity, battery drain | Keep inference foreground-only |
+| **Custom binary framing** | Over-engineering; native callbacks are direct | Use native callback directly via FFI |
 
 ---
 
-## Differentiators
+## Android Features
 
-Features that could set Edge Veda apart. Not expected, but valued if present.
+### Table Stakes
 
-### Tier 1: High Value, Achievable
+Features users expect on Android. Missing = platform feels incomplete.
 
-| Feature | Value Proposition | Complexity | Recommendation |
-|---------|-------------------|------------|----------------|
-| **Zero-config default model** | "npm install and run" experience | Low | v1 stretch: Auto-download Llama 3.2 1B if no path specified |
-| **JSON mode** | Structured output for apps | Medium | Already designed - implement in v1 if time allows |
-| **Model registry** | Curated list of tested models | Low | Already designed in ModelRegistry |
-| **Performance metrics** | tokens/sec in response | Low | Already designed in GenerateResponse |
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| **GPU acceleration via Vulkan** | Essential for acceptable performance on Android | High | llama.cpp Vulkan backend | Vulkan officially supported on Android, unlike OpenCL |
+| **API 24+ support** | Android 7.0+ covers ~95% of devices | Medium | NDK toolchain config | PROJECT.md constraint |
+| **Model caching in app directory** | Parity with iOS implementation | Low | Platform-appropriate path | Use getExternalFilesDir or equivalent |
+| **Background kill recovery** | Android LMK will kill memory-heavy apps | Medium | State restoration | Reload model gracefully after kill |
+| **Memory pressure response** | onTrimMemory() callback compliance | Medium | Platform channel | Reduce memory or unload model proactively |
+| **Mid-range device support** | Galaxy A54/Pixel 6a must work, not just flagships | High | Memory optimization | Test on 6GB RAM devices, not just 12GB |
+| **ARM64 (arm64-v8a) target** | Primary Android architecture | Low | CMake config | x86_64 for emulator nice-to-have |
 
-### Tier 2: High Value, Defer to v2
+### Differentiators
 
-| Feature | Value Proposition | Complexity | Recommendation |
-|---------|-------------------|------------|----------------|
-| **Streaming responses** | Real-time UX | High | Defer to v2 - prove basic works first |
-| **Stop stream mid-generation** | User control | Medium | Comes with streaming |
-| **Multi-turn chat history** | Conversational context | Medium | Defer - requires context management |
-| **Conversation memory** | Automatic context window | High | Defer - complex KV cache management |
+Features that give Android implementation competitive advantage.
 
-### Tier 3: Nice to Have, Future
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| **Thermal throttling awareness** | Reduce inference speed before device overheats | High | Platform APIs | Battery/thermal monitoring |
+| **NPU fallback exploration** | Qualcomm Hexagon NPU offers 10x GPU speedup | Very High | LiteRT/MediaPipe | Future consideration, not v1.1 |
+| **Dynamic layer offloading** | Adjust GPU layers based on available memory | Medium | Runtime memory checks | Start conservative, increase if headroom |
+| **Download resume on network change** | Resume model download after connectivity restored | Medium | HTTP range requests | Existing download progress infrastructure |
+| **ProGuard/R8 compatibility** | Minification must not break FFI | Low | Keep rules | Test release builds |
 
-| Feature | Value Proposition | Complexity | Recommendation |
-|---------|-------------------|------------|----------------|
-| **Stop sequences** | Fine-grained control | Low | Already designed but low priority |
-| **Token counting API** | Dev tools | Low | Already designed |
-| **Model info API** | Dev tools | Low | Already designed |
-| **Benchmarking mode** | Performance validation | Medium | Future |
-| **Headless/CI mode** | Automated testing | Medium | Future |
+### Anti-Features
+
+Features to deliberately NOT build for Android.
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **OpenCL GPU backend** | OpenCL banned on Android 7.0+; not future-proof | Use Vulkan exclusively |
+| **Foreground Service for inference** | Battery drain complaints; complexity | Keep inference activity-bound |
+| **Background model downloads** | WorkManager complexity, battery impact | Foreground download with progress UI |
+| **Multi-GPU support** | Android devices have single GPU | Single GPU path only |
+| **x86 (32-bit) support** | Negligible device share, maintenance burden | arm64-v8a only (x86_64 for emulator) |
+| **Persistent in-memory model** | Will get killed by LMK anyway | Accept reload cost; optimize reload time |
+| **Custom Vulkan shaders** | llama.cpp handles this; maintenance nightmare | Use llama.cpp Vulkan backend as-is |
 
 ---
 
-## Anti-Features
+## Cross-Platform Considerations
 
-Features to deliberately NOT build in v1. Common mistakes in this domain.
+Features that affect both iOS and Android implementations.
 
-### 1. Premature Abstraction
+### API Parity Requirements
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Universal model format support** | GGUF is sufficient; ONNX/TFLite add complexity | Support GGUF only (llama.cpp native format) |
-| **Backend abstraction layer** | Different backends have different APIs | Start with Metal-only, add abstraction when needed |
-| **Plugin architecture** | Over-engineering for v1 | Monolithic is fine until proven otherwise |
+| Capability | iOS v1.0 Status | Android v1.1 Requirement | Notes |
+|------------|-----------------|--------------------------|-------|
+| `generate(prompt)` | Implemented | Must match | Text-in/text-out core |
+| `generateStream(prompt)` | Not implemented | New for both | v1.1 feature |
+| `init(config)` | Implemented | Must match | Same config structure |
+| `dispose()` | Implemented | Must match | Cleanup pattern |
+| `getMemoryStats()` | Implemented | Must match | Memory monitoring |
+| `isMemoryPressure()` | Implemented | Must match | Quick pressure check |
+| Model download | Implemented | Must match | Same ModelManager |
+| CancelToken | Defined, unused | Must work for streaming | Cancel generation |
 
-### 2. Premature Optimization
+### Streaming API Design
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Speculative decoding** | Complex, marginal gains | Focus on basic inference first |
-| **KV cache persistence** | Complex state management | Accept cold start cost initially |
-| **Model sharding** | 1B models fit in memory | Not needed for target model size |
-| **Batched inference** | Mobile is single-user | One request at a time is fine |
+Based on Dart Stream best practices and existing SDK patterns:
 
-### 3. Scope Creep
+```dart
+// Table stakes API shape
+Stream<TokenChunk> generateStream(
+  String prompt, {
+  GenerateOptions? options,
+  CancelToken? cancelToken,
+});
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Built-in chat UI** | SDK should be headless | Provide examples, not components |
-| **Cloud fallback** | Violates "on-device" promise | Fail clearly if device can't run model |
-| **Analytics/telemetry** | Privacy concerns, scope creep | Let apps implement their own |
-| **OTA model updates** | Control plane scope | Defer to dedicated milestone |
-| **Multi-model routing** | Over-engineering | One model at a time |
+// TokenChunk already defined in types.dart:
+// - token: String (the text content)
+// - index: int (position in sequence)
+// - isFinal: bool (completion signal)
+```
 
-### 4. Platform Overreach
+**Key implementation decisions:**
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Android in v1** | Validate iOS first | Explicit v2 milestone |
-| **Web/WASM in v1** | Different architecture entirely | Separate milestone |
-| **Desktop in v1** | Mobile-first validation | Future milestone |
+| Decision | Rationale | Source |
+|----------|-----------|--------|
+| Use `async*` generator | Single-subscription by default, auto-pause at yield | Dart official docs |
+| Long-lived worker isolate | Required for persistent native context + streaming callbacks | Current iOS impl notes |
+| SendPort/ReceivePort | Bidirectional communication with worker isolate | Dart isolate pattern |
+| CancelToken checks at yield | Clean cancellation without orphaned resources | Existing CancelToken type |
+
+### Memory Management Differences
+
+| Aspect | iOS | Android | Implication |
+|--------|-----|---------|-------------|
+| Kill mechanism | Jetsam (memory pressure levels) | LMK (oom_adj_score) | Different thresholds |
+| Memory budget | 1.2GB per PRD | 1.2GB per PRD | Same target |
+| Pressure callback | iOS memory warnings | onTrimMemory() | Platform-specific handling |
+| Typical device RAM | 6-8GB (iPhone 15) | 6-12GB (varies widely) | Android needs more caution |
+| Background behavior | Suspended, then killed | Killed more aggressively | Android needs faster recovery |
+
+### Shared Infrastructure
+
+Components that work for both platforms:
+
+| Component | Reusability | Notes |
+|-----------|-------------|-------|
+| ModelManager | 100% shared | Download, cache, checksum |
+| Types/exceptions | 100% shared | All in types.dart |
+| EdgeVedaConfig | 100% shared | Platform-agnostic config |
+| GenerateOptions | 100% shared | Sampling parameters |
+| TokenChunk | 100% shared | Streaming response type |
+| CancelToken | 100% shared | Cancellation mechanism |
+| FFI bindings | Partial | Same C API, different build artifacts |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Model Loading (REQUIRED FIRST)
+Android Support
     |
-    v
-Basic Generate (text in -> text out)
+    +-- NDK Build Infrastructure
+    |       |
+    |       +-- Vulkan backend enabled
+    |       +-- ARM64 target
     |
-    +---> GPU Acceleration (Metal)
-    |         |
-    |         v
-    |     Performance Optimization
+    +-- Platform-specific memory handling
+    |       |
+    |       +-- onTrimMemory() integration
+    |       +-- LMK-aware thresholds
     |
-    +---> JSON Mode (structured output)
+    +-- Model caching path
+            |
+            +-- Platform channel for directory
+
+Streaming Support
     |
-    +---> [v2] Streaming
-              |
-              v
-          Stop Stream
-              |
-              v
-          Multi-turn Chat
-              |
-              v
-          Conversation Memory
+    +-- Long-lived Worker Isolate
+    |       |
+    |       +-- SendPort/ReceivePort setup
+    |       +-- Persistent native context
+    |
+    +-- Token callback from native
+    |       |
+    |       +-- C callback function
+    |       +-- FFI callback registration
+    |
+    +-- CancelToken integration
+    |       |
+    |       +-- Check at each token
+    |       +-- Clean resource teardown
+    |
+    +-- Stream API surface
+            |
+            +-- async* generator
+            +-- Error propagation
 ```
 
-**Critical path for v1:** Model Loading -> Basic Generate -> GPU Acceleration
+---
+
+## MVP Recommendation for v1.1
+
+### Must Have (Table Stakes)
+
+For v1.1 to feel complete:
+
+1. **Android Vulkan inference** - Core platform support
+2. **generateStream(prompt)** - Streaming API on both platforms
+3. **Cancel generation** - CancelToken for abort
+4. **Memory pressure handling** - Platform-appropriate responses
+5. **API parity** - Same Dart API surface on both platforms
+
+### Should Have (Differentiators)
+
+For v1.1 to feel polished:
+
+1. **Generation metrics at stream end** - Full response stats
+2. **Token count in stream** - Running count
+3. **Mid-range device testing** - Galaxy A54, Pixel 6a validation
+
+### Defer to Post-v1.1
+
+1. **Thermal throttling awareness** - Complex, device-specific
+2. **NPU exploration** - Requires different framework (LiteRT)
+3. **Memory pressure events during stream** - Nice-to-have optimization
 
 ---
 
-## Comparison to Existing Solutions
+## Performance Benchmarks
 
-### llama.cpp (C++ library)
+### Key Metrics to Track
 
-| Aspect | llama.cpp | Edge Veda Target |
-|--------|-----------|------------------|
-| **Language** | C/C++ | Dart (Flutter) |
-| **Setup complexity** | High (build from source) | Low (pub.dev package) |
-| **Mobile support** | Manual FFI work | Built-in |
-| **Streaming** | Yes | v2 |
-| **Model format** | GGUF | GGUF (via llama.cpp) |
+| Metric | Target | Why It Matters |
+|--------|--------|----------------|
+| **TTFT (Time to First Token)** | <500ms | User perceives response as immediate |
+| **ITL (Inter-Token Latency)** | <100ms | Smooth streaming experience |
+| **TPS (Tokens Per Second)** | >15 tok/s | PRD requirement |
+| **Memory Peak** | <1.2GB | Device stability |
 
-**Edge Veda advantage:** Developer experience. llama.cpp is powerful but requires C++ expertise.
+### Device Tier Testing Matrix
 
-### MediaPipe LLM Inference (Google)
-
-| Aspect | MediaPipe | Edge Veda Target |
-|--------|-----------|------------------|
-| **Platforms** | iOS, Android, Web | iOS (v1), Android (v2) |
-| **Flutter support** | Limited/indirect | Native |
-| **Model format** | TFLite, custom | GGUF |
-| **Models** | Gemma, Phi, Falcon | Any GGUF (Llama, etc.) |
-| **API style** | Callback-heavy | Async/await native |
-
-**Edge Veda advantage:** Flutter-native API, broader model support via GGUF.
-
-### MLC-LLM
-
-| Aspect | MLC-LLM | Edge Veda Target |
-|--------|---------|------------------|
-| **Compilation** | Requires model compilation | Pre-quantized GGUF |
-| **Setup** | Complex toolchain | Simple pub.dev |
-| **Performance** | Highly optimized | Good (llama.cpp) |
-| **Model flexibility** | Any model (with work) | Any GGUF model |
-
-**Edge Veda advantage:** No compilation step. Download and run.
+| Tier | Example Devices | RAM | Expected Performance |
+|------|-----------------|-----|---------------------|
+| **Flagship** | Pixel 8 Pro, S24 Ultra | 12GB | Full speed, all layers on GPU |
+| **Mid-range** | Pixel 6a, Galaxy A54 | 6GB | Reduced layers, acceptable speed |
+| **Budget** | Older 4GB devices | 4GB | May need CPU-only fallback |
 
 ---
 
-## MVP Feature Checklist for v1
+## Historical Context (v1.0 Features)
 
-### Must Have (blocking release)
+These features are already implemented for iOS and need Android parity:
 
-- [ ] Load GGUF model from path
-- [ ] `generate(prompt)` returns text
-- [ ] System prompt support
-- [ ] Max tokens limit
-- [ ] Temperature/top-p/top-k sampling
-- [ ] Metal GPU acceleration (iOS)
-- [ ] Memory usage tracking
-- [ ] Proper dispose/cleanup
-- [ ] Download model from URL
-- [ ] Download progress reporting
-- [ ] Checksum verification
-- [ ] Typed exception hierarchy
+### Already Shipped (iOS v1.0)
 
-### Should Have (include if time)
+- Load GGUF model from path
+- `generate(prompt)` returns complete text
+- System prompt support
+- Temperature/top-p/top-k sampling
+- Model download with progress
+- Model caching with checksum
+- Memory pressure handling (1.2GB limit)
+- Typed exception hierarchy
+- Metal GPU acceleration
 
-- [ ] JSON mode for structured output
-- [ ] Model registry with pre-configured models
-- [ ] Performance metrics (tokens/sec) in response
-- [ ] Verbose logging mode
+### Not Yet Implemented (v1.1 Scope)
 
-### Could Have (stretch goals)
-
-- [ ] Zero-config with default model auto-download
-- [ ] Token counting API
-
-### Won't Have (explicit v2+)
-
-- [ ] Streaming responses
-- [ ] Multi-turn chat
-- [ ] Android support
-- [ ] Stop sequences (low value)
-- [ ] Any cloud features
-
----
-
-## Implications for Roadmap
-
-### Phase Structure Recommendation
-
-1. **Core Inference** - Model loading + basic generate
-   - Critical path, highest risk
-   - llama.cpp integration is the key technical challenge
-
-2. **GPU Acceleration** - Metal backend
-   - Required for acceptable performance
-   - Depends on core inference working
-
-3. **Model Management** - Download, cache, verify
-   - High polish area for DX
-   - Can be done in parallel with GPU work
-
-4. **Polish & Release** - Error handling, logging, docs
-   - Already designed, just needs implementation validation
-   - pub.dev publication
-
-### Risk Areas Requiring Deeper Research
-
-| Area | Risk | Mitigation |
-|------|------|------------|
-| llama.cpp FFI | Memory management across Dart/C++ boundary | Phase-specific research on Dart FFI patterns |
-| Metal integration | llama.cpp Metal backend stability on iOS | Test early, have CPU fallback |
-| Model download | Large file handling, resume support | Test on slow networks early |
+- `generateStream(prompt)` yields tokens
+- Android Vulkan GPU backend
+- Android-specific memory management
+- Cancel token for aborting generation
+- Long-lived worker isolate pattern
 
 ---
 
 ## Sources
 
-**HIGH confidence (codebase analysis):**
-- `/Users/ram/Documents/explore/edge/flutter/doc/API.md` - Existing API design
-- `/Users/ram/Documents/explore/edge/flutter/lib/src/types.dart` - Type definitions
-- `/Users/ram/Documents/explore/edge/flutter/lib/src/edge_veda_impl.dart` - Implementation skeleton
-- `/Users/ram/Documents/explore/edge/flutter/lib/src/model_manager.dart` - Model management
-- `/Users/ram/Documents/explore/edge/prd.txt` - Product requirements
+### Streaming UX and Patterns
+- [Dart Stream API Documentation](https://api.flutter.dev/flutter/dart-async/Stream-class.html) - Stream semantics and contracts
+- [Creating Streams in Dart](https://dart.dev/libraries/async/creating-streams) - async* generator patterns
+- [Streaming LLM Responses Guide](https://dataa.dev/2025/02/18/streaming-llm-responses-building-real-time-ai-applications/) - UX patterns and benchmarks
+- [SSE for LLM Streaming 2025](https://procedure.tech/blogs/the-streaming-backbone-of-llms-why-server-sent-events-(sse)-still-wins-in-2025) - Protocol comparison
+- [Chrome AI Streaming Docs](https://developer.chrome.com/docs/ai/streaming) - How LLMs stream responses
 
-**MEDIUM confidence (training data, unverified):**
-- llama.cpp feature set and API patterns
-- MediaPipe LLM Inference capabilities
-- MLC-LLM architecture approach
-- General on-device ML SDK patterns
+### Android LLM Inference
+- [llama.cpp Android Documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md) - Official NDK build guide
+- [Building AI Mobile Apps 2025](https://medium.com/@stepan_plotytsia/building-ai-powered-mobile-apps-running-on-device-llms-in-android-and-flutter-2025-guide-0b440c0ae08b) - Flutter/Android LLM guide
+- [GPT4All Vulkan Support](https://www.nomic.ai/blog/posts/gpt4all-gpu-inference-with-vulkan) - Vulkan for cross-platform GPU
+- [Android LMK Documentation](https://developer.android.com/topic/performance/vitals/lmk) - Memory killer behavior
+- [MediaPipe LLM Inference](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android) - Google's on-device approach
 
-**Note:** WebSearch was unavailable during this research. Competitor analysis based on training data (cutoff: January 2025). Verify current state of competitors before finalizing decisions.
+### Vulkan vs OpenCL
+- [GPGPU and Vulkan Compute Analysis](https://www.lei.chat/posts/gpgpu-ml-inference-and-vulkan-compute/) - Why Vulkan for ML inference
+- [VComputeBench Research](https://d-nb.info/1192370589/34) - Vulkan 1.59x speedup over OpenCL on mobile
+
+### Performance Metrics
+- [TTFT Explained](https://www.emergentmind.com/topics/time-to-first-token-ttft) - Time to first token importance
+- [LLM Inference Metrics](https://bentoml.com/llm/inference-optimization/llm-inference-metrics) - Key benchmarking metrics

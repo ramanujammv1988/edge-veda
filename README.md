@@ -11,7 +11,7 @@
 
 ## Demo
 
-![Edge Veda Demo](https://placehold.co/600x400/png?text=Edge+Veda+Demo+GIF+Coming+Soon)
+![Edge Veda Demo](demo/demo.gif)
 *(Add a 15s screen capture here showing performance on a real device)*
 
 ## Overview
