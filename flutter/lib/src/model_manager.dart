@@ -33,6 +33,14 @@ class ModelManager {
   }
 
   /// Get the models directory path
+  ///
+  /// Uses [getApplicationSupportDirectory] which maps to:
+  /// - iOS: ~/Library/Application Support/ (excluded from iCloud backup)
+  /// - Android: /data/data/<package>/files/ (internal, persists across updates)
+  ///
+  /// This directory is NOT cleared when the user clears cache,
+  /// ensuring models survive between app sessions and process kills.
+  /// Models are only removed on app uninstall.
   Future<Directory> getModelsDirectory() async {
     final appDir = await getApplicationSupportDirectory();
     final modelsDir = Directory(path.join(appDir.path, _modelsCacheDir));
