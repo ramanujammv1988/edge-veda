@@ -8,16 +8,19 @@
 /// - No Pointer storage on main isolate (pointers can't transfer between isolates)
 /// - Each Isolate.run() re-loads DynamicLibrary, creates context, performs op, frees context
 /// - Only primitive data (String, int, etc.) crosses isolate boundaries
-/// - Streaming deferred to v2 (requires long-lived worker isolate pattern)
+/// - Streaming uses long-lived worker isolate (StreamingWorker) for persistent context
 ///
-/// ## Memory pressure handling for v1
+/// ## Memory pressure handling
 ///
 /// Due to the per-request Isolate.run() architecture, real-time memory
-/// pressure callbacks from C++ are not supported in v1. Instead, use:
+/// pressure callbacks from C++ are not supported. Instead, use:
 /// - [EdgeVeda.getMemoryStats] to poll current memory usage
 /// - [EdgeVeda.isMemoryPressure] to check if usage exceeds threshold
 ///
-/// For real-time callbacks, v2 will implement a long-lived worker isolate.
+/// ## Streaming
+///
+/// Use [generateStream] for token-by-token generation with a long-lived worker
+/// isolate that maintains native context across multiple ev_stream_next calls.
 library;
 
 import 'dart:async';
@@ -28,6 +31,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 
 import 'ffi/bindings.dart';
+import 'isolate/worker_isolate.dart';
 import 'types.dart' show
     EdgeVedaConfig,
     EdgeVedaException,
@@ -39,12 +43,15 @@ import 'types.dart' show
     InitializationException,
     ModelLoadException,
     GenerationException,
-    ConfigurationException;
+    ConfigurationException,
+    TokenChunk,
+    CancelToken;
 
 /// Main Edge Veda SDK class for on-device AI inference
 ///
 /// Uses Isolate.run() for all FFI calls to keep the UI responsive.
 /// Each operation creates a fresh native context in the background isolate.
+/// For streaming, uses a long-lived worker isolate via [StreamingWorker].
 class EdgeVeda {
   /// Stored configuration (primitives only - safe across isolates)
   EdgeVedaConfig? _config;
@@ -52,10 +59,19 @@ class EdgeVeda {
   /// Whether the SDK has been initialized and validated
   bool _isInitialized = false;
 
+  /// Worker isolate for streaming operations
+  StreamingWorker? _worker;
+
+  /// Whether streaming is currently active
+  bool _isStreaming = false;
+
   // Note: NO Pointer storage here - pointers can't transfer between isolates
 
   /// Whether the SDK is initialized
   bool get isInitialized => _isInitialized;
+
+  /// Whether a streaming operation is currently in progress
+  bool get isStreaming => _isStreaming;
 
   /// Current configuration
   EdgeVedaConfig? get config => _config;
@@ -359,19 +375,129 @@ class EdgeVeda {
     );
   }
 
-  // TODO(v2): Implement streaming with SendPort/ReceivePort worker isolate
-  // Stream<TokenChunk> generateStream(
-  //   String prompt, {
-  //   GenerateOptions? options,
-  // }) {
-  //   // Streaming requires a long-lived worker isolate pattern:
-  //   // 1. Spawn a persistent worker isolate
-  //   // 2. Keep native context alive in that isolate
-  //   // 3. Use SendPort/ReceivePort for bidirectional communication
-  //   // 4. Stream tokens back to main isolate via ReceivePort
-  //   // This is more complex than Isolate.run() and deferred to v2.
-  //   throw UnimplementedError('Streaming deferred to v2');
-  // }
+  /// Generate text as a stream of tokens
+  ///
+  /// Returns a Stream that yields [TokenChunk] objects as they are generated.
+  /// The final chunk has `isFinal=true` to signal stream completion.
+  ///
+  /// Use [cancelToken] to cancel generation mid-stream:
+  /// ```dart
+  /// final cancelToken = CancelToken();
+  /// final stream = edgeVeda.generateStream('Hello', cancelToken: cancelToken);
+  ///
+  /// await for (final chunk in stream) {
+  ///   print(chunk.token);
+  ///   if (shouldStop) {
+  ///     cancelToken.cancel();
+  ///     break;
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// Errors during generation are propagated as stream errors.
+  ///
+  /// Only one streaming operation can be active at a time. If [generateStream]
+  /// is called while another stream is active, a [GenerationException] is thrown.
+  Stream<TokenChunk> generateStream(
+    String prompt, {
+    GenerateOptions? options,
+    CancelToken? cancelToken,
+  }) async* {
+    _ensureInitialized();
+
+    if (prompt.isEmpty) {
+      throw GenerationException('Prompt cannot be empty');
+    }
+
+    if (_isStreaming) {
+      throw GenerationException(
+        'Streaming already in progress. Wait for current stream to complete or cancel it.',
+      );
+    }
+
+    options ??= const GenerateOptions();
+    _validateOptions(options);
+
+    // Create and spawn worker if needed
+    _worker ??= StreamingWorker();
+    if (!_worker!.isActive) {
+      await _worker!.spawn();
+      await _worker!.init(
+        modelPath: _config!.modelPath,
+        numThreads: _config!.numThreads,
+        contextSize: _config!.contextLength,
+        useGpu: _config!.useGpu,
+        memoryLimitBytes: _config!.maxMemoryMb * 1024 * 1024,
+      );
+    }
+
+    _isStreaming = true;
+    int tokenIndex = 0;
+
+    // Set up cancellation listener
+    void Function()? cancelListener;
+    if (cancelToken != null) {
+      cancelListener = () {
+        _worker?.cancel();
+      };
+      cancelToken.addListener(cancelListener);
+    }
+
+    try {
+      // Start the stream
+      await _worker!.startStream(
+        prompt: prompt,
+        maxTokens: options.maxTokens,
+        temperature: options.temperature,
+        topP: options.topP,
+        topK: options.topK,
+        repeatPenalty: options.repeatPenalty,
+      );
+
+      // Yield tokens until stream ends
+      while (true) {
+        // Check cancellation before requesting next token
+        if (cancelToken?.isCancelled == true) {
+          break;
+        }
+
+        final response = await _worker!.nextToken();
+
+        if (response.isFinal) {
+          // Stream ended - yield final empty chunk to signal completion
+          yield TokenChunk(
+            token: '',
+            index: tokenIndex,
+            isFinal: true,
+          );
+          break;
+        }
+
+        if (response.token != null && response.token!.isNotEmpty) {
+          yield TokenChunk(
+            token: response.token!,
+            index: tokenIndex++,
+            isFinal: false,
+          );
+        }
+      }
+    } catch (e) {
+      // Convert to GenerationException if not already
+      if (e is GenerationException) {
+        rethrow;
+      }
+      throw GenerationException(
+        'Streaming failed',
+        details: e.toString(),
+        originalError: e,
+      );
+    } finally {
+      _isStreaming = false;
+      if (cancelListener != null && cancelToken != null) {
+        cancelToken.removeListener(cancelListener);
+      }
+    }
+  }
 
   /// Ensure SDK is initialized before operations
   void _ensureInitialized() {
@@ -384,9 +510,14 @@ class EdgeVeda {
 
   /// Dispose and free all resources
   ///
-  /// Since we don't store any native context on the main isolate,
-  /// this just clears the configuration state.
+  /// Disposes the streaming worker if active and clears configuration state.
+  /// After calling dispose(), you must call [init] again before using the SDK.
   Future<void> dispose() async {
+    if (_worker != null) {
+      await _worker!.dispose();
+      _worker = null;
+    }
+    _isStreaming = false;
     _isInitialized = false;
     _config = null;
   }
