@@ -12,7 +12,6 @@
 ## Demo
 
 ![Edge Veda Demo](demo/demo.gif)
-*(Add a 15s screen capture here showing performance on a real device)*
 
 ## Overview
 
