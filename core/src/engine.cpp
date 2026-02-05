@@ -756,17 +756,18 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
 bool ev_stream_has_next(ev_stream stream) {
     if (!stream) return false;
     std::lock_guard<std::mutex> lock(stream->mutex);
-    return !stream->ended;
+    return !stream->ended && !stream->check_cancelled();
 }
 
 void ev_stream_cancel(ev_stream stream) {
     if (!stream) return;
-    std::lock_guard<std::mutex> lock(stream->mutex);
-    stream->ended = true;
+    // Use atomic operation - no mutex needed for cancel request
+    stream->request_cancel();
 }
 
 void ev_stream_free(ev_stream stream) {
     if (!stream) return;
+    // Destructor handles sampler cleanup
     delete stream;
 }
 
