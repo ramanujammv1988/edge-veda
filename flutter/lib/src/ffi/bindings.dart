@@ -226,6 +226,14 @@ final class EvMemoryStats extends Struct {
 }
 
 // =============================================================================
+// Streaming Types (matching edge_veda.h)
+// =============================================================================
+
+/// Opaque stream handle for streaming generation
+/// Corresponds to: typedef struct ev_stream_impl* ev_stream;
+final class EvStreamImpl extends Opaque {}
+
+// =============================================================================
 // Native Function Type Definitions
 // =============================================================================
 
@@ -341,6 +349,46 @@ typedef EvGetLastErrorDart = Pointer<Utf8> Function(Pointer<EvContextImpl> ctx);
 
 typedef EvResetNative = Int32 Function(Pointer<EvContextImpl> ctx);
 typedef EvResetDart = int Function(Pointer<EvContextImpl> ctx);
+
+// =============================================================================
+// Streaming Generation Function Types
+// =============================================================================
+
+/// ev_stream ev_generate_stream(ev_context ctx, const char* prompt, const ev_generation_params* params, ev_error_t* error)
+typedef EvGenerateStreamNative = Pointer<EvStreamImpl> Function(
+  Pointer<EvContextImpl> ctx,
+  Pointer<Utf8> prompt,
+  Pointer<EvGenerationParams> params,
+  Pointer<Int32> error,
+);
+typedef EvGenerateStreamDart = Pointer<EvStreamImpl> Function(
+  Pointer<EvContextImpl> ctx,
+  Pointer<Utf8> prompt,
+  Pointer<EvGenerationParams> params,
+  Pointer<Int32> error,
+);
+
+/// char* ev_stream_next(ev_stream stream, ev_error_t* error)
+typedef EvStreamNextNative = Pointer<Utf8> Function(
+  Pointer<EvStreamImpl> stream,
+  Pointer<Int32> error,
+);
+typedef EvStreamNextDart = Pointer<Utf8> Function(
+  Pointer<EvStreamImpl> stream,
+  Pointer<Int32> error,
+);
+
+/// bool ev_stream_has_next(ev_stream stream)
+typedef EvStreamHasNextNative = Bool Function(Pointer<EvStreamImpl> stream);
+typedef EvStreamHasNextDart = bool Function(Pointer<EvStreamImpl> stream);
+
+/// void ev_stream_cancel(ev_stream stream)
+typedef EvStreamCancelNative = Void Function(Pointer<EvStreamImpl> stream);
+typedef EvStreamCancelDart = void Function(Pointer<EvStreamImpl> stream);
+
+/// void ev_stream_free(ev_stream stream)
+typedef EvStreamFreeNative = Void Function(Pointer<EvStreamImpl> stream);
+typedef EvStreamFreeDart = void Function(Pointer<EvStreamImpl> stream);
 
 // =============================================================================
 // Native Library Bindings
