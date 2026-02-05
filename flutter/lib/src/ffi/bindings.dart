@@ -523,6 +523,25 @@ class EdgeVedaNativeBindings {
   late final EvResetDart evReset;
 
   // ---------------------------------------------------------------------------
+  // Streaming Generation Functions
+  // ---------------------------------------------------------------------------
+
+  /// Start streaming generation for given prompt
+  late final EvGenerateStreamDart evGenerateStream;
+
+  /// Get next token from streaming generation
+  late final EvStreamNextDart evStreamNext;
+
+  /// Check if stream has more tokens available
+  late final EvStreamHasNextDart evStreamHasNext;
+
+  /// Cancel ongoing streaming generation
+  late final EvStreamCancelDart evStreamCancel;
+
+  /// Free stream handle and release resources
+  late final EvStreamFreeDart evStreamFree;
+
+  // ---------------------------------------------------------------------------
   // Binding Initialization
   // ---------------------------------------------------------------------------
 
@@ -595,5 +614,22 @@ class EdgeVedaNativeBindings {
       'ev_get_last_error',
     );
     evReset = _dylib.lookupFunction<EvResetNative, EvResetDart>('ev_reset');
+
+    // Streaming generation
+    evGenerateStream = _dylib.lookupFunction<EvGenerateStreamNative, EvGenerateStreamDart>(
+      'ev_generate_stream',
+    );
+    evStreamNext = _dylib.lookupFunction<EvStreamNextNative, EvStreamNextDart>(
+      'ev_stream_next',
+    );
+    evStreamHasNext = _dylib.lookupFunction<EvStreamHasNextNative, EvStreamHasNextDart>(
+      'ev_stream_has_next',
+    );
+    evStreamCancel = _dylib.lookupFunction<EvStreamCancelNative, EvStreamCancelDart>(
+      'ev_stream_cancel',
+    );
+    evStreamFree = _dylib.lookupFunction<EvStreamFreeNative, EvStreamFreeDart>(
+      'ev_stream_free',
+    );
   }
 }
