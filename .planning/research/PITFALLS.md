@@ -1,568 +1,631 @@
-# Domain Pitfalls: Flutter + llama.cpp + iOS
+# Pitfalls Research: v1.1 Android + Streaming
 
-**Domain:** On-device LLM inference SDK for Flutter iOS
+**Project:** Edge Veda SDK
+**Milestone:** v1.1 Android Support + Streaming Responses
 **Researched:** 2026-02-04
-**Confidence:** MEDIUM (based on project analysis + domain expertise; WebSearch unavailable)
+**Confidence:** HIGH (verified against official docs, GitHub issues, and existing codebase)
+
+This document catalogs common mistakes when adding Android NDK support and streaming responses to an existing Flutter iOS LLM SDK. Each pitfall includes warning signs for early detection and actionable prevention strategies.
 
 ---
 
-## Critical Pitfalls
+## Critical Pitfalls (Must Address)
 
-Mistakes that cause rewrites, App Store rejection, or crashes in production.
+These pitfalls cause crashes, rewrites, or major architectural issues if not addressed.
 
----
+### P1: Android Memory Killer (LMK) Behavior Differs from iOS Jetsam
 
-### Pitfall 1: iOS Memory Pressure Kills App Without Warning
+**Risk:** Android's Low Memory Killer Daemon (LMKD) uses different heuristics than iOS jetsam. Your 1.2GB iOS memory limit may be inappropriate for Android, causing either unnecessary throttling (too conservative) or OOM kills (too aggressive).
 
-**What goes wrong:** iOS aggressively terminates apps that exceed memory limits. Unlike desktop, there is no swap file. On a 4GB iPhone, system reserves ~2GB, leaving ~2GB for foreground apps. A 1B parameter GGUF model at Q4 quantization uses ~500MB-1GB just for weights, plus ~500MB-1GB for KV cache during inference. Total can easily exceed 1.5GB, triggering jetsam (iOS memory watchdog).
+**Why It Happens:**
+- iOS jetsam kills based on memory footprint with clear thresholds
+- Android LMK uses PSI (Pressure Stall Information) on Android 10+ and oom_adj_score
+- Android has no direct API for detecting native memory pressure events
+- mmap behavior differs: Android may not count mmap'd memory the same way iOS does
 
-**Why it happens:**
-- Developers test on high-end devices (iPhone 15 Pro with 8GB RAM) but users have iPhone 11/12 with 4GB
-- llama.cpp allocates memory upfront during model load, not incrementally
-- KV cache grows with context length (2048 tokens = ~500MB for 1B model)
-- iOS does not send memory warnings to FFI/C++ code - only to Swift/ObjC
-
-**Consequences:**
-- App is killed instantly (SIGKILL) - no chance to save state
-- User loses conversation context
-- Repeated kills lead to poor App Store reviews
-- Apple may reject app during review if it crashes on test devices
+**Warning Signs:**
+- App killed silently on Android with no crash report
+- `ApplicationExitInfo` shows `REASON_LOW_MEMORY`
+- Works fine on high-end devices, crashes on 4GB devices
+- Memory stats show low usage but app still gets killed
 
 **Prevention:**
-1. **Implement proactive memory monitoring** (already scaffolded in `memory_guard.cpp`)
-   - Monitor via `mach_task_basic_info` (resident_size)
-   - Set hard limit at 1.2GB, warning at 900MB
-   - Register for `didReceiveMemoryWarning` in Flutter's iOS runner
-2. **Use llama.cpp's mmap mode** (`use_mmap: true`)
-   - Memory-mapped files don't count against app's memory footprint as heavily
-   - OS can evict pages under pressure
-3. **Limit context window** to 2048 tokens on 4GB devices, detect device RAM at init
-4. **Implement graceful degradation**
-   - If approaching limit: stop generation, return partial result
-   - Expose `ev_memory_pressure_callback` to Flutter layer
+1. Use `ApplicationExitInfo` API to monitor LMK kills in testing
+2. Start with 800MB limit on Android (more conservative than iOS 1.2GB)
+3. Test on 4GB RAM devices as baseline (API 24 devices often have 2-4GB)
+4. Use `context-size` of 2048-4096 initially (not 8192) to reduce memory spikes
+5. Monitor PSS (Proportional Set Size) not just raw allocation
 
-**Detection (warning signs):**
-- Test on iPhone 11 (4GB RAM) - if it crashes during long generation, you have this problem
-- Memory usage exceeds 1.2GB during inference (check Xcode Instruments)
-- Random SIGKILL with exit code 137 in Xcode
+**Phase:** Phase 1 (Android NDK build) - Must determine memory limits before integration testing
 
-**Phase to address:** Phase 1 (Core Setup) - Before llama.cpp integration, validate memory guard works
+**Sources:**
+- [Android LMK Documentation](https://developer.android.com/topic/performance/vitals/lmk)
+- [Understanding Low Memory Management in Android](https://www.droidcon.com/2025/01/14/understanding-low-memory-management-in-android-kswapd-lmk/)
+- [llama.cpp Discussion #1876 - Understanding memory usage](https://github.com/ggml-org/llama.cpp/discussions/1876)
 
 ---
 
-### Pitfall 2: llama.cpp Metal Backend Build Configuration
+### P2: llama.cpp Version Compatibility - Segfaults After b5028
 
-**What goes wrong:** llama.cpp Metal support requires specific CMake flags and Xcode configuration. Missing flags result in CPU-only inference (10x slower) or build failures on iOS.
+**Risk:** Building from recent llama.cpp versions can cause segmentation faults on Android. Your pinned version (b4658) should work, but upgrading or using wrong build flags will cause crashes.
 
-**Why it happens:**
-- llama.cpp's CMake is designed for desktop first
-- iOS cross-compilation requires toolchain file + specific flags
-- Metal shaders must be compiled with correct SDK
-- bitcode is deprecated but old llama.cpp versions may require it off
-- arm64 simulators (Apple Silicon Macs) need different settings than arm64 devices
+**Why It Happens:**
+- llama.cpp is under rapid development with breaking changes
+- Some commits introduce Android-specific regressions
+- Vulkan backend support is less mature than Metal
+- OpenMP and llamafile features don't work on Android
 
-**Consequences:**
-- Performance target of >15 tok/sec impossible without Metal
-- Build fails with cryptic Metal compiler errors
-- App runs on simulator but crashes on device (or vice versa)
-- Binary bloat from unused CPU-specific SIMD code
+**Warning Signs:**
+- App crashes immediately on model load with SIGSEGV
+- Works on iOS but crashes on Android
+- Native crash logs show segfault in `libedge_veda.so`
+- Different crash behavior between debug and release builds
 
 **Prevention:**
-1. **Set correct CMake flags for iOS:**
+1. Keep llama.cpp pinned to b4658 (known working version)
+2. Build with explicit flags:
    ```cmake
-   set(LLAMA_METAL ON)
-   set(LLAMA_METAL_EMBED_LIBRARY ON)  # Embed shaders in binary
-   set(LLAMA_ACCELERATE ON)           # Apple Accelerate framework
-   set(LLAMA_BUILD_TESTS OFF)
-   set(LLAMA_BUILD_EXAMPLES OFF)
-   set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")  # Match project target
+   -DGGML_OPENMP=OFF
+   -DGGML_LLAMAFILE=OFF
    ```
-2. **Use iOS toolchain file** (already exists at `core/cmake/ios.toolchain.cmake`)
-   - Set `CMAKE_SYSTEM_NAME iOS`
-   - Set `CMAKE_OSX_ARCHITECTURES "arm64"` for device
-   - Separate build for simulator: `CMAKE_OSX_ARCHITECTURES "arm64"` with `CMAKE_OSX_SYSROOT iphonesimulator`
-3. **Build universal XCFramework** combining device and simulator slices
-4. **Verify Metal shader compilation** - look for `.metallib` in build output
+3. Test any version bump on Android FIRST (higher risk than iOS)
+4. Use NDK r25+ (your constraint) but test specific NDK version
+5. Verify architecture: `arm64-v8a` is primary target
 
-**Detection:**
-- Run `ev_detect_backend()` returns `EV_BACKEND_CPU` instead of `EV_BACKEND_METAL`
-- Inference speed <5 tok/sec on iPhone 13+
-- Build log shows "Metal not available" warnings
+**Phase:** Phase 1 (Android NDK build) - Must validate before any integration
 
-**Phase to address:** Phase 1 (C++ Core build) - Get llama.cpp compiling with Metal first
+**Sources:**
+- [llama.cpp Android Documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md)
+- [llama.cpp Android Tutorial](https://github.com/JackZeng0208/llama.cpp-android-tutorial)
+- [Building llama.cpp for Android Discussion](https://github.com/ggml-org/llama.cpp/discussions/4960)
 
 ---
 
-### Pitfall 3: Flutter FFI Threading Violations
+### P3: Vulkan Support is Incomplete on Android - Use CPU Fallback Strategy
 
-**What goes wrong:** Dart FFI calls block the Dart isolate. Long-running C++ inference blocks Flutter's UI thread, causing ANR (Application Not Responding) or iOS watchdog termination.
+**Risk:** Vulkan GPU acceleration on Android is unreliable across devices. Unlike Metal (which works universally on iOS 15+), Vulkan support varies dramatically by device, driver version, and GPU vendor.
 
-**Why it happens:**
-- Dart FFI is synchronous by design
-- llama.cpp `ev_generate()` can take 5-30 seconds for long responses
-- iOS kills apps that block main thread for >10 seconds
-- Flutter's UI updates freeze during blocking FFI calls
+**Why It Happens:**
+- Vulkan flash attention not supported (except on newest NVIDIA drivers with coopmat2)
+- Adreno GPUs (Qualcomm) often slower with Vulkan than CPU
+- Mali GPUs (Samsung, MediaTek) have buggy drivers on older devices
+- Some devices report Vulkan support but produce wrong inference results
 
-**Consequences:**
-- UI freezes during inference
-- iOS shows "app not responding" dialog
-- Watchdog kills app after ~10 seconds of main thread block
-- Poor UX - users think app crashed
-
-**Prevention:**
-1. **Never call inference from main isolate** - use `compute()` or spawn dedicated isolate
-   ```dart
-   // BAD - blocks UI
-   final result = await _bindings.edgeVedaGenerate(ctx, prompt);
-
-   // GOOD - runs in background isolate
-   final result = await Isolate.run(() {
-     return _bindings.edgeVedaGenerate(ctx, prompt);
-   });
-   ```
-2. **Use streaming generation** (`ev_generate_stream`) with polling
-   - Call `ev_stream_next()` in short bursts
-   - Yield to event loop between tokens
-3. **Set timeouts on FFI calls** - if C++ hangs, detect and recover
-4. **Show loading UI** immediately before FFI call returns
-
-**Detection:**
-- UI freezes when tapping "Generate"
-- Xcode shows purple "main thread blocked" warning
-- `flutter run --verbose` shows long gaps in event processing
-
-**Phase to address:** Phase 2 (Flutter FFI bindings) - Design async wrapper from start
-
----
-
-### Pitfall 4: Model File Path Sandbox Violations
-
-**What goes wrong:** iOS apps are sandboxed. Models downloaded to wrong directory are inaccessible, or paths hardcoded for one device fail on another.
-
-**Why it happens:**
-- iOS sandbox paths change between app installs
-- Developers hardcode paths during testing
-- Documents directory on iOS is different from Android
-- iCloud backup may try to backup large model files (uses quota, slow)
-
-**Consequences:**
-- Model load fails with "file not found"
-- Works on simulator, fails on device
-- App rejected for backing up large files to iCloud
+**Warning Signs:**
+- Inference results differ between iOS and Android
+- GPU inference slower than CPU on mid-range devices
+- Crashes on specific device models with Vulkan enabled
+- Works in emulator but fails on physical devices
 
 **Prevention:**
-1. **Use `path_provider` correctly:**
+1. Default to CPU backend on Android initially (safer baseline)
+2. Implement runtime Vulkan capability detection:
    ```dart
-   // For model files (large, no backup needed)
-   final dir = await getApplicationSupportDirectory();  // Not Documents!
-   final modelPath = '${dir.path}/models/llama-3.2-1b.gguf';
-   ```
-2. **Exclude models from iCloud backup:**
-   ```dart
-   final file = File(modelPath);
-   await file.setAttributes({FileAttribute.excludeFromBackup: true});
-   ```
-3. **Pass absolute paths to C++** - never relative paths
-4. **Validate path exists in Dart** before calling `ev_init()`
-
-**Detection:**
-- `EV_ERROR_MODEL_LOAD_FAILED` after app reinstall
-- Works on first install, fails after update
-- iCloud backup complains about large files
-
-**Phase to address:** Phase 2 (Model Manager) - Design download + storage correctly
-
----
-
-### Pitfall 5: App Store Review Rejection for Background Execution
-
-**What goes wrong:** Apple rejects apps that run CPU-intensive tasks in background. If user switches apps during generation, iOS suspends the process. Developers try to use background modes incorrectly.
-
-**Why it happens:**
-- Background Audio/Location modes don't apply to LLM inference
-- `beginBackgroundTask` only gives 30 seconds
-- Developers try to cheat with silent audio playing
-- Apple specifically tests for this during review
-
-**Consequences:**
-- App Store rejection (Guideline 2.5.4 - Background execution)
-- Generation stops mid-response when user switches apps
-- Users lose partial results
-
-**Prevention:**
-1. **Do not request background execution** - it won't be approved
-2. **Save state before backgrounding:**
-   ```dart
-   WidgetsBindingObserver {
-     void didChangeAppLifecycleState(state) {
-       if (state == AppLifecycleState.paused) {
-         // Cancel current generation, save partial result
-         _edgeVeda.cancelGeneration();
-       }
-     }
+   if (Platform.isAndroid) {
+     config.backend = EvBackend.cpu; // Safe default
+     // Enable Vulkan only on verified devices
    }
    ```
-3. **Implement generation resume** - store prompt + partial output, continue when foregrounded
-4. **Show user warning** if they try to leave during generation
-5. **Keep responses short** - if user needs 60+ seconds, generation is too long
+3. Test on Adreno (Snapdragon), Mali (Samsung/MediaTek), and PowerVR
+4. Consider OpenCL backend for Adreno instead of Vulkan (better driver support)
+5. Maintain device allowlist for Vulkan acceleration
 
-**Detection:**
-- App review feedback mentions "background execution"
-- Generation stops when phone locked
-- Battery drain complaints from users
+**Phase:** Phase 1 (Android NDK build) - Architecture decision upfront
 
-**Phase to address:** Phase 3 (Flutter SDK) - Handle lifecycle from start
+**Sources:**
+- [Vulkan on Android - Google PDF](https://vulkan.org/user/pages/09.events/vulkanised-2025/T15-Ian-Elliott-Google-Vulkan-on-Android.pdf)
+- [llama.cpp Issue #11695 - Vulkan Android compile bug](https://github.com/ggml-org/llama.cpp/issues/11695)
+- [llama.cpp Issue #8705 - GPU acceleration on Android](https://github.com/ggml-org/llama.cpp/issues/8705)
+- [ncnn Vulkan FAQ](https://github.com/Tencent/ncnn/wiki/FAQ-ncnn-vulkan)
 
 ---
 
-### Pitfall 6: FFI Memory Leaks from Pointer Mismanagement
+### P4: Native Library Loading Fails with dlopen/UnsatisfiedLinkError
 
-**What goes wrong:** Dart FFI requires manual memory management for C strings. Forgetting to free pointers leaks memory. On mobile, even small leaks compound over sessions.
+**Risk:** Flutter Android app crashes at startup with `dlopen failed: library "libedge_veda.so" not found`. This is common when native libraries are missing or built for wrong architecture.
 
-**Why it happens:**
-- Dart has GC, C++ does not - mental model mismatch
-- `toNativeUtf8()` allocates, but where is `free()`?
-- Error paths skip cleanup
-- Streaming generation creates many small string allocations
+**Why It Happens:**
+- Library not bundled in correct ABI folder in APK
+- 32-bit library on 64-bit device (architecture mismatch)
+- NDK version mismatch between Flutter and native plugin
+- CMake didn't copy .so to correct output location
 
-**Consequences:**
-- Memory grows over multiple generations
-- Eventually triggers memory pressure / jetsam
-- Hard to debug - no crash, just gradual degradation
+**Warning Signs:**
+- App crashes immediately on Android launch
+- Error: `java.lang.UnsatisfiedLinkError: dlopen failed`
+- Works on emulator (x86_64) but not on device (arm64-v8a)
+- Works on some devices but not others
 
 **Prevention:**
-1. **Establish clear ownership rules:**
-   - Dart allocates -> Dart frees (via `malloc.free()`)
-   - C++ allocates (ev_generate output) -> C++ frees (`ev_free_string()`)
-2. **Use RAII wrapper in Dart:**
-   ```dart
-   extension NativeStringScope on String {
-     R useNative<R>(R Function(Pointer<Utf8>) fn) {
-       final ptr = toNativeUtf8();
-       try {
-         return fn(ptr);
-       } finally {
-         malloc.free(ptr);
-       }
-     }
-   }
-   ```
-3. **Always free in finally blocks** - error paths must clean up
-4. **Test with leak detection:**
-   - Xcode Instruments > Leaks
-   - `flutter run --profile` with DevTools memory view
-
-**Detection:**
-- Memory grows linearly with number of generations
-- Leaks instrument shows growing C heap
-- App slows down after ~20-30 generations
-
-**Phase to address:** Phase 2 (FFI Bindings) - Build correct patterns before replication
-
----
-
-### Pitfall 7: Binary Size Explosion from llama.cpp
-
-**What goes wrong:** llama.cpp compiled with all backends and SIMD variants can add 50MB+ to app size. PRD requires <25MB SDK footprint.
-
-**Why it happens:**
-- Default llama.cpp build includes AVX, AVX2, AVX512 (desktop SIMD)
-- Multiple backend support (Metal + CPU + Vulkan)
-- Debug symbols not stripped
-- Unused code not eliminated
-
-**Consequences:**
-- App Store size limit concerns (200MB OTA limit)
-- Slow downloads over cellular
-- PRD target missed
-
-**Prevention:**
-1. **Build iOS-only configuration:**
-   ```cmake
-   set(LLAMA_NATIVE OFF)      # No auto-detect (it's for desktop)
-   set(LLAMA_AVX OFF)
-   set(LLAMA_AVX2 OFF)
-   set(LLAMA_FMA OFF)
-   set(LLAMA_F16C OFF)
-   # Keep only ARM NEON (automatic on iOS)
-   set(LLAMA_METAL ON)
-   ```
-2. **Strip symbols in release:**
-   ```cmake
-   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
-   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
-   ```
-3. **Enable LTO (Link Time Optimization):**
-   ```cmake
-   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-   ```
-4. **Measure with `size` command** - track binary size per commit
-
-**Detection:**
-- `libedge_veda.a` or `.framework` > 15MB
-- App Store submission shows large download size
-- `nm -S libedge_veda.a | sort -k2 -n` shows large unused symbols
-
-**Phase to address:** Phase 1 (C++ Core build) - Set flags before first build
-
----
-
-## Moderate Pitfalls
-
-Mistakes that cause delays, technical debt, or user friction.
-
----
-
-### Pitfall 8: llama.cpp API Version Mismatch
-
-**What goes wrong:** llama.cpp evolves rapidly. Code written for one commit breaks on newer versions. API changes every few weeks.
-
-**Prevention:**
-1. **Pin llama.cpp to specific commit** - not a branch
+1. Build for `arm64-v8a` as primary ABI (Google Play requirement since 2021)
+2. Verify library placement in APK:
    ```bash
-   git submodule add https://github.com/ggerganov/llama.cpp third_party/llama.cpp
-   cd third_party/llama.cpp
-   git checkout b3879  # Specific commit hash
+   unzip -l app-release.apk | grep libedge_veda
+   # Should show: lib/arm64-v8a/libedge_veda.so
    ```
-2. **Document the pinned version** and what API it provides
-3. **Create abstraction layer** in `engine.cpp` - don't expose llama.cpp types in public API
-4. **Schedule quarterly llama.cpp updates** - batched migration
+3. Set explicit abiFilters in build.gradle:
+   ```gradle
+   ndk { abiFilters 'arm64-v8a' }
+   ```
+4. Match NDK version between Flutter and native build (use NDK 25 or 27)
+5. Test on physical arm64 device, not just emulator
 
-**Detection:**
-- Build breaks after `git submodule update`
-- Functions have different signatures in llama.h
+**Phase:** Phase 1 (Android NDK build) - Must pass before any functionality testing
 
-**Phase to address:** Phase 1 (submodule setup)
-
----
-
-### Pitfall 9: GGUF Model Format Incompatibility
-
-**What goes wrong:** GGUF format evolves. Models quantized with newer llama.cpp may not load in older versions.
-
-**Prevention:**
-1. **Document supported GGUF version** (currently v3)
-2. **Validate GGUF magic/version** before loading
-3. **Provide canonical download URLs** for tested models
-4. **Error message must include** model version vs SDK version
-
-**Detection:**
-- Model loads on developer machine, fails in production
-- `EV_ERROR_MODEL_LOAD_FAILED` with cryptic llama.cpp error
-
-**Phase to address:** Phase 2 (Model Manager)
+**Sources:**
+- [Flutter Issue #170797 - JNI Library Loading on 64-bit](https://github.com/flutter/flutter/issues/170797)
+- [Flutter Issue #108079 - libflutter.so not found](https://github.com/flutter/flutter/issues/108079)
+- [Android ABIs Documentation](https://developer.android.com/ndk/guides/abis)
 
 ---
 
-### Pitfall 10: Tokenizer Mismatch
+### P5: Streaming Callbacks from Native Thread Crash with Wrong API
 
-**What goes wrong:** Different Llama models use different tokenizers. Using wrong tokenizer produces garbage output.
+**Risk:** Using `Pointer.fromFunction` for streaming token callbacks will crash when called from C++ inference thread. Must use `NativeCallable.listener` for cross-thread callbacks.
 
-**Prevention:**
-1. **Llama 3.2 uses tiktoken-based tokenizer** - llama.cpp handles this internally
-2. **Never expose token IDs to Dart layer** - only strings
-3. **Test with known prompt/response pairs**
-4. **Include model metadata check** - verify tokenizer type in GGUF
+**Why It Happens:**
+- `Pointer.fromFunction` can only be invoked on the main Dart isolate's mutator thread
+- llama.cpp inference runs on a background thread
+- Calling from wrong thread causes immediate process abort
+- Error is not caught - just crashes
 
-**Detection:**
-- Output is garbage or repeating patterns
-- System prompt ignored or mangled
-
-**Phase to address:** Phase 2 (Inference integration)
-
----
-
-### Pitfall 11: Flutter Hot Reload Breaks FFI State
-
-**What goes wrong:** Flutter hot reload reinitializes Dart but not C++. Native context becomes invalid, causing crashes.
+**Warning Signs:**
+- App crashes during streaming generation (not at start or end)
+- Crash happens after first few tokens are generated
+- Works with non-streaming `generate()` but crashes with `generateStream()`
+- Native crash log shows abort in FFI callback
 
 **Prevention:**
-1. **Implement `dispose()` in Flutter SDK** that calls `ev_free()`
-2. **Track initialization state** in Dart - check before FFI calls
-3. **Handle hot restart gracefully:**
+1. Use `NativeCallable.listener` for streaming callbacks:
    ```dart
-   class EdgeVeda {
-     static ev_context? _ctx;
+   final callback = NativeCallable<TokenCallbackNative>.listener(
+     (Pointer<Utf8> token) {
+       sendPort.send(token.toDartString());
+     },
+   );
+   ```
+2. Never use `Pointer.fromFunction` for callbacks from native threads
+3. Always close NativeCallable when done: `callback.close()`
+4. Test streaming on both iOS and Android to verify thread safety
 
-     Future<void> init() async {
-       if (_ctx != null) {
-         // Already initialized, reinitialize clean
-         ev_free(_ctx!);
-         _ctx = null;
-       }
-       _ctx = ev_init(...);
-     }
+**Phase:** Phase 2 (Streaming API) - Critical for streaming implementation
+
+**Sources:**
+- [NativeCallable.listener Documentation](https://api.flutter.dev/flutter/dart-ffi/NativeCallable/NativeCallable.listener.html)
+- [Dart SDK Issue #54276 - Invoke callback from native code](https://github.com/dart-lang/sdk/issues/54276)
+- [Dart SDK Issue #61272 - High number of FFI callbacks deadlock](https://github.com/dart-lang/sdk/issues/61272)
+
+---
+
+### P6: Long-Lived Worker Isolate Pattern Required for Streaming
+
+**Risk:** Current v1.0 `Isolate.run()` pattern cannot support streaming. Each `Isolate.run()` creates/destroys context, making token-by-token streaming impossible. Requires architectural change to long-lived worker isolate.
+
+**Why It Happens:**
+- `Isolate.run()` terminates isolate when function completes
+- Pointers cannot transfer between isolates
+- Native context must persist across multiple token emissions
+- Current implementation (correctly) noted this in v1.0 code comments
+
+**Warning Signs:**
+- Attempting streaming with Isolate.run() returns only final result
+- Memory leaks if trying to keep context alive incorrectly
+- UI freezes if running inference on main isolate
+
+**Prevention:**
+1. Implement dedicated worker isolate with `Isolate.spawn()`:
+   ```dart
+   // Main isolate
+   final receivePort = ReceivePort();
+   await Isolate.spawn(workerEntryPoint, receivePort.sendPort);
+
+   // Worker isolate
+   void workerEntryPoint(SendPort mainSendPort) {
+     final workerReceivePort = ReceivePort();
+     mainSendPort.send(workerReceivePort.sendPort);
+     // Keep native context alive here
    }
    ```
-4. **Document that hot reload resets model** in development
+2. Use SendPort for commands (main -> worker) and responses (worker -> main)
+3. Keep native context alive in worker isolate (not main isolate)
+4. Stream tokens via SendPort as they're generated
+5. Implement graceful shutdown to free native resources
 
-**Detection:**
-- Crash after pressing 'R' in Flutter debug
-- `EV_ERROR_CONTEXT_INVALID` after code change
+**Phase:** Phase 2 (Streaming API) - Fundamental architecture for streaming
 
-**Phase to address:** Phase 2 (Flutter SDK)
+**Sources:**
+- [Flutter Isolates Documentation](https://docs.flutter.dev/perf/isolates)
+- [Dart Isolates Language Guide](https://dart.dev/language/isolates)
+- [Mastering Isolates in Flutter & Dart](https://plugfox.dev/mastering-isolates/)
 
 ---
 
-### Pitfall 12: Incorrect Model Download Progress
+## Moderate Pitfalls (Should Address)
 
-**What goes wrong:** `http` package progress callbacks are unreliable for large files. Progress jumps or stalls, users think download failed.
+These pitfalls cause delays, technical debt, or degraded user experience.
+
+### P7: NDK Version Mismatch Between Flutter and Native Plugin
+
+**Risk:** Flutter plugin requires one NDK version, native build uses another. Causes build failures or runtime crashes.
+
+**Why It Happens:**
+- Flutter 3.29+ warns about NDK version mismatches
+- Different packages may require different NDK versions
+- Android Studio updates can change default NDK
+- Manual NDK downloads vs Android Studio managed NDK
+
+**Warning Signs:**
+- Build warning: "plugin(s) depend on a different Android NDK version"
+- Build fails with cryptic CMake errors
+- Multiple NDK folders consuming disk space
+- Works locally but fails in CI
 
 **Prevention:**
-1. **Use chunked download with explicit progress:**
-   ```dart
-   final response = await client.send(request);
-   final contentLength = response.contentLength ?? 0;
-   var downloaded = 0;
-
-   await for (final chunk in response.stream) {
-     downloaded += chunk.length;
-     _progressController.add(downloaded / contentLength);
-     file.writeAsBytesSync(chunk, mode: FileMode.append);
+1. Pin NDK version explicitly in `android/app/build.gradle`:
+   ```gradle
+   android {
+       ndkVersion "25.2.9519653"  // Match your native build
    }
    ```
-2. **Support resume** - check existing file size, use Range header
-3. **Validate checksum after download** - SHA256 of complete file
-4. **Show bytes downloaded** not just percentage
+2. Use same NDK version for native build script and Flutter
+3. Document required NDK version in README
+4. Add CI check to verify NDK version
 
-**Detection:**
-- Progress bar stuck at 0% or 99%
-- Download takes much longer than expected
+**Phase:** Phase 1 (Android NDK build)
 
-**Phase to address:** Phase 2 (Model Manager)
+**Sources:**
+- [Flutter Issue #163945 - NDK version mismatch](https://github.com/flutter/flutter/issues/163945)
+- [Flutter Android C Interop Documentation](https://docs.flutter.dev/platform-integration/android/c-interop)
 
 ---
 
-### Pitfall 13: Concurrent Inference Attempts
+### P8: High-Volume Streaming Callbacks Cause Deadlocks
 
-**What goes wrong:** User taps "Generate" twice quickly. Two simultaneous inference calls corrupt llama.cpp internal state.
+**Risk:** When streaming generates tokens very fast (>100/sec on fast devices), the volume of FFI callbacks can cause VM deadlocks.
+
+**Why It Happens:**
+- NativeCallable.listener uses message passing to main isolate
+- High callback frequency overwhelms the event loop
+- VM mutex contention when many callbacks queue up
+- Reported as deadlock but is actually backpressure issue
+
+**Warning Signs:**
+- App freezes during fast generation
+- CPU spikes to 100% during streaming
+- Works fine with slow models, hangs with fast models
+- Deadlock appears random, not reproducible on slow devices
 
 **Prevention:**
-1. **llama.cpp is not thread-safe** for single context - document this
-2. **Mutex in C++ layer** (already present in `engine.cpp`)
-3. **Queue in Dart layer** - second request waits for first
-4. **Disable UI button** during generation
-5. **Consider cancellation** - second tap cancels first, starts new
-
-**Detection:**
-- Garbage output or crash on double-tap
-- Mutex deadlock (app hangs)
-
-**Phase to address:** Phase 2 (Flutter SDK)
-
----
-
-## Minor Pitfalls
-
-Annoyances that are fixable but wasteful if encountered.
-
----
-
-### Pitfall 14: Simulator Performance Misleads
-
-**What goes wrong:** Metal on iOS Simulator runs on Mac GPU - performance looks great. Real device with mobile GPU is 2-3x slower.
-
-**Prevention:**
-1. **Always benchmark on real device**
-2. **Document expected tok/sec per device class**
-3. **CI tests should include device farm** (BrowserStack, Firebase Test Lab)
-
-**Phase to address:** Phase 3 (Testing)
-
----
-
-### Pitfall 15: Forgetting to Handle Stop Sequences
-
-**What goes wrong:** Model generates past desired endpoint. "What is 2+2?" produces "2+2 = 4. Now let me explain calculus..."
-
-**Prevention:**
-1. **Implement stop sequences in C++ layer** - `ev_generation_params.stop_sequences`
-2. **Default stop sequences** for chat: `["</s>", "<|eot_id|>", "<|end|>"]`
-3. **Trim trailing whitespace** from output
-
-**Phase to address:** Phase 2 (Inference)
-
----
-
-### Pitfall 16: Temperature=0 Still Has Randomness
-
-**What goes wrong:** Developer expects deterministic output at temp=0. llama.cpp may still sample randomly due to float precision.
-
-**Prevention:**
-1. **Set seed explicitly** for reproducible tests
-2. **Document that temp=0 means "greedy" not "deterministic across runs"**
-3. **For true determinism**: temp=0 + seed=12345 + top_k=1
-
-**Phase to address:** Phase 2 (API documentation)
-
----
-
-### Pitfall 17: Missing System Prompt Format
-
-**What goes wrong:** Raw prompt sent to model without chat template. Output is inconsistent or model doesn't follow instructions.
-
-**Prevention:**
-1. **Llama 3.2 requires specific template:**
+1. Implement token batching (send every N tokens or every M ms)
+2. Use throttling in native callback:
+   ```cpp
+   static auto lastSend = std::chrono::steady_clock::now();
+   auto now = std::chrono::steady_clock::now();
+   if (now - lastSend > std::chrono::milliseconds(16)) {  // ~60 fps
+       sendTokenBatch();
+       lastSend = now;
+   }
    ```
-   <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+3. Consider accumulating tokens in native buffer
+4. Test with artificially fast generation to stress-test
 
-   {system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>
+**Phase:** Phase 2 (Streaming API) - Performance optimization
 
-   {user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+**Sources:**
+- [Dart SDK Issue #61272 - High number of FFI callbacks deadlock](https://github.com/dart-lang/sdk/issues/61272)
+
+---
+
+### P9: mmap vs malloc Memory Accounting Differences
+
+**Risk:** llama.cpp uses mmap for model loading by default. Android may account mmap'd memory differently, causing confusion about actual memory usage and incorrect memory pressure decisions.
+
+**Why It Happens:**
+- mmap creates virtual address mappings without immediate RAM consumption
+- Pages loaded on-demand as model weights are accessed
+- PSS (Proportional Set Size) counts shared pages differently
+- Memory stats may show low usage while system is actually under pressure
+
+**Warning Signs:**
+- `getMemoryStats()` shows low usage but app gets LMK killed
+- Model appears to load instantly (too fast - pages not actually loaded)
+- Performance degrades significantly after a few inferences (page faults)
+- Memory usage jumps dramatically during first inference
+
+**Prevention:**
+1. Use `--no-mmap` flag if memory accounting needed
+2. Pre-touch model pages after loading (force page faults early):
+   ```cpp
+   // After model load, touch all pages
+   volatile char* p = model_data;
+   for (size_t i = 0; i < model_size; i += 4096) {
+       (void)*p;
+       p += 4096;
+   }
    ```
-2. **Apply template in C++ layer** before tokenization
-3. **Expose `useRawPrompt` option** for power users
+3. Account for both PSS and USS in memory monitoring
+4. Test memory behavior with and without mmap on target devices
 
-**Phase to address:** Phase 2 (Inference)
+**Phase:** Phase 1 (Android NDK build) - Memory management strategy
 
----
-
-## Phase-Specific Warnings
-
-| Phase | Topic | Likely Pitfall | Mitigation |
-|-------|-------|----------------|------------|
-| Phase 1 | llama.cpp submodule | API version drift | Pin to specific commit |
-| Phase 1 | CMake iOS build | Metal not enabled | Verify build flags |
-| Phase 1 | Binary size | Desktop SIMD included | Disable non-ARM optimizations |
-| Phase 2 | FFI bindings | Memory leaks | RAII wrappers, ownership rules |
-| Phase 2 | Threading | UI blocking | Background isolate for inference |
-| Phase 2 | Model storage | Sandbox violations | Use applicationSupportDirectory |
-| Phase 2 | Download | Progress stalls | Chunked download with validation |
-| Phase 3 | Memory | Jetsam kills app | Monitor at 900MB, limit at 1.2GB |
-| Phase 3 | Lifecycle | Background termination | Cancel on pause, save state |
-| Phase 3 | Testing | Simulator misleads | Real device benchmarks required |
-| Phase 4 | App Review | Background execution | Don't request, handle gracefully |
+**Sources:**
+- [llama.cpp Discussion #1876 - Understanding memory usage](https://github.com/ggml-org/llama.cpp/discussions/1876)
+- [Why MMAP in llama.cpp hides true memory usage](https://news.ycombinator.com/item?id=35426679)
 
 ---
 
-## Confidence Assessment
+### P10: Feature Parity Testing - Platform-Specific Behavior Differences
 
-| Pitfall Category | Confidence | Basis |
-|------------------|------------|-------|
-| iOS Memory (Jetsam) | HIGH | Well-documented iOS behavior, visible in project constraints |
-| llama.cpp Build | MEDIUM | Based on llama.cpp repo patterns, not verified 2025+ |
-| Flutter FFI Threading | HIGH | Documented dart:ffi limitation |
-| File Path Sandbox | HIGH | Standard iOS behavior |
-| App Store Review | HIGH | Published Apple guidelines |
-| FFI Memory Management | HIGH | Documented dart:ffi requirement |
-| Binary Size | MEDIUM | Based on typical llama.cpp builds |
-| API Version Issues | MEDIUM | llama.cpp known for rapid changes |
+**Risk:** Same API produces different results on iOS vs Android. Users expect identical behavior but underlying implementations differ.
+
+**Why It Happens:**
+- Metal vs Vulkan/CPU produce slightly different floating point results
+- Thread scheduling differs between platforms
+- Memory pressure handling differs
+- Random seed behavior may vary
+
+**Warning Signs:**
+- Identical prompts produce different outputs on iOS vs Android
+- Performance metrics differ significantly
+- Tests pass on iOS but fail on Android (or vice versa)
+- User reports "Android version is broken"
+
+**Prevention:**
+1. Create platform-parity test suite with known prompts/outputs
+2. Use deterministic settings for testing (temperature=0, seed=fixed)
+3. Accept minor numerical differences in floating point
+4. Document any intentional platform differences
+5. Run CI tests on both iOS and Android devices
+
+**Phase:** Phase 3 (Demo app update) - Integration testing
+
+**Sources:**
+- [Flutter Multi-Platform Documentation](https://flutter.dev/multi-platform)
 
 ---
 
-## Sources
+### P11: Isolate Memory Management - GC Freezes with Multiple Isolates
 
-- Project files analyzed: `prd.txt`, `core/CMakeLists.txt`, `core/src/engine.cpp`, `core/src/memory_guard.cpp`, `flutter/lib/src/ffi/bindings.dart`, `.planning/codebase/CONCERNS.md`
-- iOS memory management: Apple Developer Documentation (training data)
-- llama.cpp build patterns: Repository analysis (training data, may be stale)
-- Flutter FFI: dart:ffi package documentation
-- Note: WebSearch and WebFetch unavailable - some findings based on training data may be outdated
+**Risk:** Using multiple long-lived isolates (main + worker) causes longer garbage collection pauses. With large model data, GC can freeze UI for seconds.
+
+**Why It Happens:**
+- Dart GC must pause all isolates when collecting long-lived objects
+- More isolates = longer GC coordination time
+- Large model metadata in Dart heap compounds the issue
+- Returning to foreground triggers full GC on all isolates
+
+**Warning Signs:**
+- UI freezes for several seconds when app returns from background
+- Stuttering during streaming (GC pauses between tokens)
+- Memory usage appears stable but app becomes unresponsive
+- Freeze duration increases with more isolates
+
+**Prevention:**
+1. Minimize data stored in worker isolate's Dart heap
+2. Keep model metadata in native memory, not Dart objects
+3. Use TransferableTypedData for large binary transfers
+4. Consider single worker isolate (not isolate pool)
+5. Profile with `--observe` flag to identify GC pressure
+
+**Phase:** Phase 2 (Streaming API) - Architecture decision
+
+**Sources:**
+- [Flutter Performance Degradation with Isolates](https://github.com/dart-lang/sdk/issues/47672)
+- [Flutter Issue #166945 - Isolate performance regression](https://github.com/flutter/flutter/issues/166945)
 
 ---
 
-## Gaps Requiring Phase-Specific Research
+### P12: Cancel Token Implementation Complexity
 
-1. **Current llama.cpp iOS Metal API** - verify exact CMake flags for 2025+ versions
-2. **Xcode 16+ compatibility** - may have new iOS toolchain requirements
-3. **Flutter 3.19+ FFI changes** - verify isolate spawn patterns still valid
-4. **GGUF v4 format** - if released, may affect model loading
+**Risk:** Implementing cancel token for streaming requires careful coordination between Dart, FFI, and native code. Incorrect implementation causes resource leaks or crashes.
+
+**Why It Happens:**
+- Native inference loop must check cancellation flag
+- Worker isolate must handle cancel command mid-stream
+- Native resources must be freed even if cancelled
+- Race conditions between cancel and normal completion
+
+**Warning Signs:**
+- Cancel doesn't stop generation (keeps running in background)
+- Memory leaks after cancellation
+- Crash when cancelling during token callback
+- Deadlock when cancel and completion race
+
+**Prevention:**
+1. Use atomic flag for cancellation check in native code:
+   ```cpp
+   std::atomic<bool> cancelled{false};
+   // In generation loop:
+   if (cancelled.load()) break;
+   ```
+2. Ensure native cleanup runs regardless of cancellation
+3. Test cancel at various points: start, middle, near end
+4. Use timeout as fallback if cancel doesn't respond
+
+**Phase:** Phase 2 (Streaming API) - Cancel token implementation
+
+---
+
+## Minor Pitfalls (Nice to Address)
+
+These cause annoyance but are fixable without major rework.
+
+### P13: Android Studio CMake Integration is Unreliable
+
+**Risk:** Android Studio's CMake/NDK integration has known issues. Relying on it for complex native builds leads to frustration.
+
+**Why It Happens:**
+- Android Studio cmake support described as "always been terrible"
+- IDE caching causes stale build configurations
+- Incremental builds may not pick up native changes
+- Different behavior between IDE and command-line builds
+
+**Warning Signs:**
+- Native changes not reflected after rebuild in IDE
+- Build succeeds in terminal but fails in Android Studio
+- CMakeLists.txt errors that don't match actual content
+- Different .so output between IDE and command line
+
+**Prevention:**
+1. Build native .so separately with script (like `build-android.sh`)
+2. Use Android Studio only for Dart/Flutter code
+3. Add `flutter clean` to debugging workflow
+4. Verify builds work from command line before debugging IDE issues
+
+**Phase:** Phase 1 (Android NDK build) - Build system setup
+
+**Sources:**
+- [llama.cpp Discussion #4960](https://github.com/ggml-org/llama.cpp/discussions/4960)
+
+---
+
+### P14: NDK Optimization Flags Can Cause Crashes
+
+**Risk:** Aggressive optimization flags (`-Os`, `-O3` with certain options) can cause code generation bugs in specific NDK versions.
+
+**Why It Happens:**
+- NDK r25c known to produce invalid code with `-Os` for arm64-v8a
+- Vectorization patches can cause crashes
+- LTO can expose latent issues in llama.cpp code
+- Debug vs Release builds may have different behavior
+
+**Warning Signs:**
+- Release build crashes but debug build works
+- Crashes only on specific device architectures
+- Intermittent crashes that seem random
+- Crash in optimized math code paths
+
+**Prevention:**
+1. Start with `-O2` instead of `-Os` or `-O3`
+2. Test release builds thoroughly (don't only test debug)
+3. Document exact NDK version and flags that work
+4. Consider disabling LTO initially for stability
+
+**Phase:** Phase 1 (Android NDK build)
+
+**Sources:**
+- [Android NDK Issue #1862 - Invalid code with -Os](https://github.com/android/ndk/issues/1862)
+- [Android NDK NEON Documentation](https://developer.android.com/ndk/guides/cpu-arm-neon)
+
+---
+
+### P15: Binary Size Bloat from Multi-ABI Build
+
+**Risk:** Building for multiple ABIs (arm64-v8a + armeabi-v7a + x86_64) multiplies APK size. Native library already ~15MB means 45MB+ in APK.
+
+**Why It Happens:**
+- Each ABI requires separate compiled binary
+- No way to share code between ABIs
+- Google Play requirement for 64-bit drives arm64-v8a necessity
+- Emulator testing may want x86_64
+
+**Warning Signs:**
+- APK size exceeds 100MB (raises user concern)
+- Google Play AAB still larger than expected
+- CI build times very long (building 3+ variants)
+- Disk space issues in CI
+
+**Prevention:**
+1. Ship only `arm64-v8a` for v1.1 (covers 90%+ of active devices)
+2. Use Android App Bundle (AAB) for Play Store (delivers only needed ABI)
+3. Defer armeabi-v7a support unless required
+4. Skip x86_64 in release builds (emulator-only)
+
+**Phase:** Phase 1 (Android NDK build)
+
+**Sources:**
+- [Android Support 64-bit architectures](https://developer.android.com/games/optimize/64-bit)
+
+---
+
+## Pitfall Summary Table
+
+| # | Pitfall | Severity | Phase | Category |
+|---|---------|----------|-------|----------|
+| P1 | Android LMK differs from iOS jetsam | Critical | Phase 1 | Memory |
+| P2 | llama.cpp version compatibility | Critical | Phase 1 | Build |
+| P3 | Vulkan support incomplete on Android | Critical | Phase 1 | GPU |
+| P4 | Native library loading fails (dlopen) | Critical | Phase 1 | Build |
+| P5 | Streaming callbacks crash with wrong API | Critical | Phase 2 | Streaming |
+| P6 | Long-lived worker isolate required | Critical | Phase 2 | Architecture |
+| P7 | NDK version mismatch | Moderate | Phase 1 | Build |
+| P8 | High-volume callbacks cause deadlocks | Moderate | Phase 2 | Streaming |
+| P9 | mmap vs malloc memory accounting | Moderate | Phase 1 | Memory |
+| P10 | Feature parity testing across platforms | Moderate | Phase 3 | Testing |
+| P11 | GC freezes with multiple isolates | Moderate | Phase 2 | Memory |
+| P12 | Cancel token implementation complexity | Moderate | Phase 2 | Streaming |
+| P13 | Android Studio CMake unreliable | Minor | Phase 1 | Build |
+| P14 | NDK optimization flags cause crashes | Minor | Phase 1 | Build |
+| P15 | Binary size bloat from multi-ABI | Minor | Phase 1 | Build |
+
+---
+
+## Phase-Specific Pitfall Summary
+
+### Phase 1: Android NDK Build
+Must address: P1, P2, P3, P4
+Should address: P7, P9
+Nice to address: P13, P14, P15
+
+**Key insight:** Focus on getting a stable CPU-only build working first. Vulkan optimization is secondary to correctness.
+
+### Phase 2: Streaming API
+Must address: P5, P6
+Should address: P8, P11, P12
+
+**Key insight:** The architecture change from `Isolate.run()` to long-lived worker isolate is the biggest technical challenge. Plan adequate time.
+
+### Phase 3: Demo App Update
+Should address: P10
+
+**Key insight:** Feature parity testing should be automated in CI to catch platform differences early.
+
+---
+
+## Integration Pitfalls with Existing iOS System
+
+These pitfalls specifically address adding Android support to your existing iOS codebase:
+
+### Existing Pattern: Per-Call Isolate.run()
+Your current `edge_veda_impl.dart` uses `Isolate.run()` for each `generate()` call. This works for iOS non-streaming but **must be refactored** for streaming (P6). Plan to:
+1. Keep existing `generate()` API working during transition
+2. Add new `generateStream()` alongside, not replacing
+3. Eventually migrate `generate()` to use long-lived worker internally
+
+### Existing Pattern: Singleton Bindings
+Your `EdgeVedaNativeBindings.instance` pattern works but needs Android library loading:
+```dart
+// Current: Works for iOS
+if (Platform.isIOS) {
+  return DynamicLibrary.process();
+}
+// Add: Android support
+if (Platform.isAndroid) {
+  return DynamicLibrary.open('libedge_veda.so');  // Must be in correct ABI folder
+}
+```
+
+### Existing Pattern: Backend Detection
+Your `EvBackend` enum already includes Vulkan. Ensure fallback:
+```dart
+// In config population
+configPtr.ref.backend = useGpu
+    ? (Platform.isAndroid ? EvBackend.cpu.value : EvBackend.auto_.value)  // Conservative Android default
+    : EvBackend.cpu.value;
+```
+
+---
+
+## Recommendations for Roadmap
+
+Based on these pitfalls, the v1.1 roadmap should:
+
+1. **Start with CPU-only Android** - Get Android working without GPU acceleration first (P3)
+2. **Validate memory early** - Determine Android memory limits before extensive development (P1)
+3. **Plan streaming architecture upfront** - The isolate pattern change affects all streaming work (P6)
+4. **Build verification matrix** - Test on multiple device types: high-end, mid-range, 4GB devices
+5. **Add platform parity CI** - Automated tests running on both iOS and Android
+
+---
+
+*Confidence: HIGH - Research verified against official documentation, GitHub issues, and analysis of existing v1.0 codebase patterns.*

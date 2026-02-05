@@ -19,8 +19,8 @@ The architecture wires Flutter Dart code through FFI to a C++ core that wraps ll
 |                  |     |                   |     |  ev_generate()   |
 |  async/await     |     | Pointer<Context>  |     |  ev_stream_*()   |
 +------------------+     +-------------------+     +------------------+
-                                                           |
-                                                           v
+                                                          |
+                                                          v
 +------------------+     +-------------------+     +------------------+
 |   iOS Runtime    |     |   llama.cpp       |     |   Metal Backend  |
 |                  |     |                   |     |                  |
@@ -673,3 +673,445 @@ Recommendation: Update Dart to match the well-designed `edge_veda.h` API.
 ---
 
 *This architecture document informs phase structure. Key insight: threading model is the critical path - solving isolate/async before attempting full integration.*
+
+---
+
+# Architecture Extension: v1.1 Android + Streaming
+
+**Extension Date:** 2026-02-04
+**Focus:** Android NDK integration and streaming callbacks for Flutter FFI
+**Confidence:** HIGH (based on existing codebase analysis + official documentation)
+
+---
+
+## v1.1 Extension Overview
+
+This section extends the v1.0 architecture to add:
+1. **Android NDK build** - Vulkan backend for GPU acceleration
+2. **Streaming implementation** - Long-lived worker isolate pattern
+
+## Current v1.0 State Analysis
+
+### What's Already Built
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| C++ Core | Complete | `core/src/engine.cpp` - 830 lines, ev_* API implemented |
+| Streaming C API | Defined, not implemented | ev_stream_* functions return EV_ERROR_NOT_IMPLEMENTED |
+| iOS Build | Complete | `scripts/build-ios.sh` - XCFramework generation |
+| Flutter FFI | Complete | `flutter/lib/src/ffi/bindings.dart` - all bindings |
+| Dart SDK | Complete | `flutter/lib/src/edge_veda_impl.dart` - Isolate.run() pattern |
+| Android Gradle | Scaffolded | `flutter/android/build.gradle` - CMake config present |
+
+### Current Isolate Pattern (v1.0)
+
+```dart
+// edge_veda_impl.dart - Current implementation
+Future<GenerateResponse> generate(String prompt, ...) async {
+  // One-shot isolate - dies after returning
+  return Isolate.run<String>(() {
+    final bindings = EdgeVedaNativeBindings.instance;
+    // Create context, generate, free context
+    // Return primitive String (no pointers cross boundary)
+  });
+}
+```
+
+**Limitation:** Cannot maintain long-lived context for streaming.
+
+---
+
+## Android Integration Architecture
+
+### Build System Changes
+
+The existing `flutter/android/build.gradle` has CMake configuration:
+
+```groovy
+externalNativeBuild {
+    cmake {
+        path "../../core/CMakeLists.txt"
+        cppFlags "-std=c++17 -frtti -fexceptions"
+        arguments "-DANDROID_STL=c++_shared",
+                  "-DANDROID_PLATFORM=android-24",
+                  "-DGGML_VULKAN=ON"
+    }
+}
+```
+
+### Required Changes
+
+| Component | Current State | Required Change |
+|-----------|---------------|-----------------|
+| build-android.sh | Does not exist | Create (mirror build-ios.sh) |
+| CMakeLists.txt | Android detection present | Verify Vulkan linking |
+| jniLibs output | Empty | Build outputs .so files |
+| Vulkan shaders | Not built | Cross-compile vulkan-shaders-gen |
+
+### Android Build Script Structure
+
+```bash
+# scripts/build-android.sh (new)
+
+# Key differences from build-ios.sh:
+# 1. Uses ANDROID_NDK toolchain instead of ios.toolchain.cmake
+# 2. Builds .so files instead of .a/.framework
+# 3. Multiple architectures (arm64-v8a, armeabi-v7a)
+# 4. No bitcode stripping needed
+
+cmake \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-24 \
+  -DGGML_VULKAN=ON \
+  -DEDGE_VEDA_BUILD_SHARED=ON \
+  -B build-android
+
+cmake --build build-android
+
+# Output: build-android/libedge_veda.so
+```
+
+### Vulkan Build Considerations
+
+Per [llama.cpp documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md):
+
+1. **vulkan-shaders-gen must be built for host first**
+2. **Android NDK Vulkan headers may need updating**
+3. **Known issues:** Adreno GPU may crash, Mali GPU may be slower than CPU
+
+**Recommendation:** Build with both Vulkan and CPU, implement runtime fallback.
+
+### Output Directory Structure
+
+```
+flutter/
+  android/
+    src/main/
+      jniLibs/
+        arm64-v8a/
+          libedge_veda.so
+          libc++_shared.so
+        armeabi-v7a/
+          libedge_veda.so
+          libc++_shared.so
+```
+
+---
+
+## Streaming Architecture
+
+### The Streaming Problem
+
+Current `Isolate.run()` pattern:
+- Creates fresh isolate per call
+- Reloads DynamicLibrary each time
+- Creates new ev_context, runs generate, frees context
+- Cannot maintain state between calls
+
+Streaming requires:
+- Long-lived native context
+- Persistent isolate sending multiple messages
+- Token-by-token delivery
+
+### C++ Streaming Implementation
+
+The C API exists in `edge_veda.h` (lines 262-318):
+
+```c
+ev_stream ev_generate_stream(ev_context ctx, const char* prompt, ...);
+char* ev_stream_next(ev_stream stream, ev_error_t* error);
+bool ev_stream_has_next(ev_stream stream);
+void ev_stream_cancel(ev_stream stream);
+void ev_stream_free(ev_stream stream);
+```
+
+Implementation in `engine.cpp` is marked TODO. Required implementation:
+
+```cpp
+// ev_generate_stream - Initialize streaming state
+ev_stream ev_generate_stream(...) {
+    ev_stream stream = new ev_stream_impl(ctx, prompt, params);
+
+    // 1. Tokenize prompt
+    stream->tokens = tokenize_prompt(ctx->model, prompt, true);
+
+    // 2. Clear KV cache
+    llama_kv_cache_clear(ctx->llama_ctx);
+
+    // 3. Evaluate prompt batch
+    llama_batch batch = llama_batch_get_one(stream->tokens.data(), stream->tokens.size());
+    llama_decode(ctx->llama_ctx, batch);
+
+    // 4. Create sampler
+    stream->sampler = create_sampler(params);
+
+    return stream;
+}
+
+// ev_stream_next - Generate one token
+char* ev_stream_next(ev_stream stream, ev_error_t* error) {
+    if (stream->ended) {
+        *error = EV_ERROR_STREAM_ENDED;
+        return nullptr;
+    }
+
+    // 1. Sample token
+    llama_token new_token = llama_sampler_sample(
+        stream->sampler, stream->ctx->llama_ctx, -1);
+
+    // 2. Check EOS
+    if (llama_vocab_is_eog(vocab, new_token)) {
+        stream->ended = true;
+        *error = EV_ERROR_STREAM_ENDED;
+        return nullptr;
+    }
+
+    // 3. Convert to text
+    char buf[128];
+    llama_token_to_piece(vocab, new_token, buf, sizeof(buf), 0, true);
+
+    // 4. Advance decode state
+    llama_batch batch = llama_batch_get_one(&new_token, 1);
+    llama_decode(stream->ctx->llama_ctx, batch);
+
+    *error = EV_SUCCESS;
+    return strdup(buf);
+}
+```
+
+### Dart Long-Lived Worker Pattern
+
+Replace `Isolate.run()` with persistent worker isolate:
+
+```dart
+class EdgeVeda {
+  Isolate? _workerIsolate;
+  SendPort? _workerSendPort;
+  ReceivePort? _mainReceivePort;
+
+  Future<void> init(EdgeVedaConfig config) async {
+    // Spawn persistent worker
+    _mainReceivePort = ReceivePort();
+    _workerIsolate = await Isolate.spawn(
+      _workerEntry,
+      _mainReceivePort!.sendPort,
+    );
+
+    // Get worker's SendPort
+    final completer = Completer<SendPort>();
+    _mainReceivePort!.listen((message) {
+      if (message is SendPort) {
+        completer.complete(message);
+      }
+    });
+    _workerSendPort = await completer.future;
+
+    // Initialize native context in worker
+    _workerSendPort!.send(_InitMessage(config));
+  }
+
+  Stream<String> generateStream(String prompt) {
+    final controller = StreamController<String>();
+
+    _mainReceivePort!.listen((message) {
+      if (message is _TokenChunk) {
+        controller.add(message.token);
+      } else if (message is _StreamDone) {
+        controller.close();
+      }
+    });
+
+    _workerSendPort!.send(_StreamMessage(prompt));
+    return controller.stream;
+  }
+}
+
+// Worker isolate entry point
+void _workerEntry(SendPort mainSendPort) {
+  final workerReceivePort = ReceivePort();
+  mainSendPort.send(workerReceivePort.sendPort);
+
+  final bindings = EdgeVedaNativeBindings.instance;
+  Pointer<EvContextImpl>? ctx;
+  Pointer<EvStreamImpl>? stream;
+
+  workerReceivePort.listen((message) {
+    if (message is _InitMessage) {
+      ctx = bindings.evInit(...);
+      mainSendPort.send(_InitResult(success: ctx != nullptr));
+    } else if (message is _StreamMessage) {
+      stream = bindings.evGenerateStream(ctx, message.prompt, ...);
+
+      // Poll tokens
+      while (bindings.evStreamHasNext(stream)) {
+        final token = bindings.evStreamNext(stream, errorPtr);
+        if (token != nullptr) {
+          mainSendPort.send(_TokenChunk(token.toDartString()));
+          bindings.evFreeString(token);
+        }
+      }
+      mainSendPort.send(_StreamDone());
+      bindings.evStreamFree(stream);
+    }
+  });
+}
+```
+
+### Data Flow: Streaming
+
+```
+[Main Isolate]                    [Worker Isolate (persistent)]
+     |                                    |
+  init() ----(SendPort)----------------->+
+                                         | ev_init()
+     +<----(SendPort)-- InitResult ------+
+     |                                   |
+  generateStream() -(SendPort)---------->+
+                                         | ev_generate_stream()
+                                         | while(has_next):
+                                         |   ev_stream_next()
+     +<----(SendPort)-- TokenChunk ------+
+     +<----(SendPort)-- TokenChunk ------+
+     +<----(SendPort)-- TokenChunk ------+
+     +<----(SendPort)-- StreamDone ------+
+     |                                   |
+  dispose() ----(SendPort)-------------->+
+                                         | ev_free()
+                                         | exit
+```
+
+---
+
+## Component Diagram: v1.1
+
+```
++------------------+     +-------------------+
+|  Flutter App     |     |  Dart SDK         |
+|                  |     |  edge_veda.dart   |
++--------+---------+     +--------+----------+
+         |                        |
+         v                        v
++--------+------------------------+----------+
+|        Main Isolate                        |
+|  +-----------------------------------+     |
+|  | EdgeVeda class                    |     |
+|  |   - init() spawns worker          |     |
+|  |   - generate() one-shot (legacy)  |     |
+|  |   - generateStream() via worker   |     |
+|  +-----------------------------------+     |
++--------------------------------------------+
+         |                    ^
+         | SendPort           | ReceivePort
+         v                    |
++--------------------------------------------+
+|        Worker Isolate (persistent)  [NEW]  |
+|  +-----------------------------------+     |
+|  | Maintains native context          |     |
+|  | Handles stream commands           |     |
+|  | Polls ev_stream_next() in loop    |     |
+|  +-----------------------------------+     |
++--------------------------------------------+
+         |
+         | FFI calls
+         v
++--------------------------------------------+
+|        Native Library                      |
+|  +-----------------------------------+     |
+|  | libedge_veda.so / .xcframework   |     |
+|  |   - ev_stream_* IMPLEMENTED [NEW] |     |
+|  +-----------------------------------+     |
+|  +-----------------------------------+     |
+|  | Platform Backend                  |     |
+|  |   - Metal (iOS)                   |     |
+|  |   - Vulkan (Android) [NEW]        |     |
+|  |   - CPU (fallback)                |     |
+|  +-----------------------------------+     |
++--------------------------------------------+
+```
+
+---
+
+## Build Order: v1.1
+
+### Phase 1: Android CPU Build
+
+**Goal:** Get libedge_veda.so building and loading on Android
+
+1. Create `scripts/build-android.sh`
+2. Update CMakeLists.txt for Android SHARED library
+3. Verify Flutter loads library via DynamicLibrary.open()
+4. Test ev_version(), ev_init/ev_free cycle
+
+**Deliverable:** generate() works on Android (CPU backend)
+
+### Phase 2: Android Vulkan Backend
+
+**Goal:** GPU acceleration on supported devices
+
+1. Configure GGML_VULKAN in CMake
+2. Handle vulkan-shaders-gen cross-compilation
+3. Implement runtime backend selection with CPU fallback
+4. Benchmark CPU vs Vulkan
+
+**Deliverable:** Vulkan acceleration with fallback
+
+### Phase 3: Streaming C++ Implementation
+
+**Goal:** Complete ev_stream_* implementation
+
+1. Implement ev_generate_stream() - tokenize, evaluate prompt
+2. Implement ev_stream_next() - sample one token, advance state
+3. Implement ev_stream_has_next(), ev_stream_cancel(), ev_stream_free()
+4. Test from C++ directly
+
+**Deliverable:** Streaming works in C++ layer
+
+### Phase 4: Dart Streaming Integration
+
+**Goal:** Stream<String> API in Dart
+
+1. Implement worker isolate pattern
+2. Add generateStream() to EdgeVeda class
+3. Handle cancellation and cleanup
+4. Integration tests
+
+**Deliverable:** Full streaming API in Flutter
+
+### Build Order Rationale
+
+| Order | Component | Rationale |
+|-------|-----------|-----------|
+| 1 | Android CPU | Validates build system without Vulkan complexity |
+| 2 | Android Vulkan | Can iterate on GPU with working base |
+| 3 | Streaming C++ | Single-threaded, testable without Dart |
+| 4 | Dart Streaming | Depends on working streaming in C++ |
+
+**Why Android before Streaming:**
+- Android is more self-contained (build system only)
+- Streaming touches both C++ and Dart
+- Users want Android support (platform expansion)
+- Streaming is additive (existing generate() still works)
+
+---
+
+## Sources
+
+### Official Documentation
+- [Flutter Android C Interop](https://docs.flutter.dev/platform-integration/android/c-interop)
+- [Dart Isolates](https://dart.dev/language/isolates)
+- [ReceivePort/SendPort](https://api.flutter.dev/flutter/dart-isolate/ReceivePort-class.html)
+- [NativeCallable.listener](https://api.flutter.dev/flutter/dart-ffi/NativeCallable/NativeCallable.listener.html)
+- [Android NDK CMake](https://developer.android.com/studio/projects/add-native-code)
+
+### llama.cpp References
+- [llama.cpp Android Build](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md)
+- [Vulkan Android Discussion](https://github.com/ggml-org/llama.cpp/discussions/8874)
+- [llama.android Example](https://github.com/ggml-org/llama.cpp/tree/master/examples/llama.android)
+
+### Existing Codebase Analysis
+- `/Users/ram/Documents/explore/edge/core/CMakeLists.txt` - Build configuration
+- `/Users/ram/Documents/explore/edge/core/src/engine.cpp` - C++ implementation
+- `/Users/ram/Documents/explore/edge/flutter/lib/src/edge_veda_impl.dart` - Dart SDK
+- `/Users/ram/Documents/explore/edge/flutter/android/build.gradle` - Android build config
+- `/Users/ram/Documents/explore/edge/core/third_party/llama.cpp/examples/simple/simple.cpp` - llama.cpp streaming pattern
