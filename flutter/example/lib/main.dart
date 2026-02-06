@@ -20,7 +20,24 @@ class EdgeVedaExampleApp extends StatelessWidget {
     return MaterialApp(
       title: 'Edge Veda Example',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF1A1A2E),
+        colorScheme: const ColorScheme.dark(
+          surface: Color(0xFF1A1A2E),
+          primary: Color(0xFF7C6FE3),
+          secondary: Color(0xFF5A5A8A),
+          onSurface: Color(0xFFE0E0E0),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF16162A),
+          foregroundColor: Color(0xFFE0E0E0),
+          elevation: 0,
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          backgroundColor: Color(0xFF16162A),
+          selectedItemColor: Color(0xFF7C6FE3),
+          unselectedItemColor: Color(0xFF6A6A8A),
+        ),
         useMaterial3: true,
       ),
       home: const HomeScreen(),
@@ -161,7 +178,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Memory pressure: $level'),
-                  backgroundColor: Colors.orange,
+                  backgroundColor: const Color(0xFFE65100),
                   duration: const Duration(seconds: 3),
                 ),
               );
@@ -204,7 +221,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Generation cancelled - app backgrounded'),
-              backgroundColor: Colors.orange,
+              backgroundColor: Color(0xFFE65100),
               duration: Duration(seconds: 2),
             ),
           );
@@ -416,17 +433,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       print('EdgeVeda: Starting generateStream...');
       setState(() => _statusMessage = 'Creating stream...');
 
-      // DEBUG: Show popup to confirm streaming is triggered
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('DEBUG: Streaming started - initializing worker...'),
-            duration: Duration(seconds: 3),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
-
       final stream = _edgeVeda.generateStream(
         prompt,
         options: const GenerateOptions(
@@ -438,16 +444,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
       print('EdgeVeda: Stream created, starting iteration...');
       setState(() => _statusMessage = 'Loading model in worker isolate (30-60s first time)...');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Loading model in worker... please wait 30-60 seconds'),
-            duration: Duration(seconds: 10),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
 
       // Add an empty assistant message that we'll update with streaming tokens
       _addAssistantMessage('');
@@ -485,16 +481,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if (!receivedFirstToken) {
           _timeToFirstTokenMs = stopwatch.elapsedMilliseconds;
           receivedFirstToken = true;
-          // Show success snackbar only on first CONTENT token (not empty isFinal)
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('SUCCESS: First token received! Streaming working!'),
-                duration: Duration(seconds: 3),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
         }
 
         buffer.write(chunk.token);
@@ -792,10 +778,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget _buildMetricsBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
+      decoration: const BoxDecoration(
+        color: Color(0xFF22223A),
         border: Border(
-          bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+          bottom: BorderSide(color: Color(0xFF3A3A5C), width: 1),
         ),
       ),
       child: Row(
@@ -838,13 +824,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: Colors.blue[700]),
+            Icon(icon, size: 14, color: const Color(0xFF7C6FE3)),
             const SizedBox(width: 4),
             Text(
               label,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 10,
-                color: Colors.grey[600],
+                color: Color(0xFF8A8AAA),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -853,10 +839,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         const SizedBox(height: 2),
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: Colors.blue[900],
+            color: Color(0xFFE0E0E0),
           ),
         ),
       ],
@@ -934,7 +920,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
-            color: _isInitialized ? Colors.green[50] : Colors.orange[50],
+            color: _isInitialized ? const Color(0xFF1E3A2E) : const Color(0xFF3A2E1E),
             child: Row(
               children: [
                 if (_isDownloading || _isLoading)
@@ -948,7 +934,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   child: Text(
                     _statusMessage,
                     style: TextStyle(
-                      color: _isInitialized ? Colors.green[900] : Colors.orange[900],
+                      color: _isInitialized ? const Color(0xFF90EE90) : const Color(0xFFFFB74D),
                       fontSize: 12,
                     ),
                   ),
@@ -976,12 +962,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.chat_bubble_outline,
-                            size: 64, color: Colors.grey[400]),
+                        const Icon(Icons.chat_bubble_outline,
+                            size: 64, color: Color(0xFF3A3A5C)),
                         const SizedBox(height: 16),
-                        Text(
+                        const Text(
                           'No messages yet',
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: TextStyle(color: Color(0xFF6A6A8A)),
                         ),
                       ],
                     ),
@@ -999,10 +985,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           // Input area
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFF16162A),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 4,
                   offset: const Offset(0, -2),
                 ),
@@ -1018,10 +1004,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       Expanded(
                         child: TextField(
                           controller: _promptController,
-                          decoration: const InputDecoration(
+                          style: const TextStyle(color: Color(0xFFE0E0E0)),
+                          decoration: InputDecoration(
                             hintText: 'Type a message...',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
+                            hintStyle: const TextStyle(color: Color(0xFF8A8AAA)),
+                            filled: true,
+                            fillColor: const Color(0xFF2A2A3E),
+                            border: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Color(0xFF3A3A5C)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Color(0xFF3A3A5C)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: Color(0xFF7C6FE3)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 12,
                             ),
@@ -1046,6 +1047,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ? _sendMessage
                             : null,
                         style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7C6FE3),
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
@@ -1060,7 +1063,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ? _generateStreaming
                             : null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: const Color(0xFF4CAF50),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -1074,7 +1077,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         label: const Text('Stop'),
                         onPressed: _isStreaming ? _cancelGeneration : null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
+                          backgroundColor: const Color(0xFFE57373),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -1122,13 +1125,13 @@ class MessageBubble extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: const Color(0xFF2A2A3E),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               message.text,
-              style: TextStyle(
-                color: Colors.grey[700],
+              style: const TextStyle(
+                color: Color(0xFF8A8AAA),
                 fontSize: 12,
               ),
             ),
@@ -1144,9 +1147,9 @@ class MessageBubble extends StatelessWidget {
             message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!message.isUser) ...[
-            CircleAvatar(
-              backgroundColor: Colors.blue[100],
-              child: const Icon(Icons.smart_toy, color: Colors.blue),
+            const CircleAvatar(
+              backgroundColor: Color(0xFF2A2A3E),
+              child: Icon(Icons.smart_toy, color: Color(0xFF7C6FE3)),
             ),
             const SizedBox(width: 8),
           ],
@@ -1154,22 +1157,22 @@ class MessageBubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: message.isUser ? Colors.blue : Colors.grey[200],
+                color: message.isUser ? const Color(0xFF3A3080) : const Color(0xFF2A2A3E),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 message.text,
                 style: TextStyle(
-                  color: message.isUser ? Colors.white : Colors.black87,
+                  color: message.isUser ? Colors.white : const Color(0xFFE0E0E0),
                 ),
               ),
             ),
           ),
           if (message.isUser) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
-              backgroundColor: Colors.green[100],
-              child: const Icon(Icons.person, color: Colors.green),
+            const CircleAvatar(
+              backgroundColor: Color(0xFF3A3A5C),
+              child: Icon(Icons.person, color: Color(0xFF7C6FE3)),
             ),
           ],
         ],
