@@ -78,6 +78,7 @@ endif()
 set(EDGE_VEDA_SOURCES
     src/engine.cpp
     src/memory_guard.cpp
+    src/vision_engine.cpp
 )
 
 # Header files
@@ -121,6 +122,16 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/CMakeLists.txt")
     set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+    # Enable common + tools to build libmtmd (multimodal/vision support)
+    # mtmd library lives in tools/mtmd and requires LLAMA_BUILD_COMMON + LLAMA_BUILD_TOOLS
+    set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_TOOLS ON CACHE BOOL "" FORCE)
+
+    # Disable optional common dependencies not needed for mtmd
+    set(LLAMA_HTTPLIB OFF CACHE BOOL "" FORCE)
+    set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+    set(LLAMA_LLGUIDANCE OFF CACHE BOOL "" FORCE)
 
     # Metal configuration for iOS/macOS (using GGML_METAL, not deprecated LLAMA_METAL)
     if(IOS OR MACOS)
@@ -187,13 +198,14 @@ function(configure_edge_veda_target target_name)
             ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 
-    # Link llama.cpp if available (both llama and ggml libraries)
+    # Link llama.cpp if available (llama, ggml, and mtmd libraries)
     if(LLAMA_CPP_AVAILABLE)
-        target_link_libraries(${target_name} PRIVATE llama ggml)
+        target_link_libraries(${target_name} PRIVATE llama ggml mtmd)
         target_compile_definitions(${target_name} PRIVATE EDGE_VEDA_LLAMA_ENABLED)
         target_include_directories(${target_name} PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/include
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/ggml/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/tools/mtmd
         )
     endif()
 

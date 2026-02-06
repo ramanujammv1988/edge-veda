@@ -195,6 +195,7 @@ DEVICE_GGML_BASE_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-base.a" 2>/dev/nu
 DEVICE_GGML_METAL_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-metal.a" 2>/dev/null | head -1)
 DEVICE_GGML_CPU_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-cpu.a" 2>/dev/null | head -1)
 DEVICE_GGML_BLAS_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-blas.a" 2>/dev/null | head -1)
+DEVICE_MTMD_LIB=$(find "$BUILD_IOS_DEVICE" -name "libmtmd.a" 2>/dev/null | head -1)
 
 echo "Device llama: $DEVICE_LLAMA_LIB"
 echo "Device ggml: $DEVICE_GGML_LIB"
@@ -202,6 +203,7 @@ echo "Device ggml-base: $DEVICE_GGML_BASE_LIB"
 echo "Device ggml-metal: $DEVICE_GGML_METAL_LIB"
 echo "Device ggml-cpu: $DEVICE_GGML_CPU_LIB"
 echo "Device ggml-blas: $DEVICE_GGML_BLAS_LIB"
+echo "Device mtmd: $DEVICE_MTMD_LIB"
 
 # Simulator libs - search in all possible locations
 SIM_LLAMA_LIB=$(find "$BUILD_IOS_SIM" -name "libllama.a" 2>/dev/null | head -1)
@@ -210,6 +212,7 @@ SIM_GGML_BASE_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-base.a" 2>/dev/null | h
 SIM_GGML_METAL_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-metal.a" 2>/dev/null | head -1)
 SIM_GGML_CPU_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-cpu.a" 2>/dev/null | head -1)
 SIM_GGML_BLAS_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-blas.a" 2>/dev/null | head -1)
+SIM_MTMD_LIB=$(find "$BUILD_IOS_SIM" -name "libmtmd.a" 2>/dev/null | head -1)
 
 echo "Simulator llama: $SIM_LLAMA_LIB"
 echo "Simulator ggml: $SIM_GGML_LIB"
@@ -217,6 +220,7 @@ echo "Simulator ggml-base: $SIM_GGML_BASE_LIB"
 echo "Simulator ggml-metal: $SIM_GGML_METAL_LIB"
 echo "Simulator ggml-cpu: $SIM_GGML_CPU_LIB"
 echo "Simulator ggml-blas: $SIM_GGML_BLAS_LIB"
+echo "Simulator mtmd: $SIM_MTMD_LIB"
 
 # Merge libraries into single static library per platform
 echo ""
@@ -233,6 +237,7 @@ DEVICE_LIBS_TO_MERGE="$DEVICE_LIB"
 [ -n "$DEVICE_GGML_METAL_LIB" ] && [ -f "$DEVICE_GGML_METAL_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_METAL_LIB"
 [ -n "$DEVICE_GGML_CPU_LIB" ] && [ -f "$DEVICE_GGML_CPU_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_CPU_LIB"
 [ -n "$DEVICE_GGML_BLAS_LIB" ] && [ -f "$DEVICE_GGML_BLAS_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_BLAS_LIB"
+[ -n "$DEVICE_MTMD_LIB" ] && [ -f "$DEVICE_MTMD_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_MTMD_LIB"
 
 # Build list of simulator libraries to merge
 SIM_LIBS_TO_MERGE="$SIM_LIB"
@@ -242,6 +247,7 @@ SIM_LIBS_TO_MERGE="$SIM_LIB"
 [ -n "$SIM_GGML_METAL_LIB" ] && [ -f "$SIM_GGML_METAL_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_METAL_LIB"
 [ -n "$SIM_GGML_CPU_LIB" ] && [ -f "$SIM_GGML_CPU_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_CPU_LIB"
 [ -n "$SIM_GGML_BLAS_LIB" ] && [ -f "$SIM_GGML_BLAS_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_BLAS_LIB"
+[ -n "$SIM_MTMD_LIB" ] && [ -f "$SIM_MTMD_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_MTMD_LIB"
 
 echo "Merging device libraries: $DEVICE_LIBS_TO_MERGE"
 # shellcheck disable=SC2086
@@ -346,6 +352,16 @@ if [ -d "$OUTPUT_DIR/EdgeVedaCore.xcframework" ]; then
             echo "This indicates llama.cpp was not properly linked into the binary."
             VERIFICATION_FAILED=true
         fi
+
+        # Verify vision symbols (ev_vision_* from vision_engine.cpp + libmtmd)
+        VISION_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "ev_vision_" || echo "0")
+        echo "$lib: $VISION_SYMBOLS ev_vision_* symbols found"
+        if [ "$VISION_SYMBOLS" -lt 5 ]; then
+            echo "WARNING: Expected at least 5 ev_vision_* symbols in $lib (found $VISION_SYMBOLS)"
+        fi
+
+        MTMD_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "mtmd_" || echo "0")
+        echo "$lib: $MTMD_SYMBOLS mtmd_* symbols found"
     done
 
     if [ "$VERIFICATION_FAILED" = true ]; then
