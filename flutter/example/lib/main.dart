@@ -285,7 +285,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Initializing Edge Veda...';
+      _statusMessage = 'Initializing Veda...';
     });
 
     try {
@@ -304,7 +304,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _statusMessage = 'Ready to chat!';
       });
 
-      _addSystemMessage('Edge Veda initialized successfully. Start chatting!');
+      _addSystemMessage('Veda initialized successfully. Start chatting!');
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -316,7 +316,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _sendMessage() async {
     if (!_isInitialized) {
-      _showError('Please initialize Edge Veda first');
+      _showError('Please initialize Veda first');
       return;
     }
 
@@ -400,7 +400,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// progressively. Supports cancellation via the Stop button.
   Future<void> _generateStreaming() async {
     if (!_isInitialized) {
-      _showError('Please initialize Edge Veda first');
+      _showError('Please initialize Veda first');
       return;
     }
 
