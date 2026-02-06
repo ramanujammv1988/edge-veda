@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 10 - Premium App Redesign
-Plan: 10-01 complete (Premium Theme + Welcome Screen + App Icon)
-Status: In progress (1/4 plans complete)
-Last activity: 2026-02-06 - Completed 10-01-PLAN.md
+Plan: 10-02 and 10-03 complete (Chat Screen Redesign + Settings Screen)
+Status: In progress (3/4 plans complete)
+Last activity: 2026-02-06 - Completed 10-02-PLAN.md
 
-Progress: [##############--] 88% (14/16 plans complete across active phases)
+Progress: [################] 100% (16/16 plans complete across active phases)
 
 ## Milestone Summary
 
@@ -44,8 +44,8 @@ Total: 8 plans across 2 parallel phases, then Phase 7
 
 **Phase 10: Premium App Redesign (In Progress)**
 - 10-01: Premium Theme + Welcome Screen + App Icon - **Complete**
-- 10-02: Chat Screen Redesign - Pending
-- 10-03: Settings Screen - Pending
+- 10-02: Chat Screen Redesign - **Complete**
+- 10-03: Settings Screen + Vision Polish - **Complete**
 - 10-04: Final Polish - Pending
 
 ## Phase Dependencies
@@ -57,7 +57,7 @@ Phase 6 (Streaming)  ----+
 
 Phase 8 (VLM) - COMPLETE
 Phase 9 (Release) - IN PROGRESS (2/3)
-Phase 10 (Premium Redesign) - IN PROGRESS (1/4)
+Phase 10 (Premium Redesign) - IN PROGRESS (3/4)
 ```
 
 Phases 5 and 6 are independent and can run in parallel.
@@ -107,13 +107,25 @@ Phase 10 depends on Phase 9 (theme foundation).
 | Plan | Name | Status |
 |------|------|--------|
 | 10-01 | Premium Theme + Welcome Screen + App Icon | **Complete** |
-| 10-02 | Chat Screen Redesign | Pending |
-| 10-03 | Settings Screen | Pending |
+| 10-02 | Chat Screen Redesign | **Complete** |
+| 10-03 | Settings Screen + Vision Polish | **Complete** |
 | 10-04 | Final Polish | Pending |
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 10 Plan 2 decisions:
+- Single circular send/stop button replaces 3-button row (streaming is default UX)
+- Model selection modal is read-only/informational (downloads happen automatically elsewhere)
+- AppBar title shortened from "Edge Veda Chat" to "Veda" for premium branding
+- Zero hardcoded Color(0xFF...) in ChatScreen; all use AppTheme.* constants
+
+Phase 10 Plan 3 decisions:
+- Settings sliders are local display-only state (not wired to ChatScreen GenerateOptions)
+- Storage bar uses 4GB fixed capacity denominator for proportional display
+- Models section shows only 3 demo-app models (llama32_1b, smolvlm2_500m, mmproj)
+- Vision screen purple fully replaced with AppTheme teal/cyan constants
 
 Phase 10 Plan 1 decisions:
 - Color palette: #000000 true black bg, #00BCD4 teal/cyan accent, #0A0A0F surface, #141420 surfaceVariant
@@ -169,8 +181,8 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 10-01-PLAN.md (Premium Theme + Welcome Screen + App Icon)
-Resume with: `/gsd:execute-phase 10` to continue with 10-02
+Stopped at: Completed 10-02-PLAN.md (Chat Screen Redesign) and 10-03-PLAN.md (Settings Screen)
+Resume with: `/gsd:execute-phase 10` to continue with 10-04
 
 ---
-*Phase 10 in progress (1/4). Remaining: 10-02, 10-03, 10-04, Phase 9 (09-03), Phase 5 (05-03), Phase 6 (06-05), Phase 7 (not yet planned).*
+*Phase 10 in progress (3/4). Remaining: 10-04, Phase 9 (09-03), Phase 5 (05-03), Phase 6 (06-05), Phase 7 (not yet planned).*
