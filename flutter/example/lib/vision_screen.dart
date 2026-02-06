@@ -5,6 +5,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
+import 'app_theme.dart';
+
 /// Vision tab with continuous camera scanning and description overlay
 ///
 /// Implements a Google Lens-style continuous scanning UX:
@@ -282,7 +284,7 @@ class _VisionScreenState extends State<VisionScreen>
                   value: _downloadProgress > 0 ? _downloadProgress : null,
                   backgroundColor: Colors.white24,
                   valueColor:
-                      const AlwaysStoppedAnimation<Color>(Color(0xFF7C6FE3)),
+                      const AlwaysStoppedAnimation<Color>(AppTheme.accent),
                 ),
               ),
               const SizedBox(height: 16),
@@ -341,10 +343,10 @@ class _VisionScreenState extends State<VisionScreen>
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A2E).withValues(alpha: 0.85),
+                    color: AppTheme.surface.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: const Color(0xFF3A3A5C).withValues(alpha: 0.5),
+                      color: AppTheme.border.withValues(alpha: 0.5),
                     ),
                   ),
                   child: Row(
@@ -413,7 +415,7 @@ class _PulsingDotState extends State<_PulsingDot>
           width: 10,
           height: 10,
           decoration: const BoxDecoration(
-            color: Color(0xFF7C6FE3),
+            color: AppTheme.accent,
             shape: BoxShape.circle,
           ),
         ),
