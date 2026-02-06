@@ -16,6 +16,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LoRA adapter support
 - macOS and Windows desktop support
 
+## [1.1.0] - 2026-02-06
+
+### Added
+- Vision Language Model (VLM) support with SmolVLM2-500M for real-time image description
+- `initVision()` and `describeImage()` APIs for camera-based object recognition
+- Camera utilities (`CameraUtils`) for BGRA/YUV420 to RGB conversion
+- Vision tab in demo app with continuous camera scanning and AR-style overlay
+- Streaming text generation via `generateStream()` with progressive token display
+- `CancelToken` for mid-stream generation cancellation
+- Pull-based streaming architecture (ev_stream_next loop, not callback-based)
+- `VisionConfig` and `VisionSession` for vision model lifecycle management
+- SmolVLM2-500M and mmproj entries in `ModelRegistry`
+- Dark minimal theme for demo app (Claude-inspired aesthetic)
+
+### Changed
+- Upgraded llama.cpp from b4658 to b7952
+- Integrated libmtmd (multimodal encoding) from llama.cpp tools/mtmd
+- XCFramework now includes vision engine (~7.6MB with vision support)
+- Demo app redesigned with dark theme, polished chat bubbles, and streamlined UI
+
+### Platform Support
+- iOS 13.0+ with Metal acceleration (text + vision)
+- Android API 24+ with CPU backend (vision support pending Android build)
+
 ## [1.0.0] - 2026-02-04
 
 ### Added
