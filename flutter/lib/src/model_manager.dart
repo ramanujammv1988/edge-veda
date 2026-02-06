@@ -461,15 +461,65 @@ class ModelRegistry {
     quantization: 'Q4_K_M',
   );
 
-  /// Get all available models
+  // === Vision Language Models ===
+
+  /// SmolVLM2-500M-Video-Instruct (Q8_0) - Vision Language Model
+  static final ModelInfo smolvlm2_500m = ModelInfo(
+    id: 'smolvlm2-500m-video-instruct-q8',
+    name: 'SmolVLM2 500M Video Instruct',
+    sizeBytes: 436808704, // ~417 MB
+    description: 'Vision + video understanding model for image description',
+    downloadUrl:
+        'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q8_0',
+  );
+
+  /// SmolVLM2-500M mmproj (F16) - Multimodal projector for SmolVLM2
+  static final ModelInfo smolvlm2_500m_mmproj = ModelInfo(
+    id: 'smolvlm2-500m-mmproj-f16',
+    name: 'SmolVLM2 500M Multimodal Projector',
+    sizeBytes: 199470624, // ~190 MB
+    description: 'Multimodal projector for SmolVLM2 vision model',
+    downloadUrl:
+        'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-f16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+  );
+
+  /// Get all available text models
   static List<ModelInfo> getAllModels() {
     return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama];
   }
 
-  /// Get model by ID
+  /// Get all available vision models (model + mmproj pairs)
+  static List<ModelInfo> getVisionModels() {
+    return [smolvlm2_500m];
+  }
+
+  /// Get the multimodal projector for a vision model
+  ///
+  /// Vision models require both the main model file and a separate
+  /// mmproj (multimodal projector) file. This method returns the
+  /// corresponding mmproj for a given vision model ID.
+  static ModelInfo? getMmprojForModel(String modelId) {
+    switch (modelId) {
+      case 'smolvlm2-500m-video-instruct-q8':
+        return smolvlm2_500m_mmproj;
+      default:
+        return null;
+    }
+  }
+
+  /// Get model by ID (searches both text and vision models)
   static ModelInfo? getModelById(String id) {
+    final allModels = [
+      ...getAllModels(),
+      ...getVisionModels(),
+      smolvlm2_500m_mmproj,
+    ];
     try {
-      return getAllModels().firstWhere((model) => model.id == id);
+      return allModels.firstWhere((model) => model.id == id);
     } catch (e) {
       return null;
     }
