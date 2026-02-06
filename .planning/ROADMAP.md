@@ -31,6 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: Android Vulkan + Demo Update** - Vulkan GPU enabled, streaming on both platforms, demo updated
 - [ ] **Phase 8: On-Device VLM** - Real-time vision/camera object description, zero latency, fully offline
 - [ ] **Phase 9: v1.1.0 Release + App Redesign** - Dark minimal demo app, version bump, publish to GitHub + pub.dev
+- [ ] **Phase 10: Premium App Redesign** - Full UI overhaul with teal/cyan accent, welcome flow, Settings tab, model selection, premium navigation
 
 ## Phase Details
 
@@ -266,6 +267,37 @@ Plans:
 - [ ] 09-02-PLAN.md — Version bump to 1.1.0 + CHANGELOG entry
 - [ ] 09-03-PLAN.md — Automated validation + human visual verification
 
+### Phase 10: Premium App Redesign
+**Goal**: Full UI overhaul of demo app with production-grade design quality — teal/cyan accent on true black, welcome/onboarding flow, model selection modal, Settings tab, premium bottom navigation with pill indicators, radial glow effects, card-based surfaces, and polished typography hierarchy
+
+**Depends on**: Phase 9
+
+**Requirements**: None (demo app UX overhaul, not new SDK requirements)
+
+**Success Criteria** (what must be TRUE):
+  1. Demo app uses true black (#000000) background with teal/cyan accent color system
+  2. Welcome/onboarding screen with radial glow, centered icon, "Get Started" button, and "100% Private" tagline
+  3. Chat screen redesigned with premium card-based message bubbles, polished input area, refined metrics display
+  4. Vision screen polished with consistent teal accent, premium overlays
+  5. Settings tab added with generation settings (temperature slider, max tokens), storage overview, model management, and about section
+  6. Model selection modal with device status info and downloadable model list
+  7. Bottom navigation uses pill-shaped active indicator with 3 tabs (Chat, Vision, Settings)
+  8. All screens match reference-quality design finesse — no debug UI, production-ready screenshots
+
+**Key Risks**:
+- **P1 (Low)**: Large UI refactor may break existing business logic — keep all SDK interaction code intact, only modify UI layer
+- **P2 (Low)**: New Settings screen adds complexity — keep it read-only display + simple controls, no new SDK features
+
+**Research flag**: Skip research — UI redesign with known Flutter patterns
+
+**Plans:** 4 plans
+
+Plans:
+- [ ] 10-01-PLAN.md -- Theme foundation + app shell + welcome screen + 3-tab navigation
+- [ ] 10-02-PLAN.md -- Chat screen premium redesign + model selection modal
+- [ ] 10-03-PLAN.md -- Settings tab + Vision screen teal polish
+- [ ] 10-04-PLAN.md -- Automated validation + human visual verification
+
 ## Progress
 
 **Execution Order:**
@@ -289,6 +321,7 @@ Phase 6 (Streaming)  ----+
 | 7. Android Vulkan + Demo Update | 0/? | Pending | — |
 | 8. On-Device VLM | 5/5 | **Complete** | 2026-02-06 |
 | 9. v1.1.0 Release + App Redesign | 2/3 | **In Progress** | — |
+| 10. Premium App Redesign | 0/4 | **Planned** | — |
 
 ---
 *Roadmap created: 2026-02-04*

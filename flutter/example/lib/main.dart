@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
+import 'app_theme.dart';
 import 'vision_screen.dart';
+import 'welcome_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,28 +20,8 @@ class EdgeVedaExampleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Edge Veda Example',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1A1A2E),
-        colorScheme: const ColorScheme.dark(
-          surface: Color(0xFF1A1A2E),
-          primary: Color(0xFF7C6FE3),
-          secondary: Color(0xFF5A5A8A),
-          onSurface: Color(0xFFE0E0E0),
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF16162A),
-          foregroundColor: Color(0xFFE0E0E0),
-          elevation: 0,
-        ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Color(0xFF16162A),
-          selectedItemColor: Color(0xFF7C6FE3),
-          unselectedItemColor: Color(0xFF6A6A8A),
-        ),
-        useMaterial3: true,
-      ),
+      title: 'Veda',
+      theme: AppTheme.themeData,
       home: const HomeScreen(),
     );
   }
@@ -55,30 +37,48 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _showWelcome = true;
 
   final List<Widget> _screens = const [
     ChatScreen(),
     VisionScreen(),
+    Center(child: Text('Settings', style: TextStyle(color: AppTheme.textSecondary))),
   ];
 
   @override
   Widget build(BuildContext context) {
+    if (_showWelcome) {
+      return WelcomeScreen(
+        onGetStarted: () => setState(() => _showWelcome = false),
+      );
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: _screens,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        backgroundColor: AppTheme.background,
+        indicatorColor: AppTheme.accent.withValues(alpha: 0.15),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline),
+            selectedIcon: Icon(Icons.chat_bubble),
             label: 'Chat',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.camera_alt),
+          NavigationDestination(
+            icon: Icon(Icons.camera_alt_outlined),
+            selectedIcon: Icon(Icons.camera_alt),
             label: 'Vision',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
