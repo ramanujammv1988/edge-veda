@@ -96,6 +96,11 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_set_verbose', '-Wl,-exported_symbol,_ev_set_verbose',
       '-Wl,-u,_ev_reset', '-Wl,-exported_symbol,_ev_reset',
       '-Wl,-u,_ev_free_string', '-Wl,-exported_symbol,_ev_free_string',
+      '-Wl,-u,_ev_vision_init', '-Wl,-exported_symbol,_ev_vision_init',
+      '-Wl,-u,_ev_vision_describe', '-Wl,-exported_symbol,_ev_vision_describe',
+      '-Wl,-u,_ev_vision_free', '-Wl,-exported_symbol,_ev_vision_free',
+      '-Wl,-u,_ev_vision_is_valid', '-Wl,-exported_symbol,_ev_vision_is_valid',
+      '-Wl,-u,_ev_vision_config_default', '-Wl,-exported_symbol,_ev_vision_config_default',
     ].join(' '),
     'OTHER_LDFLAGS[sdk=iphonesimulator*]' => [
       '$(inherited)',
@@ -126,6 +131,11 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_set_verbose', '-Wl,-exported_symbol,_ev_set_verbose',
       '-Wl,-u,_ev_reset', '-Wl,-exported_symbol,_ev_reset',
       '-Wl,-u,_ev_free_string', '-Wl,-exported_symbol,_ev_free_string',
+      '-Wl,-u,_ev_vision_init', '-Wl,-exported_symbol,_ev_vision_init',
+      '-Wl,-u,_ev_vision_describe', '-Wl,-exported_symbol,_ev_vision_describe',
+      '-Wl,-u,_ev_vision_free', '-Wl,-exported_symbol,_ev_vision_free',
+      '-Wl,-u,_ev_vision_is_valid', '-Wl,-exported_symbol,_ev_vision_is_valid',
+      '-Wl,-u,_ev_vision_config_default', '-Wl,-exported_symbol,_ev_vision_config_default',
     ].join(' ')
   }
 
