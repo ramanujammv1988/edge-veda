@@ -494,7 +494,7 @@ ev_error_t ev_generate(
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     // Clear KV cache for fresh generation
-    llama_kv_cache_clear(ctx->llama_ctx);
+    llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
 
     // Tokenize prompt
     std::vector<llama_token> tokens = tokenize_prompt(ctx->model, prompt, true);
@@ -664,7 +664,7 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
     // First call: evaluate prompt and clear KV cache
     if (!stream->prompt_evaluated) {
         // Clear KV cache for fresh generation
-        llama_kv_cache_clear(ctx->llama_ctx);
+        llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
 
         // Evaluate prompt tokens
         llama_batch batch = llama_batch_get_one(
@@ -858,7 +858,7 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     // Clear KV cache to free memory
     if (ctx->llama_ctx) {
-        llama_kv_cache_clear(ctx->llama_ctx);
+        llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
     }
 #endif
 
@@ -957,7 +957,7 @@ ev_error_t ev_reset(ev_context ctx) {
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    llama_kv_cache_clear(ctx->llama_ctx);
+    llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
     return EV_SUCCESS;
 #else
     return EV_ERROR_NOT_IMPLEMENTED;
