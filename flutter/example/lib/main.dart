@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
+import 'vision_screen.dart';
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const EdgeVedaExampleApp());
 }
 
@@ -20,7 +23,48 @@ class EdgeVedaExampleApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const ChatScreen(),
+      home: const HomeScreen(),
+    );
+  }
+}
+
+/// Home screen with tab navigation between Chat and Vision
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = const [
+    ChatScreen(),
+    VisionScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble),
+            label: 'Chat',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.camera_alt),
+            label: 'Vision',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -80,7 +124,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   double? _memoryMb;
   final _stopwatch = Stopwatch();
 
-  final List<ChatMessage> _messages = [];
+  List<ChatMessage> _messages = [];
 
   @override
   void initState() {
@@ -361,7 +405,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _streamingTokenCount = 0;
       _timeToFirstTokenMs = null;
       _tokensPerSecond = null;
-      _statusMessage = 'Starting stream...';
+      _statusMessage = 'Initializing streaming worker (first call loads model)...';
     });
 
     final buffer = StringBuffer();
@@ -369,7 +413,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     bool receivedFirstToken = false;
 
     try {
-      await for (final chunk in _edgeVeda.generateStream(
+      print('EdgeVeda: Starting generateStream...');
+      setState(() => _statusMessage = 'Creating stream...');
+
+      // DEBUG: Show popup to confirm streaming is triggered
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('DEBUG: Streaming started - initializing worker...'),
+            duration: Duration(seconds: 3),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
+      final stream = _edgeVeda.generateStream(
         prompt,
         options: const GenerateOptions(
           maxTokens: 256,
@@ -377,7 +435,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           topP: 0.9,
         ),
         cancelToken: _cancelToken,
-      )) {
+      );
+      print('EdgeVeda: Stream created, starting iteration...');
+      setState(() => _statusMessage = 'Loading model in worker isolate (30-60s first time)...');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Loading model in worker... please wait 30-60 seconds'),
+            duration: Duration(seconds: 10),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+
+      // Add an empty assistant message that we'll update with streaming tokens
+      _addAssistantMessage('');
+      final streamingMsgIndex = _messages.length - 1;
+
+      await for (final chunk in stream) {
+        print('EdgeVeda: Got chunk - isFinal: ${chunk.isFinal}, token: "${chunk.token}"');
         // Check if cancelled
         if (_cancelToken?.isCancelled == true) {
           setState(() {
@@ -389,7 +466,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if (chunk.isFinal) {
           // Stream completed naturally
           stopwatch.stop();
-          _tokensPerSecond = _streamingTokenCount / (stopwatch.elapsedMilliseconds / 1000);
+          _tokensPerSecond = _streamingTokenCount > 0
+              ? _streamingTokenCount / (stopwatch.elapsedMilliseconds / 1000)
+              : 0;
 
           setState(() {
             _statusMessage = 'Complete (${_streamingTokenCount} tokens, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s)';
@@ -397,29 +476,63 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           break;
         }
 
-        // Record TTFT on first token
+        // Skip empty tokens (shouldn't happen but be defensive)
+        if (chunk.token.isEmpty) {
+          continue;
+        }
+
+        // Record TTFT on first actual content token
         if (!receivedFirstToken) {
           _timeToFirstTokenMs = stopwatch.elapsedMilliseconds;
           receivedFirstToken = true;
+          // Show success snackbar only on first CONTENT token (not empty isFinal)
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('SUCCESS: First token received! Streaming working!'),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
         }
 
         buffer.write(chunk.token);
         _streamingTokenCount++;
 
-        // Update UI every few tokens to avoid excessive rebuilds
-        if (_streamingTokenCount % 3 == 0 || chunk.token.contains('\n')) {
+        // Update UI on first token, then every 3 tokens or on newlines
+        // The _streamingTokenCount == 1 ensures immediate feedback on first token
+        if (_streamingTokenCount == 1 || _streamingTokenCount % 3 == 0 || chunk.token.contains('\n')) {
           setState(() {
             _statusMessage = 'Streaming... (${_streamingTokenCount} tokens)';
+            // Update the streaming message - must create new List for Flutter to detect change
+            if (streamingMsgIndex < _messages.length) {
+              _messages = List.from(_messages);
+              _messages[streamingMsgIndex] = ChatMessage(
+                text: buffer.toString(),
+                isUser: false,
+                timestamp: _messages[streamingMsgIndex].timestamp,
+              );
+            }
           });
-          // Update the last assistant message in-place
-          _updateStreamingMessage(buffer.toString());
+          _scrollToBottom();
         }
       }
 
-      // Final update with complete text
-      if (buffer.isNotEmpty) {
-        _updateStreamingMessage(buffer.toString());
-      }
+      // Final update with complete text (or placeholder if empty)
+      setState(() {
+        // Must create new List for Flutter to detect change in ListView.builder
+        if (streamingMsgIndex < _messages.length) {
+          _messages = List.from(_messages);
+          _messages[streamingMsgIndex] = ChatMessage(
+            text: buffer.isNotEmpty
+                ? buffer.toString()
+                : '(No response generated)',
+            isUser: false,
+            timestamp: _messages[streamingMsgIndex].timestamp,
+          );
+        }
+      });
 
       // Get memory stats after streaming
       final memStats = await _edgeVeda.getMemoryStats();
@@ -442,33 +555,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _cancelToken = null;
       });
     }
-  }
-
-  /// Update or add the streaming response message
-  void _updateStreamingMessage(String text) {
-    setState(() {
-      // Find the last assistant message (non-system, non-user)
-      final lastIndex = _messages.lastIndexWhere(
-        (m) => !m.isUser && !m.isSystem,
-      );
-
-      if (lastIndex >= 0 && _isStreaming) {
-        // Update existing message
-        _messages[lastIndex] = ChatMessage(
-          text: text,
-          isUser: false,
-          timestamp: _messages[lastIndex].timestamp,
-        );
-      } else {
-        // Add new message
-        _messages.add(ChatMessage(
-          text: text,
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      }
-    });
-    _scrollToBottom();
   }
 
   /// Cancel the current streaming generation
