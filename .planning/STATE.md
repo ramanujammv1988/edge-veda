@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 8 - On-Device VLM (Vision Language Model)
-Plan: 08-00 complete (llama.cpp upgrade to b7952)
+Plan: 08-01 complete (VLM C API)
 Status: In progress
-Last activity: 2026-02-06 - Completed 08-00-PLAN.md (llama.cpp b7952 Upgrade)
+Last activity: 2026-02-06 - Completed 08-01-PLAN.md (VLM C API)
 
-Progress: [#######...] 70% (7/10 plans complete across active phases)
+Progress: [########..] 80% (8/10 plans complete across active phases)
 
 ## Milestone Summary
 
@@ -32,7 +32,8 @@ Total: 8 plans across 2 parallel phases, then Phase 7
 
 **Phase 8: On-Device VLM (Started)**
 - 08-00: llama.cpp b7952 Upgrade - **Complete**
-- 08-01 through 08-04: Vision integration - Pending
+- 08-01: VLM C API - **Complete**
+- 08-02 through 08-04: Vision integration - Pending
 
 ## Phase Dependencies
 
@@ -72,7 +73,7 @@ Phase 8 is independent of 5/6/7.
 | Plan | Name | Status |
 |------|------|--------|
 | 08-00 | llama.cpp b7952 Upgrade | **Complete** |
-| 08-01 | VLM C API | Pending |
+| 08-01 | VLM C API | **Complete** |
 | 08-02 | Dart FFI Vision Bindings | Pending |
 | 08-03 | Model Download | Pending |
 | 08-04 | Demo App | Pending |
@@ -130,6 +131,14 @@ Phase 8 Plan 0 decisions:
 - Simulator XCFramework includes Metal stubs (b7952 unconditionally references ggml_backend_metal_reg)
 - llama.cpp upgrade path: b4658 -> b7952 (12 months, only 1 API breaking change)
 
+Phase 8 Plan 1 decisions:
+- Vision context (ev_vision_context) fully separate from text context (ev_context)
+- Used mtmd_helper_eval_chunks for combined encode+decode (recommended by mtmd-cli.cpp)
+- Image marker prepended to prompt (mtmd_default_marker + newline + user prompt)
+- Bitmap freed after tokenize, chunks freed after eval (P2 memory mitigation)
+- 4096 default context size for VLM (accommodates image tokens + prompt + output)
+- llama_batch_get_one used for generation loop (core API, not common library)
+
 ### Pending Todos
 
 Carried from v1.0:
@@ -180,12 +189,13 @@ None currently.
 - llama.cpp b7952 upgrade complete [08-00]
 - libmtmd available at tools/mtmd/mtmd.h
 - SmolVLM2-500M-Video-Instruct target model
+- P2: Memory explosion from image embeddings - MITIGATED [08-01] (immediate free after eval)
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 08-00-PLAN.md (llama.cpp b7952 Upgrade)
-Resume with: `/gsd:execute-phase 8` for 08-01 (VLM C API)
+Stopped at: Completed 08-01-PLAN.md (VLM C API)
+Resume with: `/gsd:execute-phase 8` for 08-02 (CMake + Build Integration)
 
 ---
-*Phase 8 started. 08-00 complete. Next: 08-01 VLM C API.*
+*Phase 8 in progress. 08-00 and 08-01 complete. Next: 08-02 CMake + Build Integration.*
