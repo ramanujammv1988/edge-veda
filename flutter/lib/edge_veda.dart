@@ -86,6 +86,14 @@ export 'src/types.dart' show
     MemoryPressureEvent,
     CancelToken;
 
+// Vision types
+export 'src/types.dart' show
+    VisionConfig,
+    VisionException;
+
+// Camera utilities
+export 'src/camera_utils.dart' show CameraUtils;
+
 // Exceptions (all typed, per R4.1)
 export 'src/types.dart' show
     EdgeVedaException,
