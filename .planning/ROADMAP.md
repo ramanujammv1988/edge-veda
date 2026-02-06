@@ -288,7 +288,7 @@ Phase 6 (Streaming)  ----+
 | 6. Streaming C++ + Dart Integration | 0/5 | **Planned** | — |
 | 7. Android Vulkan + Demo Update | 0/? | Pending | — |
 | 8. On-Device VLM | 5/5 | **Complete** | 2026-02-06 |
-| 9. v1.1.0 Release + App Redesign | 0/3 | **Planned** | — |
+| 9. v1.1.0 Release + App Redesign | 2/3 | **In Progress** | — |
 
 ---
 *Roadmap created: 2026-02-04*
