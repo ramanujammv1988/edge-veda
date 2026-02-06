@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 8 - On-Device VLM (Vision Language Model)
-Plan: 08-02 complete (Build System + Model Registry)
+Plan: 08-03 complete (Dart FFI Vision Bindings)
 Status: In progress
-Last activity: 2026-02-06 - Completed 08-02-PLAN.md (Build System + Model Registry)
+Last activity: 2026-02-06 - Completed 08-03-PLAN.md (Dart FFI Vision Bindings)
 
-Progress: [#########.] 90% (9/10 plans complete across active phases)
+Progress: [##########] 91% (10/11 plans complete across active phases)
 
 ## Milestone Summary
 
@@ -34,7 +34,8 @@ Total: 8 plans across 2 parallel phases, then Phase 7
 - 08-00: llama.cpp b7952 Upgrade - **Complete**
 - 08-01: VLM C API - **Complete**
 - 08-02: Build System + Model Registry - **Complete**
-- 08-03 through 08-04: Dart FFI + Demo App - Pending
+- 08-03: Dart FFI Vision Bindings - **Complete**
+- 08-04: Demo App - Pending
 
 ## Phase Dependencies
 
@@ -76,7 +77,7 @@ Phase 8 is independent of 5/6/7.
 | 08-00 | llama.cpp b7952 Upgrade | **Complete** |
 | 08-01 | VLM C API | **Complete** |
 | 08-02 | Build System + Model Registry | **Complete** |
-| 08-03 | Dart FFI Vision Bindings | Pending |
+| 08-03 | Dart FFI Vision Bindings | **Complete** |
 | 08-04 | Demo App | Pending |
 
 ## Research Flags
@@ -146,6 +147,14 @@ Phase 8 Plan 2 decisions:
 - mmproj uses F16 quantization (recommended for vision projectors, 190MB)
 - Vision model registry: model + mmproj as separate ModelInfo entries linked by getMmprojForModel()
 
+Phase 8 Plan 3 decisions:
+- Vision FFI bindings follow same Native+Dart typedef pair pattern as text bindings
+- Vision init uses test-and-free pattern via Isolate.run() (same as text init)
+- describeImage() creates fresh vision context per call in Isolate.run() (same as generate())
+- CameraUtils is pure Dart - no camera package dependency in core SDK
+- Input validation checks RGB byte count (width*height*3) before FFI boundary crossing
+- Barrel file exports VisionConfig, VisionException, CameraUtils for public API
+
 ### Pending Todos
 
 Carried from v1.0:
@@ -202,8 +211,8 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 08-02-PLAN.md (Build System + Model Registry)
-Resume with: `/gsd:execute-phase 8` for 08-03 (Dart FFI Vision Bindings)
+Stopped at: Completed 08-03-PLAN.md (Dart FFI Vision Bindings)
+Resume with: `/gsd:execute-phase 8` for 08-04 (Demo App)
 
 ---
-*Phase 8 in progress. 08-00, 08-01, and 08-02 complete. Next: 08-03 Dart FFI Vision Bindings.*
+*Phase 8 in progress. 08-00 through 08-03 complete. Next: 08-04 Demo App.*
