@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** v1.1 Android + Streaming
+**Current focus:** v1.1 Android + Streaming / Phase 8 VLM
 
 ## Current Position
 
-Phase: 5 & 6 - Parallel execution in progress
-Plan: 6/8 plans complete (05-01, 05-02, 06-01, 06-02, 06-03, 06-04)
+Phase: 8 - On-Device VLM (Vision Language Model)
+Plan: 08-00 complete (llama.cpp upgrade to b7952)
 Status: In progress
-Last activity: 2026-02-05 - Completed 06-04-PLAN.md (Public Streaming API)
+Last activity: 2026-02-06 - Completed 08-00-PLAN.md (llama.cpp b7952 Upgrade)
 
-Progress: [######....] 75% (6/8 plans complete in Phase 5 & 6)
+Progress: [#######...] 70% (7/10 plans complete across active phases)
 
 ## Milestone Summary
 
@@ -25,10 +25,14 @@ Progress: [######....] 75% (6/8 plans complete in Phase 5 & 6)
 
 **v1.1: Android + Streaming (Active)**
 - Phase 5: Android CPU Build (3 plans) - 05-01, 05-02 complete
-- Phase 6: Streaming C++ + Dart (5 plans) - 06-01, 06-02 complete
+- Phase 6: Streaming C++ + Dart (5 plans) - 06-01, 06-02, 06-03, 06-04 complete
 - Phase 7: Android Vulkan + Demo (4 requirements) - depends on 5 and 6
 
 Total: 8 plans across 2 parallel phases, then Phase 7
+
+**Phase 8: On-Device VLM (Started)**
+- 08-00: llama.cpp b7952 Upgrade - **Complete**
+- 08-01 through 08-04: Vision integration - Pending
 
 ## Phase Dependencies
 
@@ -36,10 +40,14 @@ Total: 8 plans across 2 parallel phases, then Phase 7
 Phase 5 (Android CPU) ----+
                           +--> Phase 7 (Vulkan + Demo)
 Phase 6 (Streaming)  ----+
+
+Phase 8 (VLM) - Independent, urgent competitive response
+  08-00 (llama.cpp upgrade) --> 08-01 --> 08-02 --> 08-03 --> 08-04
 ```
 
 Phases 5 and 6 are independent and can run in parallel.
 Phase 7 depends on both 5 and 6 completing.
+Phase 8 is independent of 5/6/7.
 
 ## Phase 5 Progress
 
@@ -59,6 +67,16 @@ Phase 7 depends on both 5 and 6 completing.
 | 06-04 | Public Streaming API | **Complete** |
 | 06-05 | Integration Tests | Pending |
 
+## Phase 8 Progress
+
+| Plan | Name | Status |
+|------|------|--------|
+| 08-00 | llama.cpp b7952 Upgrade | **Complete** |
+| 08-01 | VLM C API | Pending |
+| 08-02 | Dart FFI Vision Bindings | Pending |
+| 08-03 | Model Download | Pending |
+| 08-04 | Demo App | Pending |
+
 ## Research Flags
 
 | Phase | Research Needed | Status |
@@ -66,6 +84,7 @@ Phase 7 depends on both 5 and 6 completing.
 | Phase 5 | No | Skipped (standard NDK patterns) |
 | Phase 6 | Yes | **Complete** (06-RESEARCH.md) |
 | Phase 7 | Yes | Pending (Vulkan compatibility) |
+| Phase 8 | Yes | **Complete** (08-RESEARCH.md) |
 
 ## Accumulated Context
 
@@ -106,6 +125,11 @@ Phase 6 Plan 4 decisions:
 - Single streaming session at a time (throws if generateStream called during active stream)
 - Worker isolate reused across streaming sessions for efficiency
 
+Phase 8 Plan 0 decisions:
+- llama_kv_cache_clear() migrated to llama_memory_clear(llama_get_memory(ctx), true) for b7952
+- Simulator XCFramework includes Metal stubs (b7952 unconditionally references ggml_backend_metal_reg)
+- llama.cpp upgrade path: b4658 -> b7952 (12 months, only 1 API breaking change)
+
 ### Pending Todos
 
 Carried from v1.0:
@@ -116,6 +140,14 @@ v1.1:
 - Verify Android NDK r27c installed in dev environment
 - Test Vulkan capability on target devices (Pixel 6a, Galaxy A54)
 
+### Roadmap Evolution
+
+- Phase 8 added: On-Device VLM (Vision Language Model) - URGENT competitive response
+  - Real-time camera object description/detection
+  - Zero latency, fully offline
+  - Marked urgent due to competitor launch
+  - 08-00 upgrade complete, libmtmd now available
+
 ### Blockers/Concerns
 
 None currently.
@@ -125,12 +157,13 @@ None currently.
 - Flutter SDK available
 - Xcode Command Line Tools only (users build XCFramework locally)
 - Android NDK not yet verified in dev environment
+- llama.cpp now at b7952 (upgraded from b4658)
 
 ## Key Pitfalls by Phase
 
 **Phase 5 (Android CPU):**
 - P1: Android LMK differs from iOS - use 800MB limit [IMPLEMENTED 05-02]
-- P2: llama.cpp version - keep b4658, GGML_OPENMP=OFF [IMPLEMENTED 05-01]
+- P2: llama.cpp version - now at b7952 (upgraded for Phase 8) [UPDATED 08-00]
 - P4: dlopen fails - build arm64-v8a, verify in APK [CONFIGURED 05-01]
 
 **Phase 6 (Streaming):**
@@ -143,11 +176,16 @@ None currently.
 - P3: Vulkan incomplete - CPU fallback, device allowlist
 - P10: Platform parity - automated cross-platform tests
 
+**Phase 8 (VLM):**
+- llama.cpp b7952 upgrade complete [08-00]
+- libmtmd available at tools/mtmd/mtmd.h
+- SmolVLM2-500M-Video-Instruct target model
+
 ## Session Continuity
 
-Last session: 2026-02-05
-Stopped at: Completed 06-04-PLAN.md (Public Streaming API)
-Resume with: `/gsd:execute-phase 5` for 05-03, or `/gsd:execute-phase 6` for 06-05
+Last session: 2026-02-06
+Stopped at: Completed 08-00-PLAN.md (llama.cpp b7952 Upgrade)
+Resume with: `/gsd:execute-phase 8` for 08-01 (VLM C API)
 
 ---
-*Phase 5 & 6 executing in parallel. 6/8 plans complete (75%).*
+*Phase 8 started. 08-00 complete. Next: 08-01 VLM C API.*
