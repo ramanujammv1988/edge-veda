@@ -466,6 +466,109 @@ EV_API const char* ev_get_last_error(ev_context ctx);
  */
 EV_API ev_error_t ev_reset(ev_context ctx);
 
+/* ============================================================================
+ * Vision API (VLM - Vision Language Model)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda vision inference engine
+ *
+ * Vision context is SEPARATE from text context (ev_context).
+ * Create with ev_vision_init(), free with ev_vision_free().
+ */
+typedef struct ev_vision_context_impl* ev_vision_context;
+
+/**
+ * @brief Configuration structure for initializing vision context
+ */
+typedef struct {
+    /** Path to VLM GGUF model file */
+    const char* model_path;
+
+    /** Path to mmproj (multimodal projector) GGUF file */
+    const char* mmproj_path;
+
+    /** Number of CPU threads (0 = auto-detect) */
+    int num_threads;
+
+    /** Token context window size (0 = auto, based on model) */
+    int context_size;
+
+    /** Batch size for processing (0 = default 512) */
+    int batch_size;
+
+    /** Memory limit in bytes (0 = no limit) */
+    size_t memory_limit_bytes;
+
+    /** GPU layers to offload (-1 = all, 0 = none) */
+    int gpu_layers;
+
+    /** Use memory mapping for model file */
+    bool use_mmap;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_vision_config;
+
+/**
+ * @brief Get default vision configuration with recommended settings
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_vision_config_default(ev_vision_config* config);
+
+/**
+ * @brief Initialize vision context with VLM model and mmproj
+ *
+ * Loads the vision language model and multimodal projector.
+ * The vision context is independent from any text context.
+ *
+ * @param config Vision configuration (model_path and mmproj_path required)
+ * @param error Optional pointer to receive error code
+ * @return Vision context handle on success, NULL on failure
+ */
+EV_API ev_vision_context ev_vision_init(
+    const ev_vision_config* config,
+    ev_error_t* error
+);
+
+/**
+ * @brief Describe an image using the vision model
+ *
+ * Takes raw RGB888 image bytes and a text prompt, returns a text description.
+ * This is a blocking call that returns the complete generated text.
+ *
+ * @param ctx Vision context handle
+ * @param image_bytes Raw pixel data in RGB888 format (width * height * 3 bytes)
+ * @param width Image width in pixels
+ * @param height Image height in pixels
+ * @param prompt User prompt (e.g., "Describe this image")
+ * @param params Generation parameters (NULL = use defaults)
+ * @param output Pointer to receive generated text (caller must free with ev_free_string)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_vision_describe(
+    ev_vision_context ctx,
+    const unsigned char* image_bytes,
+    int width,
+    int height,
+    const char* prompt,
+    const ev_generation_params* params,
+    char** output
+);
+
+/**
+ * @brief Free vision context and release all resources
+ * @param ctx Vision context handle to free
+ */
+EV_API void ev_vision_free(ev_vision_context ctx);
+
+/**
+ * @brief Check if vision context is valid and ready for inference
+ * @param ctx Vision context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_vision_is_valid(ev_vision_context ctx);
+
 #ifdef __cplusplus
 }
 #endif
