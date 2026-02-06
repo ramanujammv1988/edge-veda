@@ -29,6 +29,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Android CPU Build** - Android NDK builds and loads native library with CPU inference
 - [ ] **Phase 6: Streaming C++ + Dart Integration** - Token-by-token streaming works on iOS with long-lived isolate
 - [ ] **Phase 7: Android Vulkan + Demo Update** - Vulkan GPU enabled, streaming on both platforms, demo updated
+- [ ] **Phase 8: On-Device VLM** - Real-time vision/camera object description, zero latency, fully offline
+- [ ] **Phase 9: v1.1.0 Release + App Redesign** - Dark minimal demo app, version bump, publish to GitHub + pub.dev
 
 ## Phase Details
 
@@ -201,15 +203,78 @@ Plans:
 
 **Plans:** TBD
 
+### Phase 8: On-Device VLM (Vision Language Model) - URGENT COMPETITIVE RESPONSE
+**Goal**: Users can point phone camera at objects and get real-time descriptions with zero latency, fully offline
+
+**Depends on**: Phase 4 (iOS-first; Android support after Phase 5)
+
+**Requirements**: VLM model integration, camera frame processing, vision API
+
+**Success Criteria** (what must be TRUE):
+  1. User points camera at object, sees description within 2-5 seconds (realistic mobile latency)
+  2. Works 100% offline - no WiFi/cellular required after model download
+  3. Demo app shows real-time object description as camera moves
+  4. SmolVLM-500M model supported (437MB Q8_0, fits memory constraints)
+  5. Memory stays under device limits (1.2GB iOS, 800MB Android) during vision inference
+  6. Works on iPhone 12+ and modern Android devices with acceptable performance
+
+**Key Risks** (from 08-RESEARCH.md):
+- **P1 (Critical)**: Image encoding dominates latency - Use smaller models (SmolVLM), consider GPU acceleration
+- **P2 (Critical)**: Memory explosion with image tensors - Add 200-300MB headroom, free embeddings immediately
+- **P3 (Moderate)**: Camera frame format mismatch - Convert YUV420/BGRA to RGB before inference
+- **P4 (Moderate)**: Context size insufficient - Configure context = image_tokens + prompt + output
+- **P5 (Critical)**: Blocking UI thread - Run ALL vision ops in background isolate
+
+**Research flag**: Research complete (08-RESEARCH.md)
+
+**Plans:** 5 plans
+
+Plans:
+- [x] 08-00-PLAN.md - llama.cpp upgrade b4658 to b7952 (pre-step for libmtmd/SmolVLM2 support)
+- [x] 08-01-PLAN.md - C++ Vision API (ev_vision_* header and vision_engine.cpp using libmtmd)
+- [x] 08-02-PLAN.md - Build system + VLM model support (CMakeLists, podspec, model_manager)
+- [x] 08-03-PLAN.md - Dart FFI + VisionSession (bindings, camera_utils, initVision/describeImage)
+- [x] 08-04-PLAN.md - Demo app + verification (vision tab, camera integration, human verification)
+
+**Urgency:** Competitive response - direct competitor launched similar feature
+
+### Phase 9: v1.1.0 Release + App Redesign
+**Goal**: Demo app redesigned with dark minimal aesthetic (Claude-inspired), SDK published as v1.1.0 to GitHub Releases and pub.dev
+
+**Depends on**: Phase 8 (vision features to include in release)
+
+**Requirements**: None (release packaging + demo polish, not new SDK requirements)
+
+**Success Criteria** (what must be TRUE):
+  1. Demo app uses dark theme with minimal Claude-inspired aesthetic on both Chat and Vision tabs
+  2. App looks social-media-ready in screenshots (no debug UI, polished transitions)
+  3. Version 1.1.0 consistent across pubspec.yaml, podspec, and CHANGELOG.md
+  4. `./scripts/prepare-release.sh 1.1.0` passes all checks
+  5. `flutter analyze` passes with no errors on example app
+  6. CHANGELOG.md documents all v1.1.0 features (vision, streaming, VLM)
+
+**Key Risks**:
+- **P1 (Low)**: Theme changes break existing functionality — keep all business logic intact, only modify UI layer
+- **P2 (Low)**: pub.dev publish fails — dry-run first, existing CI/CD handles the flow
+
+**Research flag**: Skip research — UI redesign + release packaging are standard patterns
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Dark theme redesign (Chat + Vision screens, remove debug UI)
+- [ ] 09-02-PLAN.md — Version bump to 1.1.0 + CHANGELOG entry
+- [ ] 09-03-PLAN.md — Automated validation + human visual verification
+
 ## Progress
 
 **Execution Order:**
 - v1.0: 1 -> 2 -> 3 -> 4 (complete)
-- v1.1: 5 and 6 can parallelize, then 7
+- v1.1: 5 and 6 can parallelize, then 7, then 8
 
 ```
 Phase 5 (Android CPU) ----+
-                          +--> Phase 7 (Vulkan + Demo)
+                          +--> Phase 7 (Vulkan + Demo) --> Phase 8 (VLM)
 Phase 6 (Streaming)  ----+
 ```
 
@@ -222,12 +287,16 @@ Phase 6 (Streaming)  ----+
 | 5. Android CPU Build | 0/3 | **Planned** | — |
 | 6. Streaming C++ + Dart Integration | 0/5 | **Planned** | — |
 | 7. Android Vulkan + Demo Update | 0/? | Pending | — |
+| 8. On-Device VLM | 5/5 | **Complete** | 2026-02-06 |
+| 9. v1.1.0 Release + App Redesign | 0/3 | **Planned** | — |
 
 ---
 *Roadmap created: 2026-02-04*
 *v1.1 phases added: 2026-02-05*
 *Phase 5 planned: 2026-02-05*
 *Phase 6 planned: 2026-02-05*
+*Phase 8 planned: 2026-02-06*
+*Phase 9 added: 2026-02-06*
 *Depth: comprehensive (from config.json)*
 *v1.0 Coverage: 19/19 requirements mapped*
 *v1.1 Coverage: 14/14 requirements mapped*

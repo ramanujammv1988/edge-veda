@@ -2,7 +2,7 @@ name: edge_veda_example
 description: Example app for Edge Veda SDK
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.1.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
