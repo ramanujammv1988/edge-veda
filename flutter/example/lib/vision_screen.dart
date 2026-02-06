@@ -282,7 +282,7 @@ class _VisionScreenState extends State<VisionScreen>
                   value: _downloadProgress > 0 ? _downloadProgress : null,
                   backgroundColor: Colors.white24,
                   valueColor:
-                      const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+                      const AlwaysStoppedAnimation<Color>(Color(0xFF7C6FE3)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -341,8 +341,11 @@ class _VisionScreenState extends State<VisionScreen>
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
+                    color: const Color(0xFF1A1A2E).withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFF3A3A5C).withValues(alpha: 0.5),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -410,7 +413,7 @@ class _PulsingDotState extends State<_PulsingDot>
           width: 10,
           height: 10,
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: Color(0xFF7C6FE3),
             shape: BoxShape.circle,
           ),
         ),
