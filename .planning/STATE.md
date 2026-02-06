@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** v1.1.0 Release + App Redesign (Phase 9)
+**Current focus:** Premium App Redesign (Phase 10)
 
 ## Current Position
 
-Phase: 9 - v1.1.0 Release + App Redesign
-Plan: 09-02 complete (Version Bump + CHANGELOG)
-Status: In progress (2/3 plans complete)
-Last activity: 2026-02-06 - Completed 09-02-PLAN.md (Version Bump + CHANGELOG)
+Phase: 10 - Premium App Redesign
+Plan: 10-01 complete (Premium Theme + Welcome Screen + App Icon)
+Status: In progress (1/4 plans complete)
+Last activity: 2026-02-06 - Completed 10-01-PLAN.md
 
-Progress: [############-] 92% (13/14 plans complete across active phases)
+Progress: [##############--] 88% (14/16 plans complete across active phases)
 
 ## Milestone Summary
 
@@ -42,6 +42,12 @@ Total: 8 plans across 2 parallel phases, then Phase 7
 - 09-02: Version Bump + CHANGELOG - **Complete**
 - 09-03: Automated Validation + Human Verification - Pending
 
+**Phase 10: Premium App Redesign (In Progress)**
+- 10-01: Premium Theme + Welcome Screen + App Icon - **Complete**
+- 10-02: Chat Screen Redesign - Pending
+- 10-03: Settings Screen - Pending
+- 10-04: Final Polish - Pending
+
 ## Phase Dependencies
 
 ```
@@ -51,12 +57,14 @@ Phase 6 (Streaming)  ----+
 
 Phase 8 (VLM) - COMPLETE
 Phase 9 (Release) - IN PROGRESS (2/3)
+Phase 10 (Premium Redesign) - IN PROGRESS (1/4)
 ```
 
 Phases 5 and 6 are independent and can run in parallel.
 Phase 7 depends on both 5 and 6 completing.
 Phase 8 is complete (all 5 plans done, human-verified).
 Phase 9 depends on Phase 8.
+Phase 10 depends on Phase 9 (theme foundation).
 
 ## Phase 5 Progress
 
@@ -94,9 +102,25 @@ Phase 9 depends on Phase 8.
 | 09-02 | Version Bump + CHANGELOG | **Complete** |
 | 09-03 | Automated Validation + Human Verification | Pending |
 
+## Phase 10 Progress
+
+| Plan | Name | Status |
+|------|------|--------|
+| 10-01 | Premium Theme + Welcome Screen + App Icon | **Complete** |
+| 10-02 | Chat Screen Redesign | Pending |
+| 10-03 | Settings Screen | Pending |
+| 10-04 | Final Polish | Pending |
+
 ## Accumulated Context
 
 ### Decisions
+
+Phase 10 Plan 1 decisions:
+- Color palette: #000000 true black bg, #00BCD4 teal/cyan accent, #0A0A0F surface, #141420 surfaceVariant
+- Brand red #E50914 for V logo (Netflix-style)
+- Material 3 NavigationBar with pill indicator replaces BottomNavigationBar
+- Welcome screen shows on every cold start (no SharedPreferences persistence)
+- flutter_launcher_icons for cross-platform icon generation from single 1024x1024 PNG
 
 Phase 9 Plan 2 decisions:
 - CHANGELOG date set to 2026-02-06 (actual completion date)
@@ -104,8 +128,9 @@ Phase 9 Plan 2 decisions:
 - Feature granularity: listed individual APIs rather than high-level summaries
 
 Phase 9 Plan 1 decisions:
-- Dark minimal theme with Claude-inspired aesthetic
-- IndexedStack preserves Chat/Vision tab state
+- Color palette: #1A1A2E bg, #7C6FE3 primary purple, #16162A surface, #2A2A3E cards (now superseded by Phase 10)
+- Removed 3 DEBUG SnackBars from streaming; kept functional SnackBars
+- Vision overlays updated for consistency (purple accent, dark bg with border)
 
 Phase 8 Plan 4 decisions:
 - IndexedStack preserves Chat screen state when switching to Vision tab
@@ -128,6 +153,7 @@ v1.1:
 ### Roadmap Evolution
 
 - Phase 9 added: v1.1.0 Release + App Redesign (dark minimal demo, version bump, publish)
+- Phase 10 added: Premium App Redesign (teal/cyan accent, welcome flow, Settings tab, model selection, premium nav)
 
 ### Blockers/Concerns
 
@@ -143,8 +169,8 @@ None currently.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 09-02-PLAN.md (Version Bump + CHANGELOG)
-Resume with: `/gsd:execute-phase 9` to continue with 09-03
+Stopped at: Completed 10-01-PLAN.md (Premium Theme + Welcome Screen + App Icon)
+Resume with: `/gsd:execute-phase 10` to continue with 10-02
 
 ---
-*Phase 9 in progress (2/3). Remaining: 09-03, Phase 5 (05-03), Phase 6 (06-05), Phase 7 (not yet planned).*
+*Phase 10 in progress (1/4). Remaining: 10-02, 10-03, 10-04, Phase 9 (09-03), Phase 5 (05-03), Phase 6 (06-05), Phase 7 (not yet planned).*
