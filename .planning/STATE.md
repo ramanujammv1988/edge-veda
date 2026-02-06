@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 8 - On-Device VLM (Vision Language Model)
-Plan: 08-01 complete (VLM C API)
+Plan: 08-02 complete (Build System + Model Registry)
 Status: In progress
-Last activity: 2026-02-06 - Completed 08-01-PLAN.md (VLM C API)
+Last activity: 2026-02-06 - Completed 08-02-PLAN.md (Build System + Model Registry)
 
-Progress: [########..] 80% (8/10 plans complete across active phases)
+Progress: [#########.] 90% (9/10 plans complete across active phases)
 
 ## Milestone Summary
 
@@ -33,7 +33,8 @@ Total: 8 plans across 2 parallel phases, then Phase 7
 **Phase 8: On-Device VLM (Started)**
 - 08-00: llama.cpp b7952 Upgrade - **Complete**
 - 08-01: VLM C API - **Complete**
-- 08-02 through 08-04: Vision integration - Pending
+- 08-02: Build System + Model Registry - **Complete**
+- 08-03 through 08-04: Dart FFI + Demo App - Pending
 
 ## Phase Dependencies
 
@@ -74,8 +75,8 @@ Phase 8 is independent of 5/6/7.
 |------|------|--------|
 | 08-00 | llama.cpp b7952 Upgrade | **Complete** |
 | 08-01 | VLM C API | **Complete** |
-| 08-02 | Dart FFI Vision Bindings | Pending |
-| 08-03 | Model Download | Pending |
+| 08-02 | Build System + Model Registry | **Complete** |
+| 08-03 | Dart FFI Vision Bindings | Pending |
 | 08-04 | Demo App | Pending |
 
 ## Research Flags
@@ -139,6 +140,12 @@ Phase 8 Plan 1 decisions:
 - 4096 default context size for VLM (accommodates image tokens + prompt + output)
 - llama_batch_get_one used for generation loop (core API, not common library)
 
+Phase 8 Plan 2 decisions:
+- Enable LLAMA_BUILD_COMMON + LLAMA_BUILD_TOOLS to build mtmd via llama.cpp's own build system
+- Disable LLAMA_HTTPLIB/OPENSSL/LLGUIDANCE to avoid unnecessary common dependencies
+- mmproj uses F16 quantization (recommended for vision projectors, 190MB)
+- Vision model registry: model + mmproj as separate ModelInfo entries linked by getMmprojForModel()
+
 ### Pending Todos
 
 Carried from v1.0:
@@ -187,15 +194,16 @@ None currently.
 
 **Phase 8 (VLM):**
 - llama.cpp b7952 upgrade complete [08-00]
-- libmtmd available at tools/mtmd/mtmd.h
-- SmolVLM2-500M-Video-Instruct target model
+- libmtmd available at tools/mtmd/mtmd.h [LINKED 08-02]
+- SmolVLM2-500M-Video-Instruct target model [REGISTERED 08-02]
 - P2: Memory explosion from image embeddings - MITIGATED [08-01] (immediate free after eval)
+- XCFramework 7.6MB per platform with vision support [08-02]
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 08-01-PLAN.md (VLM C API)
-Resume with: `/gsd:execute-phase 8` for 08-02 (CMake + Build Integration)
+Stopped at: Completed 08-02-PLAN.md (Build System + Model Registry)
+Resume with: `/gsd:execute-phase 8` for 08-03 (Dart FFI Vision Bindings)
 
 ---
-*Phase 8 in progress. 08-00 and 08-01 complete. Next: 08-02 CMake + Build Integration.*
+*Phase 8 in progress. 08-00, 08-01, and 08-02 complete. Next: 08-03 Dart FFI Vision Bindings.*
