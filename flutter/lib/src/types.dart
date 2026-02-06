@@ -356,6 +356,11 @@ class ConfigurationException extends EdgeVedaException {
   const ConfigurationException(super.message, {super.details, super.originalError});
 }
 
+/// Thrown when vision inference fails
+class VisionException extends EdgeVedaException {
+  const VisionException(super.message, {super.details, super.originalError});
+}
+
 /// Thrown when model file fails validation (checksum mismatch, corrupted file)
 class ModelValidationException extends EdgeVedaException {
   const ModelValidationException(super.message, {super.details, super.originalError});
@@ -555,6 +560,51 @@ enum NativeErrorCode {
 /// Generic exception for unknown native errors
 class EdgeVedaGenericException extends EdgeVedaException {
   const EdgeVedaGenericException(super.message, {super.details, super.originalError});
+}
+
+/// Configuration for initializing vision inference
+///
+/// Vision context is separate from text context - developers control
+/// when the ~540MB vision models load into memory.
+class VisionConfig {
+  /// Path to the VLM GGUF model file
+  final String modelPath;
+
+  /// Path to the mmproj GGUF file (multimodal projector)
+  final String mmprojPath;
+
+  /// Number of threads for inference (defaults to 4)
+  final int numThreads;
+
+  /// Context size in tokens (0 = auto based on model)
+  final int contextSize;
+
+  /// Enable GPU acceleration (defaults to true)
+  final bool useGpu;
+
+  /// Maximum memory budget in MB
+  final int maxMemoryMb;
+
+  const VisionConfig({
+    required this.modelPath,
+    required this.mmprojPath,
+    this.numThreads = 4,
+    this.contextSize = 0,
+    this.useGpu = true,
+    this.maxMemoryMb = 1536,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'modelPath': modelPath,
+        'mmprojPath': mmprojPath,
+        'numThreads': numThreads,
+        'contextSize': contextSize,
+        'useGpu': useGpu,
+        'maxMemoryMb': maxMemoryMb,
+      };
+
+  @override
+  String toString() => 'VisionConfig(${toJson()})';
 }
 
 /// Token for cancelling ongoing operations (downloads, streaming generation)

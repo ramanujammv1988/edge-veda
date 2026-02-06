@@ -234,6 +234,51 @@ final class EvMemoryStats extends Struct {
 final class EvStreamImpl extends Opaque {}
 
 // =============================================================================
+// Vision Types (matching edge_veda.h Vision API)
+// =============================================================================
+
+/// Opaque context handle for Edge Veda vision inference engine
+/// Corresponds to: typedef struct ev_vision_context_impl* ev_vision_context;
+final class EvVisionContextImpl extends Opaque {}
+
+/// Configuration structure for initializing vision context
+/// Corresponds to: ev_vision_config in edge_veda.h
+final class EvVisionConfig extends Struct {
+  /// Path to VLM GGUF model file
+  external Pointer<Utf8> modelPath;
+
+  /// Path to mmproj (multimodal projector) GGUF file
+  external Pointer<Utf8> mmprojPath;
+
+  /// Number of CPU threads (0 = auto-detect)
+  @Int32()
+  external int numThreads;
+
+  /// Token context window size (0 = auto, based on model)
+  @Int32()
+  external int contextSize;
+
+  /// Batch size for processing (0 = default 512)
+  @Int32()
+  external int batchSize;
+
+  /// Memory limit in bytes (0 = no limit)
+  @Size()
+  external int memoryLimitBytes;
+
+  /// GPU layers to offload (-1 = all, 0 = none)
+  @Int32()
+  external int gpuLayers;
+
+  /// Use memory mapping for model file
+  @Bool()
+  external bool useMmap;
+
+  /// Reserved for future use - must be NULL
+  external Pointer<Void> reserved;
+}
+
+// =============================================================================
 // Native Function Type Definitions
 // =============================================================================
 
@@ -391,6 +436,56 @@ typedef EvStreamFreeNative = Void Function(Pointer<EvStreamImpl> stream);
 typedef EvStreamFreeDart = void Function(Pointer<EvStreamImpl> stream);
 
 // =============================================================================
+// Vision Function Types (matching edge_veda.h Vision API)
+// =============================================================================
+
+/// void ev_vision_config_default(ev_vision_config* config)
+typedef EvVisionConfigDefaultNative = Void Function(
+  Pointer<EvVisionConfig> config,
+);
+typedef EvVisionConfigDefaultDart = void Function(
+  Pointer<EvVisionConfig> config,
+);
+
+/// ev_vision_context ev_vision_init(const ev_vision_config* config, ev_error_t* error)
+typedef EvVisionInitNative = Pointer<EvVisionContextImpl> Function(
+  Pointer<EvVisionConfig> config,
+  Pointer<Int32> error,
+);
+typedef EvVisionInitDart = Pointer<EvVisionContextImpl> Function(
+  Pointer<EvVisionConfig> config,
+  Pointer<Int32> error,
+);
+
+/// ev_error_t ev_vision_describe(ev_vision_context ctx, const unsigned char* image_bytes, int width, int height, const char* prompt, const ev_generation_params* params, char** output)
+typedef EvVisionDescribeNative = Int32 Function(
+  Pointer<EvVisionContextImpl> ctx,
+  Pointer<UnsignedChar> imageBytes,
+  Int32 width,
+  Int32 height,
+  Pointer<Utf8> prompt,
+  Pointer<EvGenerationParams> params,
+  Pointer<Pointer<Utf8>> output,
+);
+typedef EvVisionDescribeDart = int Function(
+  Pointer<EvVisionContextImpl> ctx,
+  Pointer<UnsignedChar> imageBytes,
+  int width,
+  int height,
+  Pointer<Utf8> prompt,
+  Pointer<EvGenerationParams> params,
+  Pointer<Pointer<Utf8>> output,
+);
+
+/// void ev_vision_free(ev_vision_context ctx)
+typedef EvVisionFreeNative = Void Function(Pointer<EvVisionContextImpl> ctx);
+typedef EvVisionFreeDart = void Function(Pointer<EvVisionContextImpl> ctx);
+
+/// bool ev_vision_is_valid(ev_vision_context ctx)
+typedef EvVisionIsValidNative = Bool Function(Pointer<EvVisionContextImpl> ctx);
+typedef EvVisionIsValidDart = bool Function(Pointer<EvVisionContextImpl> ctx);
+
+// =============================================================================
 // Native Library Bindings
 // =============================================================================
 
@@ -542,6 +637,25 @@ class EdgeVedaNativeBindings {
   late final EvStreamFreeDart evStreamFree;
 
   // ---------------------------------------------------------------------------
+  // Vision Functions
+  // ---------------------------------------------------------------------------
+
+  /// Get default vision configuration with recommended settings
+  late final EvVisionConfigDefaultDart evVisionConfigDefault;
+
+  /// Initialize vision context with VLM model and mmproj
+  late final EvVisionInitDart evVisionInit;
+
+  /// Describe an image using the vision model
+  late final EvVisionDescribeDart evVisionDescribe;
+
+  /// Free vision context and release all resources
+  late final EvVisionFreeDart evVisionFree;
+
+  /// Check if vision context is valid and ready for inference
+  late final EvVisionIsValidDart evVisionIsValid;
+
+  // ---------------------------------------------------------------------------
   // Binding Initialization
   // ---------------------------------------------------------------------------
 
@@ -630,6 +744,24 @@ class EdgeVedaNativeBindings {
     );
     evStreamFree = _dylib.lookupFunction<EvStreamFreeNative, EvStreamFreeDart>(
       'ev_stream_free',
+    );
+
+    // Vision functions
+    evVisionConfigDefault = _dylib.lookupFunction<
+      EvVisionConfigDefaultNative,
+      EvVisionConfigDefaultDart
+    >('ev_vision_config_default');
+    evVisionInit = _dylib.lookupFunction<EvVisionInitNative, EvVisionInitDart>(
+      'ev_vision_init',
+    );
+    evVisionDescribe = _dylib.lookupFunction<EvVisionDescribeNative, EvVisionDescribeDart>(
+      'ev_vision_describe',
+    );
+    evVisionFree = _dylib.lookupFunction<EvVisionFreeNative, EvVisionFreeDart>(
+      'ev_vision_free',
+    );
+    evVisionIsValid = _dylib.lookupFunction<EvVisionIsValidNative, EvVisionIsValidDart>(
+      'ev_vision_is_valid',
     );
   }
 }
