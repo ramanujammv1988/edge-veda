@@ -27,6 +27,7 @@ import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
@@ -45,7 +46,9 @@ import 'types.dart' show
     GenerationException,
     ConfigurationException,
     TokenChunk,
-    CancelToken;
+    CancelToken,
+    VisionConfig,
+    VisionException;
 
 /// Main Edge Veda SDK class for on-device AI inference
 ///
@@ -65,6 +68,12 @@ class EdgeVeda {
   /// Whether streaming is currently active
   bool _isStreaming = false;
 
+  /// Whether vision has been initialized
+  bool _isVisionInitialized = false;
+
+  /// Vision configuration (stored for isolate transfer)
+  VisionConfig? _visionConfig;
+
   // Note: NO Pointer storage here - pointers can't transfer between isolates
 
   /// Whether the SDK is initialized
@@ -72,6 +81,9 @@ class EdgeVeda {
 
   /// Whether a streaming operation is currently in progress
   bool get isStreaming => _isStreaming;
+
+  /// Whether vision is initialized
+  bool get isVisionInitialized => _isVisionInitialized;
 
   /// Current configuration
   EdgeVedaConfig? get config => _config;
@@ -421,14 +433,31 @@ class EdgeVeda {
     // Create and spawn worker if needed
     _worker ??= StreamingWorker();
     if (!_worker!.isActive) {
-      await _worker!.spawn();
-      await _worker!.init(
-        modelPath: _config!.modelPath,
-        numThreads: _config!.numThreads,
-        contextSize: _config!.contextLength,
-        useGpu: _config!.useGpu,
-        memoryLimitBytes: _config!.maxMemoryMb * 1024 * 1024,
-      );
+      print('EdgeVeda: [1/4] Spawning streaming worker...');
+      try {
+        await _worker!.spawn();
+        print('EdgeVeda: [2/4] Worker spawned successfully');
+      } catch (e) {
+        print('EdgeVeda: Worker spawn FAILED: $e');
+        throw GenerationException('Worker spawn failed: $e');
+      }
+
+      print('EdgeVeda: [3/4] Loading model in worker (this takes 30-60 seconds)...');
+      try {
+        await _worker!.init(
+          modelPath: _config!.modelPath,
+          numThreads: _config!.numThreads,
+          contextSize: _config!.contextLength,
+          useGpu: _config!.useGpu,
+          memoryLimitBytes: _config!.maxMemoryMb * 1024 * 1024,
+        );
+        print('EdgeVeda: [4/4] Worker ready!');
+      } catch (e) {
+        print('EdgeVeda: Worker init FAILED: $e');
+        throw GenerationException('Worker init failed: $e');
+      }
+    } else {
+      print('EdgeVeda: Worker already active, reusing');
     }
 
     _isStreaming = true;
@@ -445,6 +474,7 @@ class EdgeVeda {
 
     try {
       // Start the stream
+      print('EdgeVeda: Starting stream with prompt: "${prompt.substring(0, prompt.length > 50 ? 50 : prompt.length)}..."');
       await _worker!.startStream(
         prompt: prompt,
         maxTokens: options.maxTokens,
@@ -453,6 +483,7 @@ class EdgeVeda {
         topK: options.topK,
         repeatPenalty: options.repeatPenalty,
       );
+      print('EdgeVeda: Stream started, beginning token loop');
 
       // Yield tokens until stream ends
       while (true) {
@@ -510,9 +541,10 @@ class EdgeVeda {
 
   /// Dispose and free all resources
   ///
-  /// Disposes the streaming worker if active and clears configuration state.
+  /// Disposes vision and streaming resources, clears configuration state.
   /// After calling dispose(), you must call [init] again before using the SDK.
   Future<void> dispose() async {
+    await disposeVision();
     if (_worker != null) {
       await _worker!.dispose();
       _worker = null;
@@ -520,6 +552,236 @@ class EdgeVeda {
     _isStreaming = false;
     _isInitialized = false;
     _config = null;
+  }
+
+  // ===========================================================================
+  // Vision Inference (Phase 8 - VLM)
+  // ===========================================================================
+
+  /// Initialize vision inference with VLM model
+  ///
+  /// This loads the SmolVLM2 model and mmproj (~540MB total).
+  /// Call this separately from [init] - vision models only load
+  /// when explicitly requested by the developer.
+  ///
+  /// Example:
+  /// ```dart
+  /// await edgeVeda.initVision(VisionConfig(
+  ///   modelPath: '/path/to/smolvlm2.gguf',
+  ///   mmprojPath: '/path/to/mmproj.gguf',
+  /// ));
+  /// ```
+  Future<void> initVision(VisionConfig config) async {
+    if (_isVisionInitialized) {
+      throw VisionException('Vision already initialized. Call disposeVision() first.');
+    }
+
+    // Validate config
+    if (config.modelPath.isEmpty) {
+      throw VisionException('Model path cannot be empty');
+    }
+    if (config.mmprojPath.isEmpty) {
+      throw VisionException('Mmproj path cannot be empty');
+    }
+
+    // Verify files exist
+    if (!await File(config.modelPath).exists()) {
+      throw VisionException('VLM model file not found: ${config.modelPath}');
+    }
+    if (!await File(config.mmprojPath).exists()) {
+      throw VisionException('Mmproj file not found: ${config.mmprojPath}');
+    }
+
+    // Capture primitives for isolate transfer
+    final modelPath = config.modelPath;
+    final mmprojPath = config.mmprojPath;
+    final numThreads = config.numThreads;
+    final contextSize = config.contextSize;
+    final useGpu = config.useGpu;
+    final maxMemoryMb = config.maxMemoryMb;
+
+    // Test vision init in background isolate
+    try {
+      await Isolate.run<void>(() {
+        final bindings = EdgeVedaNativeBindings.instance;
+        final configPtr = calloc<EvVisionConfig>();
+        final modelPathPtr = modelPath.toNativeUtf8();
+        final mmprojPathPtr = mmprojPath.toNativeUtf8();
+        final errorPtr = calloc<ffi.Int32>();
+
+        try {
+          configPtr.ref.modelPath = modelPathPtr;
+          configPtr.ref.mmprojPath = mmprojPathPtr;
+          configPtr.ref.numThreads = numThreads;
+          configPtr.ref.contextSize = contextSize;
+          configPtr.ref.batchSize = 512;
+          configPtr.ref.memoryLimitBytes = maxMemoryMb * 1024 * 1024;
+          configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+          configPtr.ref.useMmap = true;
+          configPtr.ref.reserved = ffi.nullptr;
+
+          final ctx = bindings.evVisionInit(configPtr, errorPtr);
+          if (ctx == ffi.nullptr) {
+            final errorCode = NativeErrorCode.fromCode(errorPtr.value);
+            throw VisionException('Vision init failed: ${errorCode.name}');
+          }
+          bindings.evVisionFree(ctx);
+        } finally {
+          calloc.free(mmprojPathPtr);
+          calloc.free(modelPathPtr);
+          calloc.free(configPtr);
+          calloc.free(errorPtr);
+        }
+      });
+    } catch (e) {
+      if (e is VisionException) rethrow;
+      throw VisionException(
+        'Vision initialization failed',
+        details: e.toString(),
+        originalError: e,
+      );
+    }
+
+    _visionConfig = config;
+    _isVisionInitialized = true;
+  }
+
+  /// Describe an image using the VLM
+  ///
+  /// [imageBytes] must be RGB888 format (width * height * 3 bytes).
+  /// Use [CameraUtils.convertBgraToRgb] or [CameraUtils.convertYuv420ToRgb]
+  /// to convert camera frames.
+  ///
+  /// Returns a text description of the image content.
+  /// This runs in a background isolate to avoid blocking the UI.
+  ///
+  /// Example:
+  /// ```dart
+  /// final description = await edgeVeda.describeImage(
+  ///   rgbBytes,
+  ///   width: 640,
+  ///   height: 480,
+  ///   prompt: 'What objects are in this image?',
+  /// );
+  /// ```
+  Future<String> describeImage(
+    Uint8List imageBytes, {
+    required int width,
+    required int height,
+    String prompt = 'Describe this image.',
+    GenerateOptions? options,
+  }) async {
+    if (!_isVisionInitialized || _visionConfig == null) {
+      throw VisionException('Vision not initialized. Call initVision() first.');
+    }
+
+    // Validate input
+    final expectedBytes = width * height * 3;
+    if (imageBytes.length != expectedBytes) {
+      throw VisionException(
+        'Image byte count mismatch: expected $expectedBytes '
+        '(${width}x${height}x3 RGB), got ${imageBytes.length}',
+      );
+    }
+
+    options ??= const GenerateOptions(maxTokens: 256);
+
+    // Capture all primitives for isolate transfer
+    final modelPath = _visionConfig!.modelPath;
+    final mmprojPath = _visionConfig!.mmprojPath;
+    final numThreads = _visionConfig!.numThreads;
+    final contextSize = _visionConfig!.contextSize;
+    final useGpu = _visionConfig!.useGpu;
+    final maxMemoryMb = _visionConfig!.maxMemoryMb;
+    final maxTokens = options.maxTokens;
+    final temperature = options.temperature;
+    final topP = options.topP;
+    final topK = options.topK;
+    final repeatPenalty = options.repeatPenalty;
+
+    // Run in background isolate (Pitfall P5 - never block UI)
+    return Isolate.run<String>(() {
+      final bindings = EdgeVedaNativeBindings.instance;
+      final configPtr = calloc<EvVisionConfig>();
+      final modelPathPtr = modelPath.toNativeUtf8();
+      final mmprojPathPtr = mmprojPath.toNativeUtf8();
+      final errorPtr = calloc<ffi.Int32>();
+
+      ffi.Pointer<EvVisionContextImpl>? ctx;
+      try {
+        // Set up vision config
+        configPtr.ref.modelPath = modelPathPtr;
+        configPtr.ref.mmprojPath = mmprojPathPtr;
+        configPtr.ref.numThreads = numThreads;
+        configPtr.ref.contextSize = contextSize;
+        configPtr.ref.batchSize = 512;
+        configPtr.ref.memoryLimitBytes = maxMemoryMb * 1024 * 1024;
+        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+        configPtr.ref.useMmap = true;
+        configPtr.ref.reserved = ffi.nullptr;
+
+        // Init vision context
+        ctx = bindings.evVisionInit(configPtr, errorPtr);
+        if (ctx == ffi.nullptr) {
+          throw VisionException('Vision init failed in describe');
+        }
+
+        // Allocate native memory for image bytes
+        final nativeBytes = calloc<ffi.UnsignedChar>(imageBytes.length);
+        final nativeBytesTyped = nativeBytes.cast<ffi.Uint8>().asTypedList(imageBytes.length);
+        nativeBytesTyped.setAll(0, imageBytes);
+
+        // Set up generation params
+        final paramsPtr = calloc<EvGenerationParams>();
+        paramsPtr.ref.maxTokens = maxTokens;
+        paramsPtr.ref.temperature = temperature;
+        paramsPtr.ref.topP = topP;
+        paramsPtr.ref.topK = topK;
+        paramsPtr.ref.repeatPenalty = repeatPenalty;
+        paramsPtr.ref.frequencyPenalty = 0.0;
+        paramsPtr.ref.presencePenalty = 0.0;
+        paramsPtr.ref.stopSequences = ffi.nullptr;
+        paramsPtr.ref.numStopSequences = 0;
+        paramsPtr.ref.reserved = ffi.nullptr;
+
+        final promptPtr = prompt.toNativeUtf8();
+        final outputPtr = calloc<ffi.Pointer<Utf8>>();
+
+        try {
+          final result = bindings.evVisionDescribe(
+            ctx, nativeBytes, width, height, promptPtr, paramsPtr, outputPtr,
+          );
+          if (result != 0) {
+            throw VisionException('Vision describe failed: error code $result');
+          }
+
+          final output = outputPtr.value.toDartString();
+          bindings.evFreeString(outputPtr.value);
+          return output;
+        } finally {
+          calloc.free(promptPtr);
+          calloc.free(paramsPtr);
+          calloc.free(outputPtr);
+          calloc.free(nativeBytes);
+        }
+      } finally {
+        if (ctx != null && ctx != ffi.nullptr) {
+          bindings.evVisionFree(ctx);
+        }
+        calloc.free(mmprojPathPtr);
+        calloc.free(modelPathPtr);
+        calloc.free(configPtr);
+        calloc.free(errorPtr);
+      }
+    });
+  }
+
+  /// Dispose vision resources
+  ///
+  /// Clears the vision configuration. Does not affect text inference.
+  Future<void> disposeVision() async {
+    _isVisionInitialized = false;
+    _visionConfig = null;
   }
 
   // ===========================================================================
