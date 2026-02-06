@@ -64,6 +64,12 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
   # Use BOTH -u (to force inclusion) AND -exported_symbol (to keep global visibility for dlsym)
   # Without -exported_symbol, the linker marks symbols as local (t) instead of global (T)
   #
+  # IMPORTANT: -exported_symbol creates an EXPLICIT whitelist - only listed symbols are exported.
+  # Xcode 26 uses a "debug blank executor" architecture where the Runner binary is a stub that
+  # loads Runner.debug.dylib and calls dlsym() to find _main and
+  # ___debug_main_executable_dylib_entry_point. These MUST be in the export list or the app
+  # crashes with SIGABRT "No entry point found".
+  #
   # Note: We use conditional force_load based on SDK to support both device and simulator builds.
   # The xcframework contains ios-arm64 for device and ios-arm64-simulator for simulator.
   s.user_target_xcconfig = {
@@ -71,6 +77,10 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '$(inherited)',
       '-framework Metal', '-framework MetalPerformanceShaders', '-framework Accelerate',
       '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/ios/Frameworks/EdgeVedaCore.xcframework/ios-arm64/libedge_veda_full.a"',
+      # Xcode 26 debug dylib entry points (required for debug blank executor stub)
+      '-Wl,-exported_symbol,_main',
+      '-Wl,-exported_symbol,___debug_main_executable_dylib_entry_point',
+      # Edge Veda FFI symbols
       '-Wl,-u,_ev_version', '-Wl,-exported_symbol,_ev_version',
       '-Wl,-u,_ev_init', '-Wl,-exported_symbol,_ev_init',
       '-Wl,-u,_ev_free', '-Wl,-exported_symbol,_ev_free',
@@ -106,6 +116,10 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '$(inherited)',
       '-framework Metal', '-framework MetalPerformanceShaders', '-framework Accelerate',
       '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/ios/Frameworks/EdgeVedaCore.xcframework/ios-arm64-simulator/libedge_veda_full.a"',
+      # Xcode 26 debug dylib entry points (required for debug blank executor stub)
+      '-Wl,-exported_symbol,_main',
+      '-Wl,-exported_symbol,___debug_main_executable_dylib_entry_point',
+      # Edge Veda FFI symbols
       '-Wl,-u,_ev_version', '-Wl,-exported_symbol,_ev_version',
       '-Wl,-u,_ev_init', '-Wl,-exported_symbol,_ev_init',
       '-Wl,-u,_ev_free', '-Wl,-exported_symbol,_ev_free',
