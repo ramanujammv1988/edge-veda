@@ -207,12 +207,14 @@ echo "Device ggml-blas: $DEVICE_GGML_BLAS_LIB"
 SIM_LLAMA_LIB=$(find "$BUILD_IOS_SIM" -name "libllama.a" 2>/dev/null | head -1)
 SIM_GGML_LIB=$(find "$BUILD_IOS_SIM" -name "libggml.a" 2>/dev/null | head -1)
 SIM_GGML_BASE_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-base.a" 2>/dev/null | head -1)
+SIM_GGML_METAL_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-metal.a" 2>/dev/null | head -1)
 SIM_GGML_CPU_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-cpu.a" 2>/dev/null | head -1)
 SIM_GGML_BLAS_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-blas.a" 2>/dev/null | head -1)
 
 echo "Simulator llama: $SIM_LLAMA_LIB"
 echo "Simulator ggml: $SIM_GGML_LIB"
 echo "Simulator ggml-base: $SIM_GGML_BASE_LIB"
+echo "Simulator ggml-metal: $SIM_GGML_METAL_LIB"
 echo "Simulator ggml-cpu: $SIM_GGML_CPU_LIB"
 echo "Simulator ggml-blas: $SIM_GGML_BLAS_LIB"
 
@@ -237,6 +239,7 @@ SIM_LIBS_TO_MERGE="$SIM_LIB"
 [ -n "$SIM_LLAMA_LIB" ] && [ -f "$SIM_LLAMA_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_LLAMA_LIB"
 [ -n "$SIM_GGML_LIB" ] && [ -f "$SIM_GGML_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_LIB"
 [ -n "$SIM_GGML_BASE_LIB" ] && [ -f "$SIM_GGML_BASE_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_BASE_LIB"
+[ -n "$SIM_GGML_METAL_LIB" ] && [ -f "$SIM_GGML_METAL_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_METAL_LIB"
 [ -n "$SIM_GGML_CPU_LIB" ] && [ -f "$SIM_GGML_CPU_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_CPU_LIB"
 [ -n "$SIM_GGML_BLAS_LIB" ] && [ -f "$SIM_GGML_BLAS_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_BLAS_LIB"
 
