@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'model_selection_modal.dart';
+import 'settings_screen.dart';
 import 'vision_screen.dart';
 import 'welcome_screen.dart';
 
@@ -42,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = const [
     ChatScreen(),
     VisionScreen(),
-    Center(child: Text('Settings', style: TextStyle(color: AppTheme.textSecondary))),
+    SettingsScreen(),
   ];
 
   @override
@@ -178,7 +180,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Memory pressure: $level'),
-                  backgroundColor: const Color(0xFFE65100),
+                  backgroundColor: AppTheme.warning,
                   duration: const Duration(seconds: 3),
                 ),
               );
@@ -219,10 +221,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         // Show user-friendly message about cancellation
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Generation cancelled - app backgrounded'),
-              backgroundColor: Color(0xFFE65100),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: const Text('Generation cancelled - app backgrounded'),
+              backgroundColor: AppTheme.warning,
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -668,32 +670,51 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Benchmark Results'),
+        backgroundColor: AppTheme.surface,
+        title: const Text(
+          'Benchmark Results',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Avg Speed: ${avgTokensPerSec.toStringAsFixed(1)} tok/s'),
-            Text('  Range: ${minTPS.toStringAsFixed(1)} - ${maxTPS.toStringAsFixed(1)}'),
-            Text('Avg TTFT: ${avgTTFT}ms'),
-            Text('Avg Latency: ${avgLatency}ms'),
-            Text('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB'),
+            Text(
+              'Avg Speed: ${avgTokensPerSec.toStringAsFixed(1)} tok/s',
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            Text(
+              '  Range: ${minTPS.toStringAsFixed(1)} - ${maxTPS.toStringAsFixed(1)}',
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            Text(
+              'Avg TTFT: ${avgTTFT}ms',
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            Text(
+              'Avg Latency: ${avgLatency}ms',
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            Text(
+              'Peak Memory: ${peakMemory.toStringAsFixed(0)} MB',
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
             const SizedBox(height: 12),
             Text(
               avgTokensPerSec >= 15
-                  ? '✓ Meets >15 tok/s target'
-                  : '⚠ Below 15 tok/s target',
+                  ? 'Meets >15 tok/s target'
+                  : 'Below 15 tok/s target',
               style: TextStyle(
-                color: avgTokensPerSec >= 15 ? Colors.green : Colors.orange,
+                color: avgTokensPerSec >= 15 ? AppTheme.success : AppTheme.warning,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               peakMemory <= 1200
-                  ? '✓ Under 1.2GB memory limit'
-                  : '⚠ Exceeds 1.2GB memory limit',
+                  ? 'Under 1.2GB memory limit'
+                  : 'Exceeds 1.2GB memory limit',
               style: TextStyle(
-                color: peakMemory <= 1200 ? Colors.green : Colors.orange,
+                color: peakMemory <= 1200 ? AppTheme.success : AppTheme.warning,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -702,7 +723,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text(
+              'OK',
+              style: TextStyle(color: AppTheme.accent),
+            ),
           ),
         ],
       ),
@@ -759,7 +783,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppTheme.danger,
       ),
     );
   }
@@ -779,9 +803,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
-        color: Color(0xFF22223A),
+        color: AppTheme.surface,
         border: Border(
-          bottom: BorderSide(color: Color(0xFF3A3A5C), width: 1),
+          bottom: BorderSide(color: AppTheme.border, width: 1),
         ),
       ),
       child: Row(
@@ -824,13 +848,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: const Color(0xFF7C6FE3)),
+            Icon(icon, size: 14, color: AppTheme.accent),
             const SizedBox(width: 4),
             Text(
               label,
               style: const TextStyle(
                 fontSize: 10,
-                color: Color(0xFF8A8AAA),
+                color: AppTheme.textTertiary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -840,9 +864,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         Text(
           value,
           style: const TextStyle(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Color(0xFFE0E0E0),
+            color: AppTheme.textPrimary,
           ),
         ),
       ],
@@ -853,17 +877,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edge Veda Chat'),
+        title: const Text(
+          'Veda',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        backgroundColor: AppTheme.background,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.layers_outlined, color: AppTheme.textSecondary),
+            tooltip: 'Models',
+            onPressed: () => ModelSelectionModal.show(context, _modelManager),
+          ),
           if (_isInitialized && !_runningBenchmark)
             IconButton(
-              icon: const Icon(Icons.assessment),
+              icon: const Icon(Icons.assessment, color: AppTheme.textSecondary),
               tooltip: 'Run Benchmark',
               onPressed: _runBenchmark,
             ),
           if (_isInitialized)
             IconButton(
-              icon: const Icon(Icons.info_outline),
+              icon: const Icon(Icons.info_outline, color: AppTheme.textSecondary),
               onPressed: () async {
                 final memStats = await _edgeVeda.getMemoryStats();
                 final memoryMb = memStats.currentBytes / (1024 * 1024);
@@ -874,38 +907,63 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Performance Info'),
+                    backgroundColor: AppTheme.surface,
+                    title: const Text(
+                      'Performance Info',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
                     content: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Platform info
-                        Text('Platform: ${Platform.isAndroid ? "Android" : Platform.isIOS ? "iOS" : "Other"}'),
-                        Text('Backend: ${Platform.isAndroid ? "CPU" : "Metal GPU"}'),
-                        const Divider(),
-                        Text('Memory: ${memoryMb.toStringAsFixed(1)} MB'),
-                        Text('Usage: $usagePercent%'),
+                        Text(
+                          'Platform: ${Platform.isAndroid ? "Android" : Platform.isIOS ? "iOS" : "Other"}',
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                        ),
+                        Text(
+                          'Backend: ${Platform.isAndroid ? "CPU" : "Metal GPU"}',
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                        ),
+                        const Divider(color: AppTheme.border),
+                        Text(
+                          'Memory: ${memoryMb.toStringAsFixed(1)} MB',
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                        ),
+                        Text(
+                          'Usage: $usagePercent%',
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                        ),
                         if (memStats.isHighPressure)
                           const Text(
                             'High memory pressure',
-                            style: TextStyle(color: Colors.orange),
+                            style: TextStyle(color: AppTheme.warning),
                           ),
                         if (_memoryPressureLevel != null)
                           Text(
                             'System pressure: $_memoryPressureLevel',
-                            style: const TextStyle(color: Colors.orange),
+                            style: const TextStyle(color: AppTheme.warning),
                           ),
                         const SizedBox(height: 8),
                         if (_tokensPerSecond != null)
-                          Text('Last Speed: ${_tokensPerSecond!.toStringAsFixed(1)} tok/s'),
+                          Text(
+                            'Last Speed: ${_tokensPerSecond!.toStringAsFixed(1)} tok/s',
+                            style: const TextStyle(color: AppTheme.textPrimary),
+                          ),
                         if (_timeToFirstTokenMs != null)
-                          Text('Last TTFT: ${_timeToFirstTokenMs}ms'),
+                          Text(
+                            'Last TTFT: ${_timeToFirstTokenMs}ms',
+                            style: const TextStyle(color: AppTheme.textPrimary),
+                          ),
                       ],
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('OK'),
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(color: AppTheme.accent),
+                        ),
                       ),
                     ],
                   ),
@@ -920,21 +978,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
-            color: _isInitialized ? const Color(0xFF1E3A2E) : const Color(0xFF3A2E1E),
+            decoration: const BoxDecoration(
+              color: AppTheme.surface,
+              border: Border(
+                bottom: BorderSide(color: AppTheme.border, width: 1),
+              ),
+            ),
             child: Row(
               children: [
                 if (_isDownloading || _isLoading)
                   const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.accent,
+                    ),
                   ),
                 if (_isDownloading || _isLoading) const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _statusMessage,
                     style: TextStyle(
-                      color: _isInitialized ? const Color(0xFF90EE90) : const Color(0xFFFFB74D),
+                      color: _isInitialized ? AppTheme.success : AppTheme.warning,
                       fontSize: 12,
                     ),
                   ),
@@ -942,6 +1008,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 if (!_isInitialized && !_isLoading && !_isDownloading && _modelPath != null)
                   ElevatedButton(
                     onPressed: _initializeEdgeVeda,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent,
+                      foregroundColor: AppTheme.background,
+                    ),
                     child: const Text('Initialize'),
                   ),
               ],
@@ -950,7 +1020,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
           // Download progress
           if (_isDownloading)
-            LinearProgressIndicator(value: _downloadProgress),
+            LinearProgressIndicator(
+              value: _downloadProgress,
+              color: AppTheme.accent,
+              backgroundColor: AppTheme.surfaceVariant,
+            ),
 
           // Metrics bar (only visible after initialization)
           if (_isInitialized) _buildMetricsBar(),
@@ -963,11 +1037,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.chat_bubble_outline,
-                            size: 64, color: Color(0xFF3A3A5C)),
+                            size: 64, color: AppTheme.border),
                         const SizedBox(height: 16),
                         const Text(
-                          'No messages yet',
-                          style: TextStyle(color: Color(0xFF6A6A8A)),
+                          'Start a conversation',
+                          style: TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Ask anything. It runs on your device.',
+                          style: TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -985,107 +1070,73 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           // Input area
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF16162A),
+              color: AppTheme.background,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  offset: const Offset(0, -4),
                 ),
               ],
             ),
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _promptController,
-                          style: const TextStyle(color: Color(0xFFE0E0E0)),
-                          decoration: InputDecoration(
-                            hintText: 'Type a message...',
-                            hintStyle: const TextStyle(color: Color(0xFF8A8AAA)),
-                            filled: true,
-                            fillColor: const Color(0xFF2A2A3E),
-                            border: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Color(0xFF3A3A5C)),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Color(0xFF3A3A5C)),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Color(0xFF7C6FE3)),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          maxLines: null,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _generateStreaming(),
-                          enabled: _isInitialized && !_isLoading && !_isStreaming,
+                  Expanded(
+                    child: TextField(
+                      controller: _promptController,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'Message...',
+                        hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                        filled: true,
+                        fillColor: AppTheme.surfaceVariant,
+                        border: OutlineInputBorder(
+                          borderSide: const BorderSide(color: AppTheme.border),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: AppTheme.border),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: AppTheme.accent),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
                         ),
                       ),
-                    ],
+                      maxLines: null,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _generateStreaming(),
+                      enabled: _isInitialized && !_isLoading && !_isStreaming,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Non-streaming generate button
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.send, size: 18),
-                        label: const Text('Generate'),
-                        onPressed: _isInitialized && !_isLoading && !_isStreaming
-                            ? _sendMessage
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF7C6FE3),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                  const SizedBox(width: 8),
+                  // Single send/stop button
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Material(
+                      color: _isStreaming ? AppTheme.danger : AppTheme.accent,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _isStreaming
+                            ? _cancelGeneration
+                            : (_isInitialized && !_isLoading
+                                ? _generateStreaming
+                                : null),
+                        child: Icon(
+                          _isStreaming ? Icons.stop : Icons.arrow_upward,
+                          color: _isStreaming ? AppTheme.textPrimary : AppTheme.background,
+                          size: 24,
                         ),
                       ),
-                      // Streaming generate button
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.stream, size: 18),
-                        label: const Text('Generate (Stream)'),
-                        onPressed: _isInitialized && !_isLoading && !_isStreaming
-                            ? _generateStreaming
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4CAF50),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                      // Stop button (only enabled during streaming)
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.stop, size: 18),
-                        label: const Text('Stop'),
-                        onPressed: _isStreaming ? _cancelGeneration : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE57373),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -1125,13 +1176,13 @@ class MessageBubble extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A3E),
+              color: AppTheme.surfaceVariant,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               message.text,
               style: const TextStyle(
-                color: Color(0xFF8A8AAA),
+                color: AppTheme.textSecondary,
                 fontSize: 12,
               ),
             ),
@@ -1141,29 +1192,42 @@ class MessageBubble extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment:
             message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!message.isUser) ...[
             const CircleAvatar(
-              backgroundColor: Color(0xFF2A2A3E),
-              child: Icon(Icons.smart_toy, color: Color(0xFF7C6FE3)),
+              radius: 16,
+              backgroundColor: AppTheme.surfaceVariant,
+              child: Icon(Icons.auto_awesome, color: AppTheme.accent, size: 18),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: message.isUser ? const Color(0xFF3A3080) : const Color(0xFF2A2A3E),
-                borderRadius: BorderRadius.circular(16),
+                color: message.isUser ? AppTheme.userBubble : AppTheme.assistantBubble,
+                borderRadius: BorderRadius.circular(20),
+                border: message.isUser
+                    ? null
+                    : Border.all(color: AppTheme.border, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Text(
                 message.text,
-                style: TextStyle(
-                  color: message.isUser ? Colors.white : const Color(0xFFE0E0E0),
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  height: 1.4,
                 ),
               ),
             ),
@@ -1171,8 +1235,9 @@ class MessageBubble extends StatelessWidget {
           if (message.isUser) ...[
             const SizedBox(width: 8),
             const CircleAvatar(
-              backgroundColor: Color(0xFF3A3A5C),
-              child: Icon(Icons.person, color: Color(0xFF7C6FE3)),
+              radius: 16,
+              backgroundColor: AppTheme.surfaceVariant,
+              child: Icon(Icons.person, color: AppTheme.accent, size: 18),
             ),
           ],
         ],
