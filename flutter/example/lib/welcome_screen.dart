@@ -26,7 +26,7 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Bold red "V" with radial glow
+              // Bold red "V" with radial glow — Netflix-style thick strokes
               SizedBox(
                 width: 200,
                 height: 200,
@@ -47,20 +47,12 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Bold red "V" — Netflix-style
-                    Container(
-                      width: 120,
-                      height: 120,
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'V',
-                        style: TextStyle(
-                          fontSize: 96,
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.brandRed,
-                          letterSpacing: -4,
-                          height: 1,
-                        ),
+                    // Thick "V" drawn as polygon — matches app icon
+                    SizedBox(
+                      width: 140,
+                      height: 140,
+                      child: CustomPaint(
+                        painter: _ThickVPainter(),
                       ),
                     ),
                   ],
@@ -136,4 +128,29 @@ class WelcomeScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Draws a thick "V" as a filled polygon matching the app icon style.
+class _ThickVPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppTheme.brandRed
+      ..style = PaintingStyle.fill;
+
+    // Thick V polygon — same proportions as app icon (1024x1024 scaled to size)
+    final path = Path()
+      ..moveTo(size.width * 0.166, size.height * 0.146) // top-left outer
+      ..lineTo(size.width * 0.322, size.height * 0.146) // top-left inner
+      ..lineTo(size.width * 0.500, size.height * 0.703) // inner bottom
+      ..lineTo(size.width * 0.678, size.height * 0.146) // top-right inner
+      ..lineTo(size.width * 0.834, size.height * 0.146) // top-right outer
+      ..lineTo(size.width * 0.500, size.height * 0.850) // outer bottom
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
