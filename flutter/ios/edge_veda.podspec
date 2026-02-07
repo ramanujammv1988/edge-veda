@@ -111,6 +111,7 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_vision_free', '-Wl,-exported_symbol,_ev_vision_free',
       '-Wl,-u,_ev_vision_is_valid', '-Wl,-exported_symbol,_ev_vision_is_valid',
       '-Wl,-u,_ev_vision_config_default', '-Wl,-exported_symbol,_ev_vision_config_default',
+      '-Wl,-u,_ev_vision_get_last_timings', '-Wl,-exported_symbol,_ev_vision_get_last_timings',
     ].join(' '),
     'OTHER_LDFLAGS[sdk=iphonesimulator*]' => [
       '$(inherited)',
@@ -150,6 +151,7 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_vision_free', '-Wl,-exported_symbol,_ev_vision_free',
       '-Wl,-u,_ev_vision_is_valid', '-Wl,-exported_symbol,_ev_vision_is_valid',
       '-Wl,-u,_ev_vision_config_default', '-Wl,-exported_symbol,_ev_vision_config_default',
+      '-Wl,-u,_ev_vision_get_last_timings', '-Wl,-exported_symbol,_ev_vision_get_last_timings',
     ].join(' ')
   }
 

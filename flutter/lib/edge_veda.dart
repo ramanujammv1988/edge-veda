@@ -107,5 +107,8 @@ export 'src/types.dart' show
     MemoryException,
     ConfigurationException;
 
+// Performance tracing
+export 'src/perf_trace.dart' show PerfTrace;
+
 // Model management
 export 'src/model_manager.dart' show ModelManager, ModelRegistry;
