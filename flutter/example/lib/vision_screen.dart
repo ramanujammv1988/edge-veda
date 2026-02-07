@@ -9,8 +9,11 @@ import 'app_theme.dart';
 
 /// Vision tab with continuous camera scanning and description overlay
 ///
+/// Uses a persistent VisionWorker isolate (model loaded once) and FrameQueue
+/// with drop-newest backpressure for production-grade vision inference.
+///
 /// Implements a Google Lens-style continuous scanning UX:
-/// - Camera feeds frames at ~1 FPS (flag-throttled, one inference at a time)
+/// - Camera feeds frames through FrameQueue (backpressure handles throttling)
 /// - Description overlay at bottom of camera view (AR-style)
 /// - Subtle pulsing indicator during inference
 /// - Vision model downloads on first open, then initializes camera
@@ -23,13 +26,13 @@ class VisionScreen extends StatefulWidget {
 
 class _VisionScreenState extends State<VisionScreen>
     with WidgetsBindingObserver {
-  final EdgeVeda _edgeVeda = EdgeVeda();
+  final VisionWorker _visionWorker = VisionWorker();
+  final FrameQueue _frameQueue = FrameQueue();
   final ModelManager _modelManager = ModelManager();
 
   // Vision state
   bool _isVisionReady = false;
   bool _isDownloading = false;
-  bool _isProcessing = false;
   String? _description;
   double _downloadProgress = 0.0;
   String _statusMessage = 'Preparing vision...';
@@ -53,7 +56,7 @@ class _VisionScreenState extends State<VisionScreen>
     WidgetsBinding.instance.removeObserver(this);
     _stopCameraStream();
     _cameraController?.dispose();
-    _edgeVeda.disposeVision();
+    _visionWorker.dispose();
     _modelManager.dispose();
     super.dispose();
   }
@@ -83,15 +86,16 @@ class _VisionScreenState extends State<VisionScreen>
 
       if (!mounted) return;
 
-      // Step 3: Initialize vision engine
+      // Step 3: Spawn persistent vision worker and load model once
       setState(() => _statusMessage = 'Loading vision model...');
-      await _edgeVeda.initVision(VisionConfig(
+      await _visionWorker.spawn();
+      await _visionWorker.initVision(
         modelPath: _modelPath!,
         mmprojPath: _mmprojPath!,
         numThreads: 4,
         contextSize: 4096,
         useGpu: true,
-      ));
+      );
 
       if (!mounted) return;
 
@@ -186,7 +190,7 @@ class _VisionScreenState extends State<VisionScreen>
     await _cameraController!.initialize();
   }
 
-  /// Start continuous camera frame processing (~1 FPS, flag-throttled)
+  /// Start continuous camera frame processing via FrameQueue
   void _startCameraStream() {
     if (_cameraController == null ||
         !_cameraController!.value.isInitialized ||
@@ -195,36 +199,8 @@ class _VisionScreenState extends State<VisionScreen>
     }
 
     _cameraController!.startImageStream((CameraImage image) {
-      if (_isProcessing || !_isVisionReady) return;
-      _isProcessing = true;
-      if (mounted) {
-        setState(() {});
-      }
-      _processFrame(image).then((_) {
-        _isProcessing = false;
-        if (mounted) {
-          setState(() {});
-        }
-      });
-    });
-  }
+      if (!_isVisionReady) return;
 
-  /// Stop camera image stream
-  void _stopCameraStream() {
-    try {
-      if (_cameraController != null &&
-          _cameraController!.value.isInitialized &&
-          _cameraController!.value.isStreamingImages) {
-        _cameraController!.stopImageStream();
-      }
-    } catch (e) {
-      debugPrint('Error stopping camera stream: $e');
-    }
-  }
-
-  /// Process a single camera frame through vision inference
-  Future<void> _processFrame(CameraImage image) async {
-    try {
       // Convert platform-specific format to RGB888
       final Uint8List rgb;
       if (Platform.isIOS) {
@@ -246,20 +222,58 @@ class _VisionScreenState extends State<VisionScreen>
         );
       }
 
-      // Run vision inference
-      final description = await _edgeVeda.describeImage(
-        rgb,
-        width: image.width,
-        height: image.height,
-        prompt: 'Describe what you see in this image in one sentence.',
-        options: const GenerateOptions(maxTokens: 100, temperature: 0.3),
-      );
+      // Enqueue frame (drops old pending if busy)
+      _frameQueue.enqueue(rgb, image.width, image.height);
 
+      // Start processing if not already
+      _processNextFrame();
+    });
+  }
+
+  /// Stop camera image stream
+  void _stopCameraStream() {
+    try {
+      if (_cameraController != null &&
+          _cameraController!.value.isInitialized &&
+          _cameraController!.value.isStreamingImages) {
+        _cameraController!.stopImageStream();
+      }
+    } catch (e) {
+      debugPrint('Error stopping camera stream: $e');
+    }
+  }
+
+  /// Pull next frame from FrameQueue and process via VisionWorker
+  Future<void> _processNextFrame() async {
+    final frame = _frameQueue.dequeue();
+    if (frame == null) return; // nothing to process or already processing
+
+    if (mounted) {
+      setState(() {}); // Update UI to show processing state
+    }
+
+    try {
+      final result = await _visionWorker.describeFrame(
+        frame.rgb,
+        frame.width,
+        frame.height,
+        prompt: 'Describe what you see in this image in one sentence.',
+        maxTokens: 100,
+      );
       if (mounted) {
-        setState(() => _description = description);
+        setState(() => _description = result.description);
       }
     } catch (e) {
       debugPrint('Vision inference error: $e');
+    } finally {
+      _frameQueue.markDone();
+      if (mounted) {
+        setState(() {}); // Update UI to clear processing state
+      }
+      // Process next pending frame if available
+      if (_frameQueue.hasPending && mounted) {
+        _processNextFrame();
+      }
     }
   }
 
@@ -352,8 +366,8 @@ class _VisionScreenState extends State<VisionScreen>
                   child: Row(
                     children: [
                       // Pulsing indicator when processing
-                      if (_isProcessing) const _PulsingDot(),
-                      if (_isProcessing) const SizedBox(width: 12),
+                      if (_frameQueue.isProcessing) const _PulsingDot(),
+                      if (_frameQueue.isProcessing) const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           _description!,

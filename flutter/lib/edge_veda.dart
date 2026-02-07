@@ -110,5 +110,17 @@ export 'src/types.dart' show
 // Performance tracing
 export 'src/perf_trace.dart' show PerfTrace;
 
+// Vision worker (persistent isolate)
+export 'src/isolate/vision_worker.dart' show VisionWorker;
+export 'src/isolate/vision_worker_messages.dart'
+    show VisionResultResponse, VisionInitSuccessResponse;
+
+// Frame queue (backpressure)
+export 'src/frame_queue.dart' show FrameQueue;
+
+// Telemetry and runtime policy
+export 'src/telemetry_service.dart' show TelemetryService, TelemetrySnapshot;
+export 'src/runtime_policy.dart' show RuntimePolicy, QoSLevel, QoSKnobs;
+
 // Model management
 export 'src/model_manager.dart' show ModelManager, ModelRegistry;
