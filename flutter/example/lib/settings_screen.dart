@@ -1,9 +1,12 @@
+import 'dart:ffi' as ffi;
 import 'dart:io' show Platform;
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'soak_test_screen.dart';
 
 /// Settings tab with generation controls, storage overview, model management,
 /// and about section.
@@ -35,11 +38,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.only(top: 8),
         children: [
+          _buildDeviceStatusSection(),
+          const SizedBox(height: 24),
           _buildGenerationSection(),
           const SizedBox(height: 24),
           _buildStorageSection(),
           const SizedBox(height: 24),
           _buildModelsSection(),
+          const SizedBox(height: 24),
+          _buildDeveloperSection(),
           const SizedBox(height: 24),
           _buildAboutSection(),
           const SizedBox(height: 40),
@@ -80,6 +87,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
         border: Border.all(color: AppTheme.border),
       ),
       child: child,
+    );
+  }
+
+  // ── Section 0: Device Status ────────────────────────────────────────────
+
+  Widget _buildDeviceStatusSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Device Status'),
+        _buildCard(
+          child: Column(
+            children: [
+              _buildAboutRow(
+                icon: Icons.phone_iphone,
+                title: 'Model',
+                value: _DeviceInfo.model,
+              ),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              _buildAboutRow(
+                icon: Icons.developer_board,
+                title: 'Chip',
+                value: _DeviceInfo.chip,
+              ),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              _buildAboutRow(
+                icon: Icons.memory,
+                title: 'Memory',
+                value: _DeviceInfo.memoryString,
+              ),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    const Icon(Icons.psychology,
+                        color: AppTheme.accent, size: 22),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Neural Engine',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      _DeviceInfo.hasNeuralEngine
+                          ? Icons.check_circle
+                          : Icons.cancel_outlined,
+                      color: _DeviceInfo.hasNeuralEngine
+                          ? AppTheme.success
+                          : AppTheme.textTertiary,
+                      size: 22,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -301,7 +374,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── Section 4: About ───────────────────────────────────────────────────
+  // ── Section 4: Developer ────────────────────────────────────────────────
+
+  Widget _buildDeveloperSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Developer'),
+        _buildCard(
+          child: ListTile(
+            leading: const Icon(Icons.science, color: AppTheme.accent),
+            title: const Text(
+              'Soak Test',
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            ),
+            subtitle: const Text(
+              '15-min sustained vision benchmark',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            ),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: AppTheme.textTertiary,
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SoakTestScreen(),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Section 5: About ───────────────────────────────────────────────────
 
   Widget _buildAboutSection() {
     return Column(
@@ -512,5 +620,99 @@ class _ModelRow extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+// ── Device Info Helper (sysctlbyname FFI) ────────────────────────────────
+
+typedef _SysctlByNameC = ffi.Int Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Void>,
+  ffi.Pointer<ffi.Size>,
+  ffi.Pointer<ffi.Void>,
+  ffi.Size,
+);
+typedef _SysctlByNameDart = int Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Void>,
+  ffi.Pointer<ffi.Size>,
+  ffi.Pointer<ffi.Void>,
+  int,
+);
+
+class _DeviceInfo {
+  static final _sysctlbyname = ffi.DynamicLibrary.process()
+      .lookupFunction<_SysctlByNameC, _SysctlByNameDart>('sysctlbyname');
+
+  static String? _cachedModel;
+  static double? _cachedMemory;
+
+  static String get model {
+    if (_cachedModel != null) return _cachedModel!;
+    try {
+      _cachedModel = _readString('hw.machine');
+    } catch (_) {
+      _cachedModel = Platform.operatingSystem;
+    }
+    return _cachedModel!;
+  }
+
+  static String get chip {
+    if (Platform.isIOS || Platform.isMacOS) return 'Apple Silicon';
+    return 'Unknown';
+  }
+
+  static double get memoryGB {
+    if (_cachedMemory != null) return _cachedMemory!;
+    try {
+      _cachedMemory = _readInt64('hw.memsize') / (1024 * 1024 * 1024);
+    } catch (_) {
+      _cachedMemory = 0;
+    }
+    return _cachedMemory!;
+  }
+
+  static String get memoryString {
+    final gb = memoryGB;
+    if (gb <= 0) return 'Unknown';
+    return '${gb.toStringAsFixed(2)} GB';
+  }
+
+  static bool get hasNeuralEngine => Platform.isIOS;
+
+  static String _readString(String name) {
+    final namePtr = name.toNativeUtf8();
+    final sizePtr = calloc<ffi.Size>();
+    try {
+      _sysctlbyname(namePtr.cast(), ffi.nullptr, sizePtr, ffi.nullptr, 0);
+      final bufLen = sizePtr.value;
+      if (bufLen == 0) return 'Unknown';
+
+      final buf = calloc<ffi.Uint8>(bufLen);
+      try {
+        _sysctlbyname(namePtr.cast(), buf.cast(), sizePtr, ffi.nullptr, 0);
+        return buf.cast<Utf8>().toDartString();
+      } finally {
+        calloc.free(buf);
+      }
+    } finally {
+      calloc.free(sizePtr);
+      calloc.free(namePtr);
+    }
+  }
+
+  static int _readInt64(String name) {
+    final namePtr = name.toNativeUtf8();
+    final sizePtr = calloc<ffi.Size>();
+    final valPtr = calloc<ffi.Int64>();
+    try {
+      sizePtr.value = ffi.sizeOf<ffi.Int64>();
+      _sysctlbyname(namePtr.cast(), valPtr.cast(), sizePtr, ffi.nullptr, 0);
+      return valPtr.value;
+    } finally {
+      calloc.free(valPtr);
+      calloc.free(sizePtr);
+      calloc.free(namePtr);
+    }
   }
 }
