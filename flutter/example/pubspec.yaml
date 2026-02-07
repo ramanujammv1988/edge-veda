@@ -13,7 +13,7 @@ dependencies:
     sdk: flutter
   edge_veda:
     path: ../
-  ffi: ^2.1.0
+  ffi: ">=2.0.0 <2.1.0"
   cupertino_icons: ^1.0.6
   camera: ^0.11.0+2
   path_provider: ^2.1.0
