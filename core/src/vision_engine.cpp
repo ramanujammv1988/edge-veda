@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <time.h>
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
 #include "llama.h"
@@ -38,6 +39,9 @@ struct ev_vision_context_impl {
     // State
     bool model_loaded;
     std::string last_error;
+
+    // Timing
+    double last_image_encode_ms = 0.0;
 
     // Thread safety
     std::mutex mutex;
@@ -371,6 +375,9 @@ ev_error_t ev_vision_describe(
     llama_pos n_past = 0;
     llama_pos new_n_past = 0;
 
+    struct timespec ts_start, ts_end;
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+
     int32_t eval_result = mtmd_helper_eval_chunks(
         ctx->mtmd_ctx,
         ctx->llama_ctx,
@@ -381,6 +388,10 @@ ev_error_t ev_vision_describe(
         true,        // logits_last (need logits for sampling)
         &new_n_past
     );
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    ctx->last_image_encode_ms = (ts_end.tv_sec - ts_start.tv_sec) * 1000.0
+                               + (ts_end.tv_nsec - ts_start.tv_nsec) / 1e6;
 
     // Free chunks immediately after evaluation (P2 - memory explosion mitigation)
     // This releases image embeddings and all tokenization artifacts
@@ -442,4 +453,32 @@ ev_error_t ev_vision_describe(
     ctx->last_error = "llama.cpp not compiled";
     return EV_ERROR_NOT_IMPLEMENTED;
 #endif
+}
+
+/* ============================================================================
+ * Vision Timing / Performance Data
+ * ========================================================================= */
+
+ev_error_t ev_vision_get_last_timings(ev_vision_context ctx, ev_timings_data* timings) {
+    if (!ctx || !timings) {
+        return EV_ERROR_INVALID_PARAM;
+    }
+    if (!ctx->model_loaded) {
+        return EV_ERROR_CONTEXT_INVALID;
+    }
+
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    std::memset(timings, 0, sizeof(ev_timings_data));
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    struct llama_perf_context_data perf = llama_perf_context(ctx->llama_ctx);
+    timings->model_load_ms    = perf.t_load_ms;
+    timings->prompt_eval_ms   = perf.t_p_eval_ms;
+    timings->decode_ms        = perf.t_eval_ms;
+    timings->prompt_tokens    = perf.n_p_eval;
+    timings->generated_tokens = perf.n_eval;
+    timings->image_encode_ms  = ctx->last_image_encode_ms;
+#endif
+
+    return EV_SUCCESS;
 }
