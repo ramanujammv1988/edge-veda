@@ -569,6 +569,51 @@ EV_API void ev_vision_free(ev_vision_context ctx);
  */
 EV_API bool ev_vision_is_valid(ev_vision_context ctx);
 
+/* ============================================================================
+ * Vision Timing / Performance Data
+ * ========================================================================= */
+
+/**
+ * @brief Timing data from the last vision inference call
+ *
+ * Contains timing breakdowns from llama.cpp's internal perf counters
+ * plus custom image encoding measurement.
+ */
+typedef struct {
+    /** Model load time in milliseconds (from llama_perf_context_data.t_load_ms) */
+    double model_load_ms;
+
+    /** Image encoding time in milliseconds (measured around mtmd_helper_eval_chunks) */
+    double image_encode_ms;
+
+    /** Prompt evaluation time in milliseconds (from llama_perf_context_data.t_p_eval_ms) */
+    double prompt_eval_ms;
+
+    /** Token decode/generation time in milliseconds (from llama_perf_context_data.t_eval_ms) */
+    double decode_ms;
+
+    /** Number of prompt tokens processed (from llama_perf_context_data.n_p_eval) */
+    int32_t prompt_tokens;
+
+    /** Number of tokens generated (from llama_perf_context_data.n_eval) */
+    int32_t generated_tokens;
+} ev_timings_data;
+
+/**
+ * @brief Get timing data from the last vision inference call
+ *
+ * Returns performance timing breakdown from the most recent
+ * ev_vision_describe() call on this context.
+ *
+ * @param ctx Vision context handle
+ * @param timings Pointer to timings structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_vision_get_last_timings(
+    ev_vision_context ctx,
+    ev_timings_data* timings
+);
+
 #ifdef __cplusplus
 }
 #endif
