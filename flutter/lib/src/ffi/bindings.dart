@@ -278,6 +278,34 @@ final class EvVisionConfig extends Struct {
   external Pointer<Void> reserved;
 }
 
+/// Timing data from last vision inference
+/// Corresponds to: ev_timings_data in edge_veda.h
+final class EvTimingsData extends Struct {
+  /// Model load time in milliseconds
+  @Double()
+  external double modelLoadMs;
+
+  /// Image encoding time in milliseconds
+  @Double()
+  external double imageEncodeMs;
+
+  /// Prompt evaluation time in milliseconds
+  @Double()
+  external double promptEvalMs;
+
+  /// Token decode/generation time in milliseconds
+  @Double()
+  external double decodeMs;
+
+  /// Number of prompt tokens processed
+  @Int32()
+  external int promptTokens;
+
+  /// Number of tokens generated
+  @Int32()
+  external int generatedTokens;
+}
+
 // =============================================================================
 // Native Function Type Definitions
 // =============================================================================
@@ -485,6 +513,16 @@ typedef EvVisionFreeDart = void Function(Pointer<EvVisionContextImpl> ctx);
 typedef EvVisionIsValidNative = Bool Function(Pointer<EvVisionContextImpl> ctx);
 typedef EvVisionIsValidDart = bool Function(Pointer<EvVisionContextImpl> ctx);
 
+/// ev_error_t ev_vision_get_last_timings(ev_vision_context ctx, ev_timings_data* timings)
+typedef EvVisionGetLastTimingsNative = Int32 Function(
+  Pointer<EvVisionContextImpl> ctx,
+  Pointer<EvTimingsData> timings,
+);
+typedef EvVisionGetLastTimingsDart = int Function(
+  Pointer<EvVisionContextImpl> ctx,
+  Pointer<EvTimingsData> timings,
+);
+
 // =============================================================================
 // Native Library Bindings
 // =============================================================================
@@ -655,6 +693,9 @@ class EdgeVedaNativeBindings {
   /// Check if vision context is valid and ready for inference
   late final EvVisionIsValidDart evVisionIsValid;
 
+  /// Get last inference timing data from vision context
+  late final EvVisionGetLastTimingsDart evVisionGetLastTimings;
+
   // ---------------------------------------------------------------------------
   // Binding Initialization
   // ---------------------------------------------------------------------------
@@ -763,5 +804,9 @@ class EdgeVedaNativeBindings {
     evVisionIsValid = _dylib.lookupFunction<EvVisionIsValidNative, EvVisionIsValidDart>(
       'ev_vision_is_valid',
     );
+    evVisionGetLastTimings = _dylib.lookupFunction<
+      EvVisionGetLastTimingsNative,
+      EvVisionGetLastTimingsDart
+    >('ev_vision_get_last_timings');
   }
 }
