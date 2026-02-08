@@ -124,3 +124,8 @@ export 'src/runtime_policy.dart' show RuntimePolicy, QoSLevel, QoSKnobs;
 
 // Model management
 export 'src/model_manager.dart' show ModelManager, ModelRegistry;
+
+// Chat session (multi-turn conversation)
+export 'src/chat_session.dart' show ChatSession;
+export 'src/chat_types.dart' show ChatMessage, ChatRole, SystemPromptPreset;
+export 'src/chat_template.dart' show ChatTemplateFormat;
