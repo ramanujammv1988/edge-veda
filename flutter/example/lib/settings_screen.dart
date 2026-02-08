@@ -358,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             children: [
               for (int i = 0; i < models.length; i++) ...[
-                _ModelRow(model: models[i]),
+                _ModelRow(model: models[i], onDeleted: () => setState(() {})),
                 if (i < models.length - 1)
                   const Divider(
                     color: AppTheme.border,
@@ -544,10 +544,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 // ── Model Row Widget (uses FutureBuilder for download status) ────────────
 
-class _ModelRow extends StatelessWidget {
+class _ModelRow extends StatefulWidget {
   final ModelInfo model;
+  final VoidCallback? onDeleted;
 
-  const _ModelRow({required this.model});
+  const _ModelRow({required this.model, this.onDeleted});
+
+  @override
+  State<_ModelRow> createState() => _ModelRowState();
+}
+
+class _ModelRowState extends State<_ModelRow> {
+  bool _isDeleting = false;
+  bool? _isDownloaded;
 
   String _formatSize(int bytes) {
     final mb = bytes / (1024 * 1024);
@@ -558,17 +567,55 @@ class _ModelRow extends StatelessWidget {
   }
 
   IconData _modelIcon() {
-    if (model.id.contains('mmproj')) return Icons.extension;
-    if (model.id.contains('vlm') || model.id.contains('smol')) {
+    if (widget.model.id.contains('mmproj')) return Icons.extension;
+    if (widget.model.id.contains('vlm') || widget.model.id.contains('smol')) {
       return Icons.visibility;
     }
     return Icons.smart_toy;
   }
 
+  Future<void> _confirmAndDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Delete Model', style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text(
+          'Delete "${widget.model.name}" (${_formatSize(widget.model.sizeBytes)})?\n\nIt will be re-downloaded when needed.',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete', style: TextStyle(color: AppTheme.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => _isDeleting = true);
+      await ModelManager().deleteModel(widget.model.id);
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+          _isDownloaded = false;
+        });
+        widget.onDeleted?.call();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: ModelManager().isModelDownloaded(model.id),
+      future: _isDownloaded != null
+          ? Future.value(_isDownloaded!)
+          : ModelManager().isModelDownloaded(widget.model.id),
       builder: (context, snapshot) {
         final isDownloaded = snapshot.data ?? false;
 
@@ -583,7 +630,7 @@ class _ModelRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      model.name,
+                      widget.model.name,
                       style: const TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 14,
@@ -591,7 +638,7 @@ class _ModelRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _formatSize(model.sizeBytes),
+                      _formatSize(widget.model.sizeBytes),
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
@@ -600,7 +647,7 @@ class _ModelRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (snapshot.connectionState == ConnectionState.waiting)
+              if (snapshot.connectionState == ConnectionState.waiting || _isDeleting)
                 const SizedBox(
                   width: 20,
                   height: 20,
@@ -609,12 +656,24 @@ class _ModelRow extends StatelessWidget {
                     color: AppTheme.accent,
                   ),
                 )
-              else
+              else ...[
                 Icon(
                   isDownloaded ? Icons.check_circle : Icons.cloud_download_outlined,
                   color: isDownloaded ? AppTheme.success : AppTheme.textTertiary,
                   size: 20,
                 ),
+                if (isDownloaded) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _confirmAndDelete,
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: AppTheme.textTertiary,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ],
             ],
           ),
         );
