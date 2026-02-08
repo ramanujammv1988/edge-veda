@@ -118,9 +118,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isStreaming = false;
   CancelToken? _cancelToken;
   int _streamingTokenCount = 0;
+  String _streamingText = ''; // Accumulates tokens during streaming
   double _downloadProgress = 0.0;
   String? _modelPath;
   String _statusMessage = 'Ready to initialize';
+
+  // ChatSession state
+  ChatSession? _session;
+  SystemPromptPreset _selectedPreset = SystemPromptPreset.assistant;
+  bool _showSummarizationIndicator = false;
 
   // Benchmark test prompts - varying complexity for realistic testing
   final List<String> _benchmarkPrompts = [
@@ -137,13 +143,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ];
 
   // Performance metrics tracking
-  int _tokenCount = 0;
   int? _timeToFirstTokenMs;
   double? _tokensPerSecond;
   double? _memoryMb;
   final _stopwatch = Stopwatch();
-
-  List<ChatMessage> _messages = [];
 
   @override
   void initState() {
@@ -213,10 +216,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       // App is being backgrounded - cancel any active generation
-      if (_isGenerating) {
+      if (_isGenerating || _isStreaming) {
+        _cancelToken?.cancel();
         _isGenerating = false;
         setState(() {
           _isLoading = false;
+          _isStreaming = false;
         });
         // Show user-friendly message about cancellation
         if (mounted) {
@@ -298,13 +303,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         verbose: true,
       ));
 
+      // Create ChatSession after successful initialization
+      _session = ChatSession(
+        edgeVeda: _edgeVeda,
+        preset: _selectedPreset,
+      );
+
       setState(() {
         _isInitialized = true;
         _isLoading = false;
         _statusMessage = 'Ready to chat!';
       });
-
-      _addSystemMessage('Veda initialized successfully. Start chatting!');
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -314,99 +323,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Send a message via ChatSession streaming
   Future<void> _sendMessage() async {
-    if (!_isInitialized) {
+    if (!_isInitialized || _session == null) {
       _showError('Please initialize Veda first');
       return;
     }
 
-    final prompt = _promptController.text.trim();
-    if (prompt.isEmpty) return;
-
-    _promptController.clear();
-    _addUserMessage(prompt);
-
-    setState(() {
-      _isLoading = true;
-      _isGenerating = true; // Track for lifecycle cancellation
-      _tokenCount = 0;
-      _timeToFirstTokenMs = null;
-      _tokensPerSecond = null;
-    });
-
-    _stopwatch.reset();
-    _stopwatch.start();
-
-    try {
-      // Non-streaming generation with metrics tracking
-      final response = await _edgeVeda.generate(
-        prompt,
-        options: const GenerateOptions(
-          maxTokens: 256,
-          temperature: 0.7,
-          topP: 0.9,
-        ),
-      );
-
-      // Check if generation was cancelled while backgrounded
-      if (!_isGenerating) {
-        print('EdgeVeda: Generation completed but was cancelled by backgrounding');
-        return;
-      }
-
-      // Calculate TTFT (time to first token - for non-streaming, use latency)
-      _timeToFirstTokenMs = _stopwatch.elapsedMilliseconds;
-
-      // Estimate token count from response length
-      // Simple heuristic: ~4 chars per token for English text
-      _tokenCount = (response.text.length / 4).round();
-
-      // Calculate tokens per second
-      _tokensPerSecond = _tokenCount / (_stopwatch.elapsedMilliseconds / 1000);
-
-      _stopwatch.stop();
-
-      // Get memory stats
-      final memStats = await _edgeVeda.getMemoryStats();
-      _memoryMb = memStats.currentBytes / (1024 * 1024);
-
-      // Check for memory warning (approaching 1.2GB limit)
-      if (_memoryMb != null && _memoryMb! > 1000) {
-        _statusMessage = 'Memory high: ${_memoryMb!.toStringAsFixed(0)}MB / 1200MB';
-      }
-
-      _addAssistantMessage(response.text);
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      print('Memory usage: ${_memoryMb?.toStringAsFixed(1)} MB');
-      print('Tokens/sec: ${_tokensPerSecond?.toStringAsFixed(1)}');
-    } catch (e) {
-      _stopwatch.stop();
-      setState(() {
-        _isLoading = false;
-      });
-      _showError('Generation failed: ${e.toString()}');
-    } finally {
-      _isGenerating = false; // Always clear generation flag
-    }
-  }
-
-  /// Streaming generation with progressive token display
-  ///
-  /// Uses generateStream() to receive tokens one-by-one and display them
-  /// progressively. Supports cancellation via the Stop button.
-  Future<void> _generateStreaming() async {
-    if (!_isInitialized) {
-      _showError('Please initialize Veda first');
-      return;
-    }
-
-    if (_isStreaming) {
-      return; // Already streaming
-    }
+    if (_isStreaming) return; // Already streaming
 
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) {
@@ -415,13 +339,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     _promptController.clear();
-    _addUserMessage(prompt);
+
+    // Check if summarization might trigger
+    final usageBefore = _session!.contextUsage;
+    if (usageBefore > 0.7) {
+      setState(() {
+        _showSummarizationIndicator = true;
+      });
+    }
 
     setState(() {
       _isStreaming = true;
       _isLoading = true;
+      _isGenerating = true;
       _cancelToken = CancelToken();
       _streamingTokenCount = 0;
+      _streamingText = '';
       _timeToFirstTokenMs = null;
       _tokensPerSecond = null;
       _statusMessage = 'Initializing streaming worker (first call loads model)...';
@@ -432,10 +365,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     bool receivedFirstToken = false;
 
     try {
-      print('EdgeVeda: Starting generateStream...');
       setState(() => _statusMessage = 'Creating stream...');
 
-      final stream = _edgeVeda.generateStream(
+      final stream = _session!.sendStream(
         prompt,
         options: const GenerateOptions(
           maxTokens: 256,
@@ -444,15 +376,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
         cancelToken: _cancelToken,
       );
-      print('EdgeVeda: Stream created, starting iteration...');
+
       setState(() => _statusMessage = 'Loading model in worker isolate (30-60s first time)...');
 
-      // Add an empty assistant message that we'll update with streaming tokens
-      _addAssistantMessage('');
-      final streamingMsgIndex = _messages.length - 1;
+      // Check if summarization happened
+      if (_session!.isSummarizing) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Summarizing older messages...'),
+              backgroundColor: AppTheme.accentDim,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
 
       await for (final chunk in stream) {
-        print('EdgeVeda: Got chunk - isFinal: ${chunk.isFinal}, token: "${chunk.token}"');
         // Check if cancelled
         if (_cancelToken?.isCancelled == true) {
           setState(() {
@@ -474,10 +414,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           break;
         }
 
-        // Skip empty tokens (shouldn't happen but be defensive)
-        if (chunk.token.isEmpty) {
-          continue;
-        }
+        // Skip empty tokens
+        if (chunk.token.isEmpty) continue;
 
         // Record TTFT on first actual content token
         if (!receivedFirstToken) {
@@ -489,58 +427,56 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _streamingTokenCount++;
 
         // Update UI on first token, then every 3 tokens or on newlines
-        // The _streamingTokenCount == 1 ensures immediate feedback on first token
         if (_streamingTokenCount == 1 || _streamingTokenCount % 3 == 0 || chunk.token.contains('\n')) {
           setState(() {
             _statusMessage = 'Streaming... (${_streamingTokenCount} tokens)';
-            // Update the streaming message - must create new List for Flutter to detect change
-            if (streamingMsgIndex < _messages.length) {
-              _messages = List.from(_messages);
-              _messages[streamingMsgIndex] = ChatMessage(
-                text: buffer.toString(),
-                isUser: false,
-                timestamp: _messages[streamingMsgIndex].timestamp,
-              );
-            }
+            _streamingText = buffer.toString();
           });
           _scrollToBottom();
         }
       }
 
-      // Final update with complete text (or placeholder if empty)
+      // Final update
       setState(() {
-        // Must create new List for Flutter to detect change in ListView.builder
-        if (streamingMsgIndex < _messages.length) {
-          _messages = List.from(_messages);
-          _messages[streamingMsgIndex] = ChatMessage(
-            text: buffer.isNotEmpty
-                ? buffer.toString()
-                : '(No response generated)',
-            isUser: false,
-            timestamp: _messages[streamingMsgIndex].timestamp,
+        _streamingText = '';
+      });
+
+      // Show summarization completion if it was triggered
+      if (_showSummarizationIndicator) {
+        setState(() {
+          _showSummarizationIndicator = false;
+        });
+        if (mounted && usageBefore > 0.7) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Context summarized -- conversation continues'),
+              backgroundColor: AppTheme.success,
+              duration: const Duration(seconds: 2),
+            ),
           );
         }
-      });
+      }
 
       // Get memory stats after streaming
       final memStats = await _edgeVeda.getMemoryStats();
       _memoryMb = memStats.currentBytes / (1024 * 1024);
-      _tokenCount = _streamingTokenCount;
-
       print('EdgeVeda: Streaming complete - ${_streamingTokenCount} tokens');
       print('EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s');
     } catch (e) {
       stopwatch.stop();
       setState(() {
         _statusMessage = 'Stream error';
+        _streamingText = '';
       });
       _showError('Streaming failed: ${e.toString()}');
       print('EdgeVeda: Streaming error: $e');
     } finally {
+      _isGenerating = false;
       setState(() {
         _isStreaming = false;
         _isLoading = false;
         _cancelToken = null;
+        _showSummarizationIndicator = false;
       });
     }
   }
@@ -550,6 +486,46 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_isStreaming && _cancelToken != null) {
       _cancelToken!.cancel();
       print('EdgeVeda: Cancellation requested');
+    }
+  }
+
+  /// Start a new chat session, clearing history
+  void _resetChat() {
+    if (_session == null) return;
+    _session!.reset();
+    setState(() {
+      _streamingText = '';
+      _timeToFirstTokenMs = null;
+      _tokensPerSecond = null;
+      _memoryMb = null;
+      _statusMessage = 'Ready to chat!';
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('New chat started'),
+          backgroundColor: AppTheme.accentDim,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Change the persona preset and create a new session
+  void _changePreset(SystemPromptPreset preset) {
+    if (preset == _selectedPreset && _session != null) return;
+    setState(() {
+      _selectedPreset = preset;
+    });
+    if (_isInitialized) {
+      _session = ChatSession(
+        edgeVeda: _edgeVeda,
+        preset: preset,
+      );
+      setState(() {
+        _streamingText = '';
+        _statusMessage = 'Ready to chat!';
+      });
     }
   }
 
@@ -733,40 +709,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _addUserMessage(String text) {
-    setState(() {
-      _messages.add(ChatMessage(
-        text: text,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
-    });
-    _scrollToBottom();
-  }
-
-  void _addAssistantMessage(String text) {
-    setState(() {
-      _messages.add(ChatMessage(
-        text: text,
-        isUser: false,
-        timestamp: DateTime.now(),
-      ));
-    });
-    _scrollToBottom();
-  }
-
-  void _addSystemMessage(String text) {
-    setState(() {
-      _messages.add(ChatMessage(
-        text: text,
-        isUser: false,
-        isSystem: true,
-        timestamp: DateTime.now(),
-      ));
-    });
-    _scrollToBottom();
-  }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -797,6 +739,86 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  /// Build the context indicator bar showing turn count and context usage
+  Widget _buildContextIndicator() {
+    if (_session == null) return const SizedBox.shrink();
+
+    final turnCount = _session!.turnCount;
+    final usage = _session!.contextUsage;
+    final usagePercent = (usage * 100).toInt().clamp(0, 100);
+    final isHighUsage = usage > 0.8;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.border, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.memory,
+            size: 14,
+            color: isHighUsage ? AppTheme.warning : AppTheme.accent,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$turnCount ${turnCount == 1 ? 'turn' : 'turns'}',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (_showSummarizationIndicator) ...[
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: AppTheme.accent,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'Summarizing...',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.accent,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          const Spacer(),
+          Text(
+            '$usagePercent%',
+            style: TextStyle(
+              fontSize: 11,
+              color: isHighUsage ? AppTheme.warning : AppTheme.textTertiary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 60,
+            height: 4,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: usage.clamp(0.0, 1.0),
+                color: isHighUsage ? AppTheme.warning : AppTheme.accent,
+                backgroundColor: AppTheme.surfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildMetricsBar() {
@@ -873,8 +895,97 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Build persona picker chips for fresh sessions (no messages yet)
+  Widget _buildPersonaPicker() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.border, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Choose a persona',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: SystemPromptPreset.values.map((preset) {
+              final isSelected = preset == _selectedPreset;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(_presetLabel(preset)),
+                  selected: isSelected,
+                  onSelected: (_) => _changePreset(preset),
+                  selectedColor: AppTheme.accent.withValues(alpha: 0.2),
+                  backgroundColor: AppTheme.surfaceVariant,
+                  labelStyle: TextStyle(
+                    color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  side: BorderSide(
+                    color: isSelected ? AppTheme.accent : AppTheme.border,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _presetLabel(SystemPromptPreset preset) {
+    switch (preset) {
+      case SystemPromptPreset.assistant:
+        return 'Assistant';
+      case SystemPromptPreset.coder:
+        return 'Coder';
+      case SystemPromptPreset.creative:
+        return 'Creative';
+    }
+  }
+
+  /// Get the combined list of messages for display:
+  /// session messages + streaming text (if currently streaming)
+  List<ChatMessage> get _displayMessages {
+    final sessionMessages = _session?.messages ?? [];
+    if (_isStreaming && _streamingText.isNotEmpty) {
+      return [
+        ...sessionMessages,
+        ChatMessage(
+          role: ChatRole.assistant,
+          content: _streamingText,
+          timestamp: DateTime.now(),
+        ),
+      ];
+    }
+    return sessionMessages;
+  }
+
+  /// Whether the session has any messages (for showing persona picker vs context indicator)
+  bool get _hasMessages {
+    final msgs = _session?.messages ?? [];
+    return msgs.isNotEmpty || _isStreaming;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final messages = _displayMessages;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -883,6 +994,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
         backgroundColor: AppTheme.background,
         actions: [
+          // New Chat button
+          if (_isInitialized)
+            IconButton(
+              icon: const Icon(Icons.add_comment_outlined, color: AppTheme.textSecondary),
+              tooltip: 'New Chat',
+              onPressed: (!_isStreaming && !_isLoading) ? _resetChat : null,
+            ),
           IconButton(
             icon: const Icon(Icons.layers_outlined, color: AppTheme.textSecondary),
             tooltip: 'Models',
@@ -1029,9 +1147,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           // Metrics bar (only visible after initialization)
           if (_isInitialized) _buildMetricsBar(),
 
+          // Persona picker (shown on fresh session with no messages)
+          if (_isInitialized && !_hasMessages)
+            _buildPersonaPicker(),
+
+          // Context indicator (shown when conversation has messages)
+          if (_isInitialized && _hasMessages)
+            _buildContextIndicator(),
+
           // Messages list
           Expanded(
-            child: _messages.isEmpty
+            child: messages.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1060,9 +1186,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
+                    itemCount: messages.length,
                     itemBuilder: (context, index) {
-                      return MessageBubble(message: _messages[index]);
+                      return MessageBubble(message: messages[index]);
                     },
                   ),
           ),
@@ -1111,7 +1237,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       ),
                       maxLines: null,
                       textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _generateStreaming(),
+                      onSubmitted: (_) => _sendMessage(),
                       enabled: _isInitialized && !_isLoading && !_isStreaming,
                     ),
                   ),
@@ -1128,7 +1254,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         onTap: _isStreaming
                             ? _cancelGeneration
                             : (_isInitialized && !_isLoading
-                                ? _generateStreaming
+                                ? _sendMessage
                                 : null),
                         child: Icon(
                           _isStreaming ? Icons.stop : Icons.arrow_upward,
@@ -1148,20 +1274,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 }
 
-class ChatMessage {
-  final String text;
-  final bool isUser;
-  final bool isSystem;
-  final DateTime timestamp;
-
-  ChatMessage({
-    required this.text,
-    required this.isUser,
-    this.isSystem = false,
-    required this.timestamp,
-  });
-}
-
 class MessageBubble extends StatelessWidget {
   final ChatMessage message;
 
@@ -1169,7 +1281,8 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.isSystem) {
+    // System and summary messages rendered as centered chips
+    if (message.role == ChatRole.system || message.role == ChatRole.summary) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Center(
@@ -1180,7 +1293,9 @@ class MessageBubble extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              message.text,
+              message.role == ChatRole.summary
+                  ? '[Context summary] ${message.content}'
+                  : message.content,
               style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 12,
@@ -1191,14 +1306,16 @@ class MessageBubble extends StatelessWidget {
       );
     }
 
+    final isUser = message.role == ChatRole.user;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment:
-            message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!message.isUser) ...[
+          if (!isUser) ...[
             const CircleAvatar(
               radius: 16,
               backgroundColor: AppTheme.surfaceVariant,
@@ -1210,9 +1327,9 @@ class MessageBubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: message.isUser ? AppTheme.userBubble : AppTheme.assistantBubble,
+                color: isUser ? AppTheme.userBubble : AppTheme.assistantBubble,
                 borderRadius: BorderRadius.circular(20),
-                border: message.isUser
+                border: isUser
                     ? null
                     : Border.all(color: AppTheme.border, width: 1),
                 boxShadow: [
@@ -1224,7 +1341,7 @@ class MessageBubble extends StatelessWidget {
                 ],
               ),
               child: Text(
-                message.text,
+                message.content,
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
                   height: 1.4,
@@ -1232,7 +1349,7 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          if (message.isUser) ...[
+          if (isUser) ...[
             const SizedBox(width: 8),
             const CircleAvatar(
               radius: 16,
