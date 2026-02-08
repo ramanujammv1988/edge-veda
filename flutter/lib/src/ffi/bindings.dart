@@ -693,19 +693,8 @@ class EdgeVedaNativeBindings {
   /// Check if vision context is valid and ready for inference
   late final EvVisionIsValidDart evVisionIsValid;
 
-  /// Get last inference timing data from vision context.
-  ///
-  /// This binding is resolved lazily because ev_vision_get_last_timings may
-  /// not exist in older XCFramework builds. The VisionWorker wraps calls in
-  /// try-catch so a lookup failure is gracefully handled.
-  EvVisionGetLastTimingsDart get evVisionGetLastTimings {
-    _evVisionGetLastTimings ??= _dylib.lookupFunction<
-        EvVisionGetLastTimingsNative,
-        EvVisionGetLastTimingsDart>('ev_vision_get_last_timings');
-    return _evVisionGetLastTimings!;
-  }
-
-  EvVisionGetLastTimingsDart? _evVisionGetLastTimings;
+  /// Get last inference timing data from vision context
+  late final EvVisionGetLastTimingsDart evVisionGetLastTimings;
 
   // ---------------------------------------------------------------------------
   // Binding Initialization
@@ -815,7 +804,9 @@ class EdgeVedaNativeBindings {
     evVisionIsValid = _dylib.lookupFunction<EvVisionIsValidNative, EvVisionIsValidDart>(
       'ev_vision_is_valid',
     );
-    // Note: evVisionGetLastTimings is resolved lazily (see getter above)
-    // because it may not exist in older XCFramework builds.
+    evVisionGetLastTimings = _dylib.lookupFunction<
+      EvVisionGetLastTimingsNative,
+      EvVisionGetLastTimingsDart
+    >('ev_vision_get_last_timings');
   }
 }

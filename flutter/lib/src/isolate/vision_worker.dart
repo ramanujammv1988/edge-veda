@@ -344,8 +344,8 @@ void _handleInitVision(
 /// Handle frame description command
 ///
 /// Performs vision inference on a single frame using the persistent context.
-/// Extracts timing data via evVisionGetLastTimings (with try-catch fallback
-/// for parallel wave safety since plan 11-00 may not have added the binding).
+/// Performs vision inference on a single frame using the persistent context.
+/// Extracts timing data via evVisionGetLastTimings after each inference call.
 void _handleDescribeFrame(
   DescribeFrameCommand cmd,
   ffi.Pointer<EvVisionContextImpl> ctx,
@@ -397,8 +397,6 @@ void _handleDescribeFrame(
     bindings.evFreeString(outputPtr.value);
 
     // Extract timing data from native engine
-    // Plan 11-00 adds evVisionGetLastTimings in the same wave (parallel).
-    // If the binding does not exist yet, default all timings to 0.
     double modelLoadMs = 0.0;
     double imageEncodeMs = 0.0;
     double promptEvalMs = 0.0;
@@ -406,25 +404,20 @@ void _handleDescribeFrame(
     int promptTokens = 0;
     int generatedTokens = 0;
 
+    final timingsPtr = calloc<EvTimingsData>();
     try {
-      final timingsPtr = calloc<EvTimingsData>();
-      try {
-        final timingsResult =
-            bindings.evVisionGetLastTimings(ctx, timingsPtr);
-        if (timingsResult == 0) {
-          modelLoadMs = timingsPtr.ref.modelLoadMs;
-          imageEncodeMs = timingsPtr.ref.imageEncodeMs;
-          promptEvalMs = timingsPtr.ref.promptEvalMs;
-          decodeMs = timingsPtr.ref.decodeMs;
-          promptTokens = timingsPtr.ref.promptTokens;
-          generatedTokens = timingsPtr.ref.generatedTokens;
-        }
-      } finally {
-        calloc.free(timingsPtr);
+      final timingsResult =
+          bindings.evVisionGetLastTimings(ctx, timingsPtr);
+      if (timingsResult == 0) {
+        modelLoadMs = timingsPtr.ref.modelLoadMs;
+        imageEncodeMs = timingsPtr.ref.imageEncodeMs;
+        promptEvalMs = timingsPtr.ref.promptEvalMs;
+        decodeMs = timingsPtr.ref.decodeMs;
+        promptTokens = timingsPtr.ref.promptTokens;
+        generatedTokens = timingsPtr.ref.generatedTokens;
       }
-    } catch (_) {
-      // evVisionGetLastTimings or EvTimingsData binding not available yet
-      // (plan 11-00 runs in parallel). All timing fields stay at 0 defaults.
+    } finally {
+      calloc.free(timingsPtr);
     }
 
     responseSendPort.send(VisionResultResponse(
