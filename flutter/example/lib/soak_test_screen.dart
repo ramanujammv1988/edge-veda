@@ -737,7 +737,10 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
           _buildMetricRow(
             'QoS Knobs',
             _isRunning
-                ? 'fps=${_policy.knobs.maxFps} res=${_policy.knobs.resolution} tok=${_policy.knobs.maxTokens}'
+                ? () {
+                    final k = _scheduler?.getKnobsForWorkload(WorkloadId.vision) ?? _policy.knobs;
+                    return 'fps=${k.maxFps} res=${k.resolution} tok=${k.maxTokens}';
+                  }()
                 : '-',
           ),
           if (_traceFilePath != null) ...[

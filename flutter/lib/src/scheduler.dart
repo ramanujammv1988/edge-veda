@@ -178,60 +178,98 @@ class Scheduler {
     _batteryTracker.addSample(snap.batteryLevel);
 
     // 3. Check each budget constraint
-    final violations = <BudgetConstraint>[];
+    // Separate into actionable (QoS changes help) and observe-only (QoS changes don't help).
+    // Memory RSS is determined by model loading -- degrading fps/resolution/tokens won't free it.
+    final actionableViolations = <BudgetConstraint>[];
+    final observeOnlyViolations = <BudgetConstraint>[];
 
     final rssMb = snap.memoryRssBytes / (1024 * 1024);
 
-    // Memory ceiling
+    // Memory ceiling -- observe-only (model footprint can't be reduced by QoS knobs)
     if (budget.memoryCeilingMb != null && rssMb > budget.memoryCeilingMb!) {
-      violations.add(BudgetConstraint.memoryCeiling);
+      observeOnlyViolations.add(BudgetConstraint.memoryCeiling);
     }
 
-    // Thermal level
+    // Thermal level -- actionable (reducing inference intensity reduces heat)
     if (budget.maxThermalLevel != null &&
         snap.thermalState >= 0 &&
         snap.thermalState > budget.maxThermalLevel!) {
-      violations.add(BudgetConstraint.thermalLevel);
+      actionableViolations.add(BudgetConstraint.thermalLevel);
     }
 
-    // Battery drain
+    // Battery drain -- actionable (reducing inference frequency reduces drain)
     final drainRate = _batteryTracker.drainPerTenMinutes;
     if (budget.batteryDrainPerTenMinutes != null && drainRate != null) {
       if (drainRate > budget.batteryDrainPerTenMinutes!) {
-        violations.add(BudgetConstraint.batteryDrain);
+        actionableViolations.add(BudgetConstraint.batteryDrain);
       }
     }
 
-    // p95 latency -- per workload
+    // p95 latency -- actionable (reducing tokens/resolution reduces latency)
     if (budget.p95LatencyMs != null) {
       for (final entry in _workloads.entries) {
         final tracker = entry.value.latencyTracker;
         if (tracker.isWarmedUp) {
           final p95 = tracker.p95;
           if (p95 != null && p95 > budget.p95LatencyMs!) {
-            violations.add(BudgetConstraint.p95Latency);
+            actionableViolations.add(BudgetConstraint.p95Latency);
             break; // One violation is enough to trigger degradation
           }
         }
       }
     }
 
-    // 4. Handle violations
-    if (violations.isNotEmpty) {
-      _handleViolations(violations, budget, rssMb, snap, drainRate);
+    // 4. Emit observe-only violations (no degradation)
+    for (final constraint in observeOnlyViolations) {
+      double currentValue;
+      double budgetValue;
+      switch (constraint) {
+        case BudgetConstraint.memoryCeiling:
+          currentValue = rssMb;
+          budgetValue = (budget.memoryCeilingMb ?? 0).toDouble();
+        default:
+          continue;
+      }
+      final violation = BudgetViolation(
+        constraint: constraint,
+        currentValue: currentValue,
+        budgetValue: budgetValue,
+        mitigation: 'Observe-only: QoS changes cannot reduce memory footprint',
+        timestamp: DateTime.now(),
+        mitigated: false,
+      );
+      _violationController.add(violation);
+      _trace?.record(
+        stage: 'budget_violation',
+        value: currentValue,
+        extra: {
+          'constraint': constraint.name,
+          'budget': budgetValue,
+          'mitigated': false,
+          'observe_only': true,
+        },
+      );
+    }
+
+    // 5. Handle actionable violations (trigger degradation)
+    if (actionableViolations.isNotEmpty) {
+      _handleViolations(actionableViolations, budget, rssMb, snap, drainRate);
     } else {
-      // 5. No violations -- attempt restoration
+      // 6. No actionable violations -- attempt restoration
       _attemptRestoration();
     }
 
-    // 6. Log budget check
+    // 7. Log budget check
+    final totalViolations = actionableViolations.length + observeOnlyViolations.length;
     _trace?.record(
       stage: 'budget_check',
-      value: violations.length.toDouble(),
+      value: totalViolations.toDouble(),
       extra: {
         'thermal': snap.thermalState,
         'battery': snap.batteryLevel,
         'rss_mb': rssMb.round(),
+        'actionable': actionableViolations.length,
+        'observe_only': observeOnlyViolations.length,
       },
     );
   }
