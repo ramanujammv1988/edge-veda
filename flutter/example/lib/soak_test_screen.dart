@@ -130,12 +130,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
         telemetry: _telemetry,
         perfTrace: _trace,
       );
-      _scheduler!.setBudget(const EdgeVedaBudget(
-        p95LatencyMs: 3000,             // 3 second p95 target
-        batteryDrainPerTenMinutes: 5.0,  // max 5% per 10 min
-        maxThermalLevel: 2,              // don't exceed "serious"
-        memoryCeilingMb: 2500,           // 2.5 GB ceiling (VLM model ~1.9GB)
-      ));
+      _scheduler!.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
       _scheduler!.registerWorkload(
         WorkloadId.vision,
         priority: WorkloadPriority.high,
