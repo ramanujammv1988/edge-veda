@@ -237,6 +237,7 @@ class Scheduler {
         mitigation: 'Observe-only: QoS changes cannot reduce memory footprint',
         timestamp: DateTime.now(),
         mitigated: false,
+        observeOnly: true,
       );
       _violationController.add(violation);
       _trace?.record(
@@ -357,6 +358,7 @@ class Scheduler {
         mitigation: mitigation,
         timestamp: DateTime.now(),
         mitigated: mitigated,
+        observeOnly: false,
       );
 
       if (!mitigated) {
