@@ -2,9 +2,9 @@
 
 **A managed on-device AI runtime for Flutter that keeps text and vision models running sustainably on real phones under real constraints — private by default.**
 
-`~14,700 LOC | 37 C API functions | 18 Dart SDK files | 0 cloud dependencies`
+`~15,900 LOC | 31 C API functions | 21 Dart SDK files | 0 cloud dependencies`
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue)](https://github.com/ramanujammv1988/edge-veda)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue)](https://github.com/ramanujammv1988/edge-veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
@@ -51,6 +51,9 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 ## Current Capabilities
 
 - Persistent **text and vision inference workers** (models load once, stay in memory)
+- **Compute budget contracts** — declare p95 latency, battery drain, thermal, and memory ceilings; the runtime enforces them
+- **Adaptive budget profiles** — `conservative` / `balanced` / `performance` auto-calibrate to measured device performance
+- **Central scheduler** arbitrates concurrent workloads with priority-based degradation
 - **Thermal, memory, and battery-aware runtime policy** with hysteresis
 - Backpressure-controlled frame processing (drop-newest, not queue-forever)
 - Multi-turn **chat session management** with auto-summarization at context overflow
@@ -72,12 +75,14 @@ Flutter App (Dart)
     +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
     +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
     |
+    +-- Scheduler ------------ Central budget enforcer, priority-based degradation
+    +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
     +-- RuntimePolicy -------- Thermal/battery/memory QoS with hysteresis
     +-- TelemetryService ----- iOS thermal, battery, memory polling
     +-- FrameQueue ----------- Drop-newest backpressure for camera frames
     +-- PerfTrace ------------ JSONL flight recorder for offline analysis
     |
-    +-- FFI Bindings --------- 37 C functions via DynamicLibrary.process()
+    +-- FFI Bindings --------- 31 C functions via DynamicLibrary.process()
          |
     XCFramework (libedge_veda_full.a, ~15MB)
     +-- engine.cpp ----------- Text inference (wraps llama.cpp)
@@ -97,7 +102,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^1.1.1
+  edge_veda: ^1.2.0
 ```
 
 ### Text Generation
@@ -195,6 +200,52 @@ Based on these signals, it dynamically adjusts:
 
 ---
 
+## Compute Budget Contracts
+
+Declare runtime guarantees. The Scheduler enforces them.
+
+```dart
+// Option 1: Adaptive — auto-calibrates to this device's actual performance
+final scheduler = Scheduler(telemetry: TelemetryService());
+scheduler.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
+
+// Option 2: Static — explicit values
+scheduler.setBudget(const EdgeVedaBudget(
+  p95LatencyMs: 3000,
+  batteryDrainPerTenMinutes: 5.0,
+  maxThermalLevel: 2,
+));
+
+// Register workloads with priorities
+scheduler.registerWorkload(WorkloadId.vision, priority: WorkloadPriority.high);
+scheduler.registerWorkload(WorkloadId.text, priority: WorkloadPriority.low);
+scheduler.start();
+
+// React to violations
+scheduler.onBudgetViolation.listen((v) {
+  print('${v.constraint}: ${v.currentValue} > ${v.budgetValue}');
+});
+
+// After warm-up (~40s), inspect what the device actually measured
+final baseline = scheduler.measuredBaseline;
+// → MeasuredBaseline(p95=1412ms, drain=2.1%/10min, thermal=1, rss=2047MB)
+
+final resolved = scheduler.resolvedBudget;
+// → EdgeVedaBudget(p95LatencyMs: 2118, maxThermalLevel: 2, ...)
+```
+
+**Adaptive profiles** resolve against measured device performance after warm-up:
+
+| Profile | p95 Multiplier | Battery | Thermal | Use Case |
+|---------|---------------|---------|---------|----------|
+| Conservative | 2.0x | 0.6x (strict) | Floor 1 | Background workloads |
+| Balanced | 1.5x | 1.0x (match) | Floor 2 | Default for most apps |
+| Performance | 1.1x | 1.5x (generous) | Allow 3 | Latency-sensitive apps |
+
+The Scheduler enforces budgets every 2 seconds: degrades lower-priority workloads first, emits `BudgetViolation` events when mitigation is exhausted, and logs all decisions to PerfTrace.
+
+---
+
 ## Performance (Vision Soak Test)
 
 Validated on physical iPhone, continuous vision inference:
@@ -258,21 +309,21 @@ Any GGUF model compatible with llama.cpp can be loaded by file path.
 ```
 edge-veda/
 +-- core/
-|   +-- include/edge_veda.h       C API (37 functions, 621 LOC)
+|   +-- include/edge_veda.h       C API (31 functions, 621 LOC)
 |   +-- src/engine.cpp            Text inference (965 LOC)
 |   +-- src/vision_engine.cpp     Vision inference (484 LOC)
 |   +-- src/memory_guard.cpp      Memory monitoring (625 LOC)
 |   +-- third_party/llama.cpp/    llama.cpp b7952 (git submodule)
 +-- flutter/
-|   +-- lib/                      Dart SDK (18 files, 6,166 LOC)
+|   +-- lib/                      Dart SDK (21 files, 7,227 LOC)
 |   +-- ios/                      Podspec + XCFramework (~15MB)
 |   +-- android/                  Android plugin (scaffolded)
-|   +-- example/                  Demo app (7 files, 3,930 LOC)
+|   +-- example/                  Demo app (7 files, 4,079 LOC)
 |   +-- test/                     Unit tests (253 LOC, 14 tests)
 +-- scripts/
 |   +-- build-ios.sh              XCFramework build pipeline (383 LOC)
 +-- tools/
-|   +-- analyze_trace.py          Soak test JSONL analysis (589 LOC)
+|   +-- analyze_trace.py          Soak test JSONL analysis (1,549 LOC)
 ```
 
 ---
@@ -306,11 +357,10 @@ The demo app includes Chat (multi-turn with ChatSession), Vision (continuous cam
 
 ## Roadmap (Directional)
 
-- Compute budget contracts (predictable resource guarantees)
+- Android sustained runtime validation (CPU + Vulkan GPU)
 - Long-horizon memory management
 - Semantic perception APIs (event-driven vision)
-- Android sustained runtime validation
-- On-device trace viewer and replay
+- Observability dashboard (localhost trace viewer)
 - Speech-to-text (Whisper) and text-to-speech integration
 
 ---
