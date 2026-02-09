@@ -136,7 +136,9 @@ export 'src/budget.dart' show
     BudgetViolation,
     BudgetConstraint,
     WorkloadPriority,
-    WorkloadId;
+    WorkloadId,
+    BudgetProfile,
+    MeasuredBaseline;
 
 export 'src/scheduler.dart' show Scheduler;
 
