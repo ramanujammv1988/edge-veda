@@ -5,6 +5,24 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-09
+
+### Added
+- **Compute Budget Contracts:** Declare p95 latency, battery drain, thermal level, and memory ceiling constraints via `EdgeVedaBudget`
+- **Adaptive Budget Profiles:** `BudgetProfile.conservative` / `.balanced` / `.performance` auto-calibrate to measured device performance after warm-up
+- **MeasuredBaseline:** Inspect actual device metrics (p95, drain rate, thermal, RSS) via `Scheduler.measuredBaseline`
+- **Central Scheduler:** Arbitrates concurrent workloads (vision + text) with priority-based degradation every 2 seconds
+- **Budget Violation Events:** `Scheduler.onBudgetViolation` stream with constraint details, mitigation status, and `observeOnly` classification
+- **Two-Phase Resolution:** Latency constraints resolve at ~40s, battery constraints resolve when drain data arrives (~2min)
+- **Experiment Tracking:** `analyze_trace.py` supports 6 testable hypotheses with versioned experiment runs
+- **Trace Export:** Share JSONL trace files from soak test via native iOS share sheet
+- **Adaptive Budget UI:** Soak test screen shows measured baseline, resolved budget, and resolution status live
+
+### Changed
+- Soak test uses `EdgeVedaBudget.adaptive(BudgetProfile.balanced)` instead of hardcoded values
+- `RuntimePolicy` is now display-only; `Scheduler` is sole authority for inference gating
+- PerfTrace captures `scheduler_decision`, `budget_check`, `budget_violation`, and `budget_resolved` entries
+
 ## [1.1.1] - 2026-02-09
 
 ### Fixed

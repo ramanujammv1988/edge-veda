@@ -2,7 +2,7 @@
 
 **A managed on-device AI runtime for Flutter that keeps text and vision models running sustainably on real phones under real constraints — private by default.**
 
-`~14,700 LOC | 37 C API functions | 18 Dart SDK files | 0 cloud dependencies`
+`~15,900 LOC | 31 C API functions | 21 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
@@ -28,6 +28,8 @@ A **supervised on-device AI runtime** that:
 
 - Runs **text and vision models fully on device**
 - Keeps models **alive across long sessions**
+- Enforces **compute budget contracts** (p95 latency, battery, thermal, memory)
+- **Auto-calibrates** to each device's actual performance via adaptive profiles
 - Adapts automatically to **thermal, memory, and battery pressure**
 - Applies **runtime policies** instead of crashing
 - Provides **structured observability** for debugging and analysis
@@ -39,7 +41,7 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^1.1.1
+  edge_veda: ^1.2.0
 ```
 
 ---
@@ -114,6 +116,34 @@ print(result.description);
 await visionWorker.dispose();
 ```
 
+## Compute Budget Contracts
+
+Declare runtime guarantees. The Scheduler enforces them.
+
+```dart
+final scheduler = Scheduler(telemetry: TelemetryService());
+
+// Auto-calibrates to this device's actual performance
+scheduler.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
+scheduler.registerWorkload(WorkloadId.vision, priority: WorkloadPriority.high);
+scheduler.start();
+
+// React to violations
+scheduler.onBudgetViolation.listen((v) {
+  print('${v.constraint}: ${v.currentValue} > ${v.budgetValue}');
+});
+
+// After warm-up (~40s), inspect measured baseline
+final baseline = scheduler.measuredBaseline;
+final resolved = scheduler.resolvedBudget;
+```
+
+| Profile | p95 Multiplier | Battery | Thermal | Use Case |
+|---------|---------------|---------|---------|----------|
+| Conservative | 2.0x | 0.6x (strict) | Floor 1 | Background workloads |
+| Balanced | 1.5x | 1.0x (match) | Floor 2 | Default for most apps |
+| Performance | 1.1x | 1.5x (generous) | Allow 3 | Latency-sensitive apps |
+
 ---
 
 ## Architecture
@@ -128,12 +158,14 @@ Flutter App (Dart)
     +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
     +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
     |
+    +-- Scheduler ------------ Central budget enforcer, priority-based degradation
+    +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
     +-- RuntimePolicy -------- Thermal/battery/memory QoS with hysteresis
     +-- TelemetryService ----- iOS thermal, battery, memory polling
     +-- FrameQueue ----------- Drop-newest backpressure for camera frames
     +-- PerfTrace ------------ JSONL flight recorder for offline analysis
     |
-    +-- FFI Bindings --------- 37 C functions via DynamicLibrary.process()
+    +-- FFI Bindings --------- 31 C functions via DynamicLibrary.process()
          |
     XCFramework (libedge_veda_full.a, ~15MB)
     +-- engine.cpp ----------- Text inference (wraps llama.cpp)

@@ -1,6 +1,6 @@
 name: edge_veda
-description: On-device LLM inference SDK for Flutter. Run Llama, Phi, and other language models locally with Metal GPU acceleration on iOS devices.
-version: 1.1.1
+description: On-device LLM inference SDK for Flutter. Run Llama, Phi, and other language models locally with Metal GPU acceleration on iOS devices. Compute budget contracts enforce p95 latency, battery, thermal, and memory guarantees.
+version: 1.2.0
 homepage: https://github.com/ramanujammv1988/edge-veda
 repository: https://github.com/ramanujammv1988/edge-veda
 
