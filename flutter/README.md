@@ -39,7 +39,7 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^1.1.0
+  edge_veda: ^1.1.1
 ```
 
 ---

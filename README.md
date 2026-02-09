@@ -4,7 +4,7 @@
 
 `~14,700 LOC | 37 C API functions | 18 Dart SDK files | 0 cloud dependencies`
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/ramanujammv1988/edge-veda)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue)](https://github.com/ramanujammv1988/edge-veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
@@ -97,7 +97,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^1.1.0
+  edge_veda: ^1.1.1
 ```
 
 ### Text Generation
