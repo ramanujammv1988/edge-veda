@@ -65,6 +65,8 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
   int _actionableViolationCount = 0;
   int _observeOnlyViolationCount = 0;
   String? _lastViolation;
+  MeasuredBaseline? _measuredBaseline;
+  EdgeVedaBudget? _resolvedBudget;
 
   // Timers
   Timer? _telemetryTimer;
@@ -159,6 +161,8 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       _actionableViolationCount = 0;
       _observeOnlyViolationCount = 0;
       _lastViolation = null;
+      _measuredBaseline = null;
+      _resolvedBudget = null;
       _frameQueue.resetCounters();
       _policy.reset();
 
@@ -430,12 +434,18 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       // RuntimePolicy QoS is display-only; Scheduler controls inference gating
       // via getKnobsForWorkload() in _processNextFrame()
 
+      // Pick up adaptive resolution state from Scheduler
+      final baseline = _scheduler?.measuredBaseline;
+      final resolved = _scheduler?.resolvedBudget;
+
       if (mounted) {
         setState(() {
           _thermalState = snap.thermalState;
           _batteryLevel = snap.batteryLevel;
           _memoryRssBytes = snap.memoryRssBytes;
           _currentQoS = newQoS;
+          _measuredBaseline = baseline;
+          _resolvedBudget = resolved;
         });
       }
     } catch (e) {
@@ -706,6 +716,59 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
             _currentQoS.name,
             valueColor: _qosColor(_currentQoS),
           ),
+          const Divider(color: AppTheme.border, height: 24),
+          const Text(
+            'ADAPTIVE BUDGET',
+            style: TextStyle(
+              color: AppTheme.accent,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildMetricRow(
+            'Profile',
+            'balanced',
+          ),
+          _buildMetricRow(
+            'Status',
+            _resolvedBudget != null ? 'Resolved' : 'Warming up…',
+            valueColor: _resolvedBudget != null ? AppTheme.success : AppTheme.textTertiary,
+          ),
+          if (_measuredBaseline != null) ...[
+            _buildMetricRow(
+              'Measured p95',
+              '${_measuredBaseline!.measuredP95Ms.toStringAsFixed(0)} ms',
+            ),
+            _buildMetricRow(
+              'Measured Drain',
+              _measuredBaseline!.measuredDrainPerTenMin != null
+                  ? '${_measuredBaseline!.measuredDrainPerTenMin!.toStringAsFixed(1)}%/10min'
+                  : 'pending…',
+              valueColor: _measuredBaseline!.measuredDrainPerTenMin != null
+                  ? AppTheme.textPrimary
+                  : AppTheme.textTertiary,
+            ),
+          ],
+          if (_resolvedBudget != null) ...[
+            _buildMetricRow(
+              'Budget p95',
+              '${_resolvedBudget!.p95LatencyMs ?? "-"} ms',
+              valueColor: AppTheme.accent,
+            ),
+            _buildMetricRow(
+              'Budget Thermal',
+              '≤ ${_resolvedBudget!.maxThermalLevel ?? "-"}',
+              valueColor: AppTheme.accent,
+            ),
+            if (_resolvedBudget!.batteryDrainPerTenMinutes != null)
+              _buildMetricRow(
+                'Budget Drain',
+                '≤ ${_resolvedBudget!.batteryDrainPerTenMinutes!.toStringAsFixed(1)}%/10min',
+                valueColor: AppTheme.accent,
+              ),
+          ],
           const Divider(color: AppTheme.border, height: 24),
           _buildMetricRow(
             'Actionable Violations',
