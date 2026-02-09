@@ -1,375 +1,220 @@
-# Edge Veda SDK for Flutter
+# Edge-Veda
 
-On-device AI inference for Flutter applications. Run LLMs, Speech-to-Text, and Text-to-Speech directly on mobile devices with hardware acceleration.
+**A managed on-device AI runtime for Flutter that keeps text and vision models running sustainably on real phones under real constraints — private by default.**
 
-## Features
+`~14,700 LOC | 37 C API functions | 18 Dart SDK files | 0 cloud dependencies`
 
-- **On-Device LLM Inference**: Run large language models locally with llama.cpp
-- **Hardware Acceleration**: Metal (iOS), Vulkan (Android) for optimal performance
-- **Streaming Support**: Real-time token-by-token generation
-- **Model Management**: Download, verify, and cache models automatically
-- **Memory Safe**: Configurable memory limits with watchdog protection
-- **Privacy First**: 100% on-device processing, zero data transmission
-- **Offline Ready**: Works without internet connectivity
+[![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
 
-## Performance
+---
 
-- **Latency**: Sub-200ms time-to-first-token on modern devices
-- **Throughput**: >15 tokens/sec for 1B parameter models
-- **Memory**: Optimized for 4GB devices with 1.5GB safe limit
-- **Battery**: GPU acceleration for efficient long-form generation
+## Why Edge-Veda Exists
+
+Modern on-device AI demos break instantly in real usage:
+
+- Thermal throttling collapses throughput
+- Memory spikes cause silent crashes
+- Sessions longer than ~60 seconds become unstable
+- Developers have no visibility into runtime behavior
+
+Edge-Veda exists to make on-device AI **predictable, observable, and sustainable** — not just runnable.
+
+---
+
+## What Edge-Veda Is
+
+A **supervised on-device AI runtime** that:
+
+- Runs **text and vision models fully on device**
+- Keeps models **alive across long sessions**
+- Adapts automatically to **thermal, memory, and battery pressure**
+- Applies **runtime policies** instead of crashing
+- Provides **structured observability** for debugging and analysis
+- Is **private by default** (no network calls during inference)
+
+---
 
 ## Installation
 
-Add to your `pubspec.yaml`:
-
 ```yaml
 dependencies:
-  edge_veda: ^0.1.0
+  edge_veda: ^1.1.0
 ```
 
-Run:
+---
 
-```bash
-flutter pub get
-```
-
-## Platform Requirements
-
-### iOS
-- iOS 13.0+
-- Metal-compatible device (iPhone 6s or later)
-- Xcode 14.0+
-
-### Android
-- Android API 24+ (Android 7.0)
-- ARM64 or ARMv7 device
-- Vulkan 1.0+ support (optional but recommended)
-
-## Quick Start
-
-### 1. Download a Model
-
-```dart
-import 'package:edge_veda/edge_veda.dart';
-
-final modelManager = ModelManager();
-
-// Download Llama 3.2 1B (recommended for most use cases)
-final modelPath = await modelManager.downloadModel(
-  ModelRegistry.llama32_1b,
-);
-
-// Monitor download progress
-modelManager.downloadProgress.listen((progress) {
-  print('Downloading: ${progress.progressPercent}%');
-});
-```
-
-### 2. Initialize Edge Veda
+## Text Generation
 
 ```dart
 final edgeVeda = EdgeVeda();
 
 await edgeVeda.init(EdgeVedaConfig(
   modelPath: modelPath,
-  useGpu: true,              // Enable hardware acceleration
-  numThreads: 4,             // CPU threads for inference
-  contextLength: 2048,       // Max context window
-  maxMemoryMb: 1536,         // Memory safety limit
-  verbose: true,             // Enable logging
+  contextLength: 2048,
+  useGpu: true,
 ));
-```
 
-### 3. Generate Text
+// Streaming
+await for (final chunk in edgeVeda.generateStream('Explain recursion briefly')) {
+  stdout.write(chunk.token);
+}
 
-**Synchronous Generation:**
-
-```dart
-final response = await edgeVeda.generate(
-  'What is the capital of France?',
-  options: GenerateOptions(
-    maxTokens: 100,
-    temperature: 0.7,
-    topP: 0.9,
-    systemPrompt: 'You are a helpful assistant.',
-  ),
-);
-
+// Blocking
+final response = await edgeVeda.generate('Hello from on-device AI');
 print(response.text);
-print('Tokens/sec: ${response.tokensPerSecond}');
 ```
 
-**Streaming Generation:**
+## Multi-Turn Conversation
 
 ```dart
-final stream = edgeVeda.generateStream(
-  'Tell me a story about a robot',
-  options: GenerateOptions(
-    maxTokens: 256,
-    temperature: 0.8,
-  ),
+final session = ChatSession(
+  edgeVeda: edgeVeda,
+  preset: SystemPromptPreset.coder,
 );
 
-await for (final chunk in stream) {
-  if (!chunk.isFinal) {
-    print(chunk.token); // Print each token as it arrives
-  }
+await for (final chunk in session.sendStream('Write hello world in Python')) {
+  stdout.write(chunk.token);
 }
-```
 
-### 4. Clean Up
-
-```dart
-await edgeVeda.dispose();
-modelManager.dispose();
-```
-
-## Available Models
-
-### Llama 3.2 1B Instruct (Recommended)
-- **Size**: 668 MB
-- **Speed**: Very fast
-- **Quality**: Excellent for most tasks
-- **Use Case**: General chat, Q&A, summarization
-
-```dart
-ModelRegistry.llama32_1b
-```
-
-### Phi 3.5 Mini Instruct
-- **Size**: 2.3 GB
-- **Speed**: Fast
-- **Quality**: Superior reasoning
-- **Use Case**: Complex reasoning, coding, math
-
-```dart
-ModelRegistry.phi35_mini
-```
-
-### Gemma 2 2B Instruct
-- **Size**: 1.6 GB
-- **Speed**: Fast
-- **Quality**: High quality
-- **Use Case**: Versatile general-purpose
-
-```dart
-ModelRegistry.gemma2_2b
-```
-
-### TinyLlama 1.1B Chat
-- **Size**: 669 MB
-- **Speed**: Ultra fast
-- **Quality**: Good for simple tasks
-- **Use Case**: Resource-constrained devices
-
-```dart
-ModelRegistry.tinyLlama
-```
-
-## Configuration Options
-
-### EdgeVedaConfig
-
-```dart
-EdgeVedaConfig(
-  modelPath: '/path/to/model.gguf',  // Required
-  numThreads: 4,                      // Default: 4
-  contextLength: 2048,                // Default: 2048
-  useGpu: true,                       // Default: true
-  maxMemoryMb: 1536,                  // Default: 1536
-  verbose: false,                     // Default: false
-)
-```
-
-### GenerateOptions
-
-```dart
-GenerateOptions(
-  systemPrompt: null,                 // Optional system context
-  maxTokens: 512,                     // Default: 512
-  temperature: 0.7,                   // Default: 0.7 (0.0-1.0)
-  topP: 0.9,                         // Default: 0.9
-  topK: 40,                          // Default: 40
-  repeatPenalty: 1.1,                // Default: 1.1
-  stopSequences: [],                 // Optional stop strings
-  jsonMode: false,                   // Default: false
-)
-```
-
-## Model Management
-
-### Check if Model is Downloaded
-
-```dart
-final isDownloaded = await modelManager.isModelDownloaded('llama-3.2-1b-instruct-q4');
-```
-
-### List Downloaded Models
-
-```dart
-final models = await modelManager.getDownloadedModels();
-print('Downloaded models: $models');
-```
-
-### Get Total Storage Usage
-
-```dart
-final totalBytes = await modelManager.getTotalModelsSize();
-print('Storage used: ${totalBytes / (1024 * 1024)} MB');
-```
-
-### Delete a Model
-
-```dart
-await modelManager.deleteModel('llama-3.2-1b-instruct-q4');
-```
-
-### Clear All Models
-
-```dart
-await modelManager.clearAllModels();
-```
-
-## Error Handling
-
-```dart
-try {
-  await edgeVeda.init(config);
-} on InitializationException catch (e) {
-  print('Init failed: ${e.message}');
-} on ModelLoadException catch (e) {
-  print('Model load failed: ${e.message}');
-} on MemoryException catch (e) {
-  print('Out of memory: ${e.message}');
-} on EdgeVedaException catch (e) {
-  print('Edge Veda error: ${e.message}');
+// Model remembers the conversation
+await for (final chunk in session.sendStream('Now convert it to Rust')) {
+  stdout.write(chunk.token);
 }
+
+print('Turns: ${session.turnCount}');
+print('Context: ${(session.contextUsage * 100).toInt()}%');
+
+// Start fresh (model stays loaded)
+session.reset();
 ```
 
-## Memory Management
-
-Monitor memory usage to prevent crashes:
+## Continuous Vision Inference
 
 ```dart
-// Get current memory usage
-final memoryBytes = edgeVeda.getMemoryUsage();
-final memoryMb = edgeVeda.getMemoryUsageMb();
+final visionWorker = VisionWorker();
+await visionWorker.spawn();
+await visionWorker.initVision(
+  modelPath: vlmModelPath,
+  mmprojPath: mmprojPath,
+  numThreads: 4,
+  contextSize: 2048,
+  useGpu: true,
+);
 
-// Check if limit exceeded
-if (edgeVeda.isMemoryLimitExceeded()) {
-  print('Warning: Memory limit exceeded!');
-  // Consider disposing and reinitializing
-}
+// Process camera frames — model stays loaded across all calls
+final result = await visionWorker.describeFrame(
+  rgbBytes, width, height,
+  prompt: 'Describe what you see.',
+  maxTokens: 100,
+);
+print(result.description);
+
+// Clean up when done
+await visionWorker.dispose();
 ```
 
-## Best Practices
-
-1. **Initialize Once**: Initialize EdgeVeda once per app session, reuse the instance
-2. **Memory Monitoring**: Check memory usage periodically, especially on low-end devices
-3. **Model Selection**: Start with Llama 3.2 1B for best balance of speed and quality
-4. **GPU Acceleration**: Always enable `useGpu: true` unless testing CPU-only
-5. **Context Management**: Keep context length at 2048 or lower for optimal performance
-6. **Error Handling**: Always wrap operations in try-catch blocks
-7. **Resource Cleanup**: Call `dispose()` when done to free native memory
-
-## Example App
-
-See the [example](example/) directory for a complete chat application demonstrating:
-- Model downloading with progress tracking
-- SDK initialization
-- Streaming text generation
-- Memory monitoring
-- Error handling
-
-Run the example:
-
-```bash
-cd example
-flutter run
-```
+---
 
 ## Architecture
 
-Edge Veda uses a layered architecture:
-
 ```
-┌─────────────────────────────────┐
-│     Flutter Application         │
-├─────────────────────────────────┤
-│     edge_veda.dart (Public API) │
-├─────────────────────────────────┤
-│  Dart FFI Bindings              │
-├─────────────────────────────────┤
-│  Native C++ Core (llama.cpp)    │
-├─────────────────────────────────┤
-│  Hardware Acceleration          │
-│  Metal (iOS) / Vulkan (Android) │
-└─────────────────────────────────┘
-```
-
-## Limitations
-
-- **Model Format**: Only GGUF format supported
-- **Platforms**: iOS and Android only (Web/Desktop coming soon)
-- **Model Size**: Limited by device storage and RAM
-- **Context Length**: Maximum 32K tokens (recommended: 2048)
-
-## Troubleshooting
-
-### iOS Build Issues
-
-```bash
-cd ios
-pod install
-cd ..
-flutter clean
-flutter build ios
+Flutter App (Dart)
+    |
+    +-- ChatSession ---------- Chat templates, context summarization, system presets
+    |
+    +-- EdgeVeda ------------- generate(), generateStream(), describeImage()
+    |
+    +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
+    +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
+    |
+    +-- RuntimePolicy -------- Thermal/battery/memory QoS with hysteresis
+    +-- TelemetryService ----- iOS thermal, battery, memory polling
+    +-- FrameQueue ----------- Drop-newest backpressure for camera frames
+    +-- PerfTrace ------------ JSONL flight recorder for offline analysis
+    |
+    +-- FFI Bindings --------- 37 C functions via DynamicLibrary.process()
+         |
+    XCFramework (libedge_veda_full.a, ~15MB)
+    +-- engine.cpp ----------- Text inference (wraps llama.cpp)
+    +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
+    +-- memory_guard.cpp ----- Cross-platform RSS monitoring, pressure callbacks
+    +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
 ```
 
-### Android Build Issues
+**Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. The `StreamingWorker` and `VisionWorker` maintain persistent contexts so models load once and stay in memory across the entire session.
 
-```bash
-flutter clean
-cd android
-./gradlew clean
-cd ..
-flutter build apk
-```
+---
 
-### Model Download Fails
+## Runtime Supervision
 
-- Check internet connectivity
-- Verify sufficient storage space
-- Try again (downloads are resumable)
+Edge-Veda continuously monitors device thermal state, available memory, and battery level, then dynamically adjusts quality of service:
 
-### Out of Memory
+| QoS Level | FPS | Resolution | Tokens | Trigger |
+|-----------|-----|------------|--------|---------|
+| Full | 2 | 640px | 100 | No pressure |
+| Reduced | 1 | 480px | 75 | Thermal warning, battery <15%, memory <200MB |
+| Minimal | 1 | 320px | 50 | Thermal serious, battery <5%, memory <100MB |
+| Paused | 0 | -- | 0 | Thermal critical, memory <50MB |
 
-- Reduce `contextLength`
-- Lower `maxMemoryMb` threshold
-- Use a smaller model (TinyLlama)
-- Close other apps
+Escalation is immediate. Restoration requires cooldown (60s per level) to prevent oscillation.
 
-## Contributing
+---
 
-Contributions are welcome! Please see [CONTRIBUTING.md](../CONTRIBUTING.md)
+## Performance (Vision Soak Test)
+
+Validated on physical iPhone, continuous vision inference:
+
+| Metric | Value |
+|--------|-------|
+| Sustained runtime | 12.6 minutes |
+| Frames processed | 254 |
+| p50 latency | 1,412 ms |
+| p95 latency | 2,283 ms |
+| p99 latency | 2,597 ms |
+| Model reloads | 0 |
+| Crashes | 0 |
+| Memory stability | No growth over session |
+| Thermal handling | Graceful pause and resume |
+
+---
+
+## Supported Models
+
+Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
+
+| Model | Size | Quantization | Use Case |
+|-------|------|-------------|----------|
+| Llama 3.2 1B Instruct | 668 MB | Q4_K_M | General chat, instruction following |
+| Phi 3.5 Mini Instruct | 2.3 GB | Q4_K_M | Reasoning, longer context |
+| Gemma 2 2B Instruct | 1.6 GB | Q4_K_M | General purpose |
+| TinyLlama 1.1B Chat | 669 MB | Q4_K_M | Lightweight, fast inference |
+| SmolVLM2 500M | 417 MB | Q8_0 | Vision / image description |
+
+Any GGUF model compatible with llama.cpp can be loaded by file path.
+
+---
+
+## Platform Status
+
+| Platform | GPU | Status |
+|----------|-----|--------|
+| iOS (device) | Metal | Fully validated on-device |
+| iOS (simulator) | CPU | Working (Metal stubs) |
+| Android | CPU | Scaffolded, validation pending |
+
+---
+
+## Documentation
+
+- [Full README and source](https://github.com/ramanujammv1988/edge-veda)
+- [API Reference](https://pub.dev/documentation/edge_veda/latest/)
+- [Example App](https://github.com/ramanujammv1988/edge-veda/tree/main/flutter/example)
+
+---
 
 ## License
 
-MIT License - see [LICENSE](../LICENSE)
+[Apache 2.0](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
 
-## Support
-
-- Issues: [GitHub Issues](https://github.com/edgeveda/edge-veda-sdk/issues)
-- Discussions: [GitHub Discussions](https://github.com/edgeveda/edge-veda-sdk/discussions)
-- Email: support@edgeveda.com
-
-## Roadmap
-
-- [ ] Flutter Web support (WASM + WebGPU)
-- [ ] Speech-to-Text (Whisper)
-- [ ] Text-to-Speech (Kokoro-82M)
-- [ ] Voice Activity Detection
-- [ ] Prompt caching
-- [ ] LoRA adapter support
-- [ ] Custom model fine-tuning
+Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors.
