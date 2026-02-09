@@ -102,9 +102,11 @@ class EdgeVedaBudget {
       warnings.add('batteryDrainPerTenMinutes=$batteryDrainPerTenMinutes '
           'may be too restrictive for active inference');
     }
-    if (memoryCeilingMb != null && memoryCeilingMb! < 400) {
-      warnings.add('memoryCeilingMb=$memoryCeilingMb is below typical '
-          'model memory requirements (~600-800MB)');
+    if (memoryCeilingMb != null && memoryCeilingMb! < 2000) {
+      warnings.add('memoryCeilingMb=$memoryCeilingMb may be too low for VLM '
+          'workloads (typical RSS: 1500-2500MB including model + Metal '
+          'buffers + image tensors). Consider setting to null to skip memory '
+          'enforcement, or measure actual RSS after model load.');
     }
     return warnings;
   }
@@ -138,6 +140,12 @@ class BudgetViolation {
   /// Whether the mitigation was successful (constraint now satisfied).
   final bool mitigated;
 
+  /// Whether this violation is observe-only (no QoS mitigation possible).
+  ///
+  /// Memory ceiling violations are observe-only because QoS knob changes
+  /// (fps, resolution, tokens) cannot reduce model memory footprint.
+  final bool observeOnly;
+
   const BudgetViolation({
     required this.constraint,
     required this.currentValue,
@@ -145,12 +153,14 @@ class BudgetViolation {
     required this.mitigation,
     required this.timestamp,
     required this.mitigated,
+    this.observeOnly = false,
   });
 
   @override
   String toString() => 'BudgetViolation('
       '${constraint.name}: current=$currentValue, '
       'budget=$budgetValue, '
+      '${observeOnly ? 'observeOnly=$observeOnly, ' : ''}'
       'mitigated=$mitigated, '
       'mitigation=$mitigation)';
 }
