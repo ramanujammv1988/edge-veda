@@ -59,6 +59,11 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
   String? _traceFilePath;
   String? _lastDescription;
 
+  // Budget enforcement
+  Scheduler? _scheduler;
+  int _budgetViolationCount = 0;
+  String? _lastViolation;
+
   // Timers
   Timer? _telemetryTimer;
   Timer? _elapsedTimer;
@@ -118,12 +123,40 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       _trace = PerfTrace(traceFile);
       _traceFilePath = traceFile.path;
 
+      // Step 4.5: Create Scheduler with budget
+      _scheduler = Scheduler(
+        telemetry: _telemetry,
+        perfTrace: _trace,
+      );
+      _scheduler!.setBudget(const EdgeVedaBudget(
+        p95LatencyMs: 3000,             // 3 second p95 target
+        batteryDrainPerTenMinutes: 5.0,  // max 5% per 10 min
+        maxThermalLevel: 2,              // don't exceed "serious"
+        memoryCeilingMb: 1200,           // 1.2 GB ceiling
+      ));
+      _scheduler!.registerWorkload(
+        WorkloadId.vision,
+        priority: WorkloadPriority.high,
+      );
+      _scheduler!.onBudgetViolation.listen((violation) {
+        if (!mounted) return;
+        setState(() {
+          _budgetViolationCount++;
+          _lastViolation = '${violation.constraint.name}: '
+              '${violation.currentValue.toStringAsFixed(1)} '
+              '(budget: ${violation.budgetValue.toStringAsFixed(1)})';
+        });
+      });
+      _scheduler!.start();
+
       // Step 5: Reset counters
       _frameCount = 0;
       _totalTokens = 0;
       _lastLatencyMs = 0;
       _avgLatencyMs = 0;
       _totalLatencyMs = 0;
+      _budgetViolationCount = 0;
+      _lastViolation = null;
       _frameQueue.resetCounters();
       _policy.reset();
 
@@ -177,6 +210,10 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
     _telemetryTimer = null;
     _elapsedTimer?.cancel();
     _elapsedTimer = null;
+
+    // Stop Scheduler
+    _scheduler?.dispose();
+    _scheduler = null;
 
     // Close PerfTrace
     await _trace?.close();
@@ -304,13 +341,12 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
     final frame = _frameQueue.dequeue();
     if (frame == null) return;
 
-    // Check RuntimePolicy -- if QoS is paused, skip inference
-    if (_currentQoS == QoSLevel.paused) {
+    // Check Scheduler-controlled QoS -- if paused, skip inference
+    final knobs = _scheduler?.getKnobsForWorkload(WorkloadId.vision) ?? _policy.knobs;
+    if (knobs.maxFps == 0) {
       _frameQueue.markDone();
       return;
     }
-
-    final knobs = _policy.knobs;
     final stopwatch = Stopwatch()..start();
 
     try {
@@ -324,6 +360,9 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
 
       stopwatch.stop();
       final totalInferenceMs = stopwatch.elapsedMilliseconds.toDouble();
+
+      // Report latency to Scheduler for p95 tracking
+      _scheduler?.reportLatency(WorkloadId.vision, totalInferenceMs);
 
       // Record timing data to PerfTrace
       _trace?.record(stage: 'image_encode', value: result.imageEncodeMs);
@@ -386,14 +425,8 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
         isLowPowerMode: snap.isLowPowerMode,
       );
 
-      // Handle QoS pause/resume
-      if (newQoS == QoSLevel.paused && _currentQoS != QoSLevel.paused) {
-        _stopCameraStream();
-        setState(() => _statusMessage = 'Paused (thermal/memory pressure)');
-      } else if (newQoS != QoSLevel.paused && _currentQoS == QoSLevel.paused) {
-        _startCameraStream();
-        setState(() => _statusMessage = 'Running...');
-      }
+      // RuntimePolicy QoS is display-only; Scheduler controls inference gating
+      // via getKnobsForWorkload() in _processNextFrame()
 
       if (mounted) {
         setState(() {
@@ -655,6 +688,18 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
             _currentQoS.name,
             valueColor: _qosColor(_currentQoS),
           ),
+          const Divider(color: AppTheme.border, height: 24),
+          _buildMetricRow(
+            'Budget Violations',
+            '$_budgetViolationCount',
+            valueColor: _budgetViolationCount > 0 ? AppTheme.warning : AppTheme.success,
+          ),
+          if (_lastViolation != null)
+            _buildMetricRow(
+              'Last Violation',
+              _lastViolation!,
+              valueColor: AppTheme.warning,
+            ),
         ],
       ),
     );
