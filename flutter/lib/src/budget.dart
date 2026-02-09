@@ -57,11 +57,11 @@ enum WorkloadId {
 /// performance of THIS device with THIS model. The [Scheduler] resolves
 /// profile multipliers against [MeasuredBaseline] after warm-up.
 enum BudgetProfile {
-  /// Generous headroom: p95 x2.0, battery x0.6 (strict), thermal = max(current, 1).
+  /// Generous headroom: p95 x2.0, battery x0.6 (strict), thermal = 1 (Fair).
   /// Best for background/secondary workloads where stability matters more than speed.
   conservative,
 
-  /// Moderate headroom: p95 x1.5, battery x1.0 (match baseline), thermal = max(current+1, 2).
+  /// Moderate headroom: p95 x1.5, battery x1.0 (match baseline), thermal = 1 (Fair).
   /// Good default for most apps.
   balanced,
 
@@ -188,8 +188,7 @@ class EdgeVedaBudget {
         resolvedDrain = baseline.measuredDrainPerTenMin != null
             ? baseline.measuredDrainPerTenMin! * 1.0
             : null;
-        final thermalFloor = baseline.currentThermalState + 1;
-        resolvedThermal = thermalFloor < 2 ? 2 : thermalFloor;
+        resolvedThermal = 1;
       case BudgetProfile.performance:
         resolvedP95 = (baseline.measuredP95Ms * 1.1).round();
         resolvedDrain = baseline.measuredDrainPerTenMin != null
