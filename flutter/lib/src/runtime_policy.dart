@@ -139,31 +139,41 @@ class RuntimePolicy {
         ? availableMemoryMinBytes + 1 // above threshold = no pressure
         : availableMemoryBytes;
 
-    // --- Escalation checks (immediate) ---
-
-    // Critical conditions: pause immediately
+    // --- Determine the level demanded by current pressure ---
+    QoSLevel demandedLevel;
     if (thermal >= 3 || availMem < 50 * 1024 * 1024) {
-      return _escalateTo(QoSLevel.paused);
-    }
-
-    // Serious conditions: minimal
-    if (thermal >= 2 || availMem < 100 * 1024 * 1024 || battery < 0.05) {
-      return _escalateTo(QoSLevel.minimal);
-    }
-
-    // Moderate conditions: reduced
-    if (thermal >= 1 ||
+      demandedLevel = QoSLevel.paused;
+    } else if (thermal >= 2 ||
+        availMem < 100 * 1024 * 1024 ||
+        battery < 0.05) {
+      demandedLevel = QoSLevel.minimal;
+    } else if (thermal >= 1 ||
         availMem < availableMemoryMinBytes ||
         battery < 0.15 ||
         isLowPowerMode) {
-      return _escalateTo(QoSLevel.reduced);
+      demandedLevel = QoSLevel.reduced;
+    } else {
+      demandedLevel = QoSLevel.full;
     }
 
-    // --- No pressure: attempt restoration (with hysteresis) ---
-    if (_currentLevel != QoSLevel.full) {
+    // --- Apply level transition rules ---
+
+    if (demandedLevel.index >= _currentLevel.index) {
+      // Pressure is same or worse: escalate immediately
+      return _escalateTo(demandedLevel);
+    }
+
+    if (demandedLevel == QoSLevel.full) {
+      // No pressure at all: restore gradually with hysteresis to avoid
+      // oscillation (e.g. paused→full→paused→full).
       return _attemptRestore();
     }
 
+    // Pressure improved but still present (e.g. Critical→Serious means
+    // paused→minimal). De-escalate to the demanded level — the ongoing
+    // pressure conditions are themselves the safety mechanism.
+    _currentLevel = demandedLevel;
+    _lastEscalation = DateTime.now();
     return _currentLevel;
   }
 
