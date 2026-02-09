@@ -184,6 +184,10 @@ callgrind.out.*
 # third_party/llama.cpp/
 # third_party/whisper.cpp/
 
+# Experiment tracking (generated per-device)
+tools/experiments.json
+tools/EXPERIMENTS.md
+
 # Internal / Planning
 .claude/
 .planning/

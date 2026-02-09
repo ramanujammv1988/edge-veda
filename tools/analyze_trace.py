@@ -14,14 +14,19 @@ Each JSONL line has:
 
 Usage:
   python3 tools/analyze_trace.py path/to/soak_test.jsonl [--output-dir ./charts]
+  python3 tools/analyze_trace.py path/to/trace.jsonl --experiment --tag "baseline"
+  python3 tools/analyze_trace.py --list
+  python3 tools/analyze_trace.py --compare [ID1] [ID2]
 """
 
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -209,6 +214,809 @@ def _compute_token_metrics(
         "total_generated": total_tokens,
         "tokens_per_sec": tokens_per_sec,
     }
+
+
+# ── Experiment Metrics ───────────────────────────────────────────────────────
+
+
+def compute_rss_slope(
+    entries: List[Dict[str, Any]], warmup_seconds: float = 60.0
+) -> Optional[Dict[str, Any]]:
+    """Compute RSS memory slope (MB/min) after warmup period.
+
+    Uses numpy.polyfit(degree=1) on (relative_minutes, rss_mb).
+    Returns {slope_mb_per_min, r_squared, sample_count} or None.
+    """
+    if not HAS_NUMPY:
+        return None
+
+    rss_entries = [e for e in entries if e.get("stage") == "rss_bytes"]
+    if len(rss_entries) < 5:
+        return None
+
+    all_ts = [e["ts_ms"] for e in entries if "ts_ms" in e]
+    if not all_ts:
+        return None
+    t0 = min(all_ts)
+
+    # Filter out warmup period
+    filtered = [
+        e for e in rss_entries
+        if (e["ts_ms"] - t0) / 1000.0 >= warmup_seconds
+    ]
+    if len(filtered) < 5:
+        return None
+
+    rel_minutes = np.array([(e["ts_ms"] - t0) / 60000.0 for e in filtered])
+    rss_mb = np.array([e["value"] / (1024 * 1024) for e in filtered])
+
+    coeffs = np.polyfit(rel_minutes, rss_mb, 1)
+    slope = float(coeffs[0])
+
+    # R-squared
+    predicted = np.polyval(coeffs, rel_minutes)
+    ss_res = np.sum((rss_mb - predicted) ** 2)
+    ss_tot = np.sum((rss_mb - np.mean(rss_mb)) ** 2)
+    r_squared = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+
+    return {
+        "slope_mb_per_min": round(slope, 2),
+        "r_squared": round(r_squared, 3),
+        "sample_count": len(filtered),
+    }
+
+
+def compute_latency_drift(entries: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Compute latency drift between first and second half of the run.
+
+    Splits total_inference entries at the temporal midpoint, computes p95
+    for each half, and returns the drift.
+    """
+    inference = [e for e in entries if e.get("stage") == "total_inference"]
+    if len(inference) < 20:
+        return None
+
+    # Sort by timestamp
+    inference.sort(key=lambda e: e["ts_ms"])
+    t_start = inference[0]["ts_ms"]
+    t_end = inference[-1]["ts_ms"]
+    t_mid = (t_start + t_end) / 2.0
+
+    first_half = [e["value"] for e in inference if e["ts_ms"] < t_mid]
+    second_half = [e["value"] for e in inference if e["ts_ms"] >= t_mid]
+
+    if len(first_half) < 5 or len(second_half) < 5:
+        return None
+
+    if HAS_NUMPY:
+        p95_first = float(np.percentile(first_half, 95))
+        p95_second = float(np.percentile(second_half, 95))
+    else:
+        first_sorted = sorted(first_half)
+        second_sorted = sorted(second_half)
+        p95_first = first_sorted[int(len(first_sorted) * 0.95)]
+        p95_second = second_sorted[int(len(second_sorted) * 0.95)]
+
+    drift_ms = p95_second - p95_first
+    drift_pct = (drift_ms / p95_first * 100.0) if p95_first > 0 else 0.0
+
+    return {
+        "first_half_p95": round(p95_first, 1),
+        "second_half_p95": round(p95_second, 1),
+        "drift_ms": round(drift_ms, 1),
+        "drift_pct": round(drift_pct, 1),
+    }
+
+
+def compute_thermal_distribution(
+    entries: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Compute time-weighted thermal state distribution.
+
+    Treats thermal_state as a step function: each sample's state is held
+    until the next sample.
+    """
+    thermal = [e for e in entries if e.get("stage") == "thermal_state"]
+    if not thermal:
+        return None
+
+    thermal.sort(key=lambda e: e["ts_ms"])
+
+    # Time-weighted distribution
+    state_time = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+    peak_state = 0
+
+    for i in range(len(thermal)):
+        state = int(thermal[i]["value"])
+        peak_state = max(peak_state, state)
+
+        if i + 1 < len(thermal):
+            duration = (thermal[i + 1]["ts_ms"] - thermal[i]["ts_ms"]) / 1000.0
+        else:
+            duration = 1.0  # Last sample: assume 1 second
+
+        if state in state_time:
+            state_time[state] += duration
+
+    total_time = sum(state_time.values())
+    if total_time <= 0:
+        return None
+
+    return {
+        "nominal_pct": round(state_time[0] / total_time * 100, 1),
+        "fair_pct": round(state_time[1] / total_time * 100, 1),
+        "serious_pct": round(state_time[2] / total_time * 100, 1),
+        "critical_pct": round(state_time[3] / total_time * 100, 1),
+        "peak_state": peak_state,
+    }
+
+
+def compute_scheduler_actions(
+    entries: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Count scheduler decisions and budget violations from trace entries.
+
+    PerfTrace merges extra map into entry, so fields like 'action',
+    'reason', 'constraint', 'observe_only' are top-level.
+    """
+    degrade_count = 0
+    restore_count = 0
+    degrade_reasons = defaultdict(int)  # type: Dict[str, int]
+    actionable_violations = 0
+    observe_only_violations = 0
+    memory_triggered_degrades = 0
+
+    for e in entries:
+        stage = e.get("stage")
+
+        if stage == "scheduler_decision":
+            action = e.get("action", "")
+            if action == "degrade":
+                degrade_count += 1
+                reason = e.get("reason", "unknown")
+                degrade_reasons[reason] += 1
+                if reason == "memoryCeiling":
+                    memory_triggered_degrades += 1
+            elif action == "restore":
+                restore_count += 1
+
+        elif stage == "budget_violation":
+            if e.get("observe_only", False):
+                observe_only_violations += 1
+            else:
+                actionable_violations += 1
+
+    return {
+        "degrade_count": degrade_count,
+        "restore_count": restore_count,
+        "degrade_reasons": dict(degrade_reasons),
+        "actionable_violations": actionable_violations,
+        "observe_only_violations": observe_only_violations,
+        "memory_triggered_degrades": memory_triggered_degrades,
+    }
+
+
+def compute_stability_metrics(
+    entries: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Scan for gaps > 30s between inference frames and non-monotonic frame_id."""
+    inference = [e for e in entries if e.get("stage") == "total_inference"]
+    if not inference:
+        return {"gap_count": 0, "max_gap_seconds": 0.0, "frame_id_breaks": 0, "is_stable": True}
+
+    inference.sort(key=lambda e: e["ts_ms"])
+
+    gap_count = 0
+    max_gap = 0.0
+    frame_id_breaks = 0
+    prev_ts = inference[0]["ts_ms"]
+    prev_fid = inference[0].get("frame_id", -1)
+
+    for e in inference[1:]:
+        gap = (e["ts_ms"] - prev_ts) / 1000.0
+        if gap > max_gap:
+            max_gap = gap
+        if gap > 30.0:
+            gap_count += 1
+
+        fid = e.get("frame_id", -1)
+        if fid != -1 and prev_fid != -1 and fid <= prev_fid:
+            frame_id_breaks += 1
+        prev_ts = e["ts_ms"]
+        prev_fid = fid
+
+    return {
+        "gap_count": gap_count,
+        "max_gap_seconds": round(max_gap, 1),
+        "frame_id_breaks": frame_id_breaks,
+        "is_stable": gap_count == 0 and frame_id_breaks == 0,
+    }
+
+
+# ── Hypothesis Evaluation ────────────────────────────────────────────────────
+
+DEFAULT_THRESHOLDS = {
+    "min_duration_min": 10.0,
+    "max_gap_seconds": 30.0,
+    "p95_latency_ms": 3000.0,
+    "max_drift_pct": 20.0,
+    "max_rss_slope_mb_per_min": 5.0,
+    "max_thermal_serious_pct": 10.0,
+    "max_drain_per_10min": 5.0,
+    "max_memory_triggered_degrades": 0,
+}
+
+
+def evaluate_hypotheses(
+    duration_min: float,
+    total_frames: int,
+    latency_stats: Dict[str, Any],
+    stability: Dict[str, Any],
+    drift: Optional[Dict[str, Any]],
+    rss_slope: Optional[Dict[str, Any]],
+    thermal_dist: Optional[Dict[str, Any]],
+    battery_drain_per_10min: Optional[float],
+    scheduler: Dict[str, Any],
+    thresholds: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Dict[str, str]]:
+    """Evaluate all 6 hypotheses against metrics.
+
+    Returns {H1_stability: {verdict, criteria, evidence}, ...}.
+    Verdict is PASS, FAIL, or INCONCLUSIVE.
+    """
+    t = dict(DEFAULT_THRESHOLDS)
+    if thresholds:
+        t.update(thresholds)
+
+    results = {}
+
+    # H1: Stability
+    criteria = "duration >= %.0f min, 0 gaps > %.0fs, 0 frame_id breaks" % (
+        t["min_duration_min"], t["max_gap_seconds"]
+    )
+    if total_frames < 10:
+        results["H1_stability"] = {
+            "verdict": "INCONCLUSIVE",
+            "criteria": criteria,
+            "evidence": "%d frames, insufficient data" % total_frames,
+        }
+    else:
+        h1_pass = (
+            duration_min >= t["min_duration_min"]
+            and stability["gap_count"] == 0
+            and stability["frame_id_breaks"] == 0
+        )
+        evidence = "%d frames, %.1f min, %d gaps, %d breaks" % (
+            total_frames, duration_min,
+            stability["gap_count"], stability["frame_id_breaks"],
+        )
+        results["H1_stability"] = {
+            "verdict": "PASS" if h1_pass else "FAIL",
+            "criteria": criteria,
+            "evidence": evidence,
+        }
+
+    # H2: Latency consistency
+    criteria = "p95 < %.0fms AND drift < %.0f%%" % (
+        t["p95_latency_ms"], t["max_drift_pct"]
+    )
+    p95 = latency_stats.get("p95")
+    if p95 is None or latency_stats.get("count", 0) < 20:
+        results["H2_latency"] = {
+            "verdict": "INCONCLUSIVE",
+            "criteria": criteria,
+            "evidence": "insufficient latency data",
+        }
+    elif drift is None:
+        h2_pass = p95 < t["p95_latency_ms"]
+        results["H2_latency"] = {
+            "verdict": "PASS" if h2_pass else "FAIL",
+            "criteria": criteria,
+            "evidence": "p95=%.0fms, drift=N/A" % p95,
+        }
+    else:
+        h2_pass = (
+            p95 < t["p95_latency_ms"]
+            and abs(drift["drift_pct"]) < t["max_drift_pct"]
+        )
+        results["H2_latency"] = {
+            "verdict": "PASS" if h2_pass else "FAIL",
+            "criteria": criteria,
+            "evidence": "p95=%.0fms, drift=%.1f%%" % (p95, drift["drift_pct"]),
+        }
+
+    # H3: Memory discipline
+    criteria = "RSS slope < %.1f MB/min after 60s warmup" % t["max_rss_slope_mb_per_min"]
+    if rss_slope is None:
+        results["H3_memory"] = {
+            "verdict": "INCONCLUSIVE",
+            "criteria": criteria,
+            "evidence": "no RSS slope data (numpy required)",
+        }
+    else:
+        h3_pass = rss_slope["slope_mb_per_min"] < t["max_rss_slope_mb_per_min"]
+        results["H3_memory"] = {
+            "verdict": "PASS" if h3_pass else "FAIL",
+            "criteria": criteria,
+            "evidence": "slope=%.2f MB/min (R\u00b2=%.3f)" % (
+                rss_slope["slope_mb_per_min"], rss_slope["r_squared"]
+            ),
+        }
+
+    # H4: Thermal safety
+    criteria = "fair(1) or below for > 90%% of run time"
+    if thermal_dist is None:
+        results["H4_thermal"] = {
+            "verdict": "INCONCLUSIVE",
+            "criteria": criteria,
+            "evidence": "no thermal data",
+        }
+    else:
+        safe_pct = thermal_dist["nominal_pct"] + thermal_dist["fair_pct"]
+        h4_pass = safe_pct > 90.0
+        results["H4_thermal"] = {
+            "verdict": "PASS" if h4_pass else "FAIL",
+            "criteria": criteria,
+            "evidence": "nominal=%.0f%%, fair=%.0f%%" % (
+                thermal_dist["nominal_pct"], thermal_dist["fair_pct"]
+            ),
+        }
+
+    # H5: Battery respect
+    criteria = "drain < %.1f%% per 10 min" % t["max_drain_per_10min"]
+    if battery_drain_per_10min is None:
+        results["H5_battery"] = {
+            "verdict": "INCONCLUSIVE",
+            "criteria": criteria,
+            "evidence": "no battery data",
+        }
+    else:
+        h5_pass = battery_drain_per_10min < t["max_drain_per_10min"]
+        results["H5_battery"] = {
+            "verdict": "PASS" if h5_pass else "FAIL",
+            "criteria": criteria,
+            "evidence": "%.2f%%/10min" % battery_drain_per_10min,
+        }
+
+    # H6: Budget enforcement
+    criteria = "0 degrades triggered by memoryCeiling"
+    h6_pass = scheduler["memory_triggered_degrades"] <= t["max_memory_triggered_degrades"]
+    results["H6_budget"] = {
+        "verdict": "PASS" if h6_pass else "FAIL",
+        "criteria": criteria,
+        "evidence": "memory_degrades=%d" % scheduler["memory_triggered_degrades"],
+    }
+
+    return results
+
+
+# ── Experiment Recording ─────────────────────────────────────────────────────
+
+
+def _get_git_hash() -> Optional[str]:
+    """Return short git hash of HEAD, or None on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def _generate_experiment_id(git_hash: Optional[str]) -> str:
+    """Generate experiment ID as YYYYMMDD_HHMMSS_{hash}."""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if git_hash:
+        return "%s_%s" % (ts, git_hash)
+    return ts
+
+
+def build_experiment_record(
+    experiment_id: str,
+    tag: str,
+    trace_path: str,
+    entries: List[Dict[str, Any]],
+    device_model: Optional[str],
+    device_os: Optional[str],
+    thresholds: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Assemble a full experiment record from trace entries."""
+    git_hash = _get_git_hash()
+
+    # Duration
+    all_ts = [e["ts_ms"] for e in entries if "ts_ms" in e]
+    if len(all_ts) >= 2:
+        duration_min = (max(all_ts) - min(all_ts)) / 60000.0
+    else:
+        duration_min = 0.0
+
+    # Frame count
+    frame_ids = set(
+        e.get("frame_id", -1) for e in entries if e.get("stage") == "total_inference"
+    )
+    frame_ids.discard(-1)
+    total_frames = len(frame_ids)
+
+    # Dropped frames
+    dropped_stats = compute_stats(entries, "dropped_frames")
+    dropped_count = int(dropped_stats.get("max", 0)) if dropped_stats["count"] > 0 else 0
+
+    # Existing metrics
+    latency_stats = compute_stats(entries, "total_inference")
+    throughput = compute_throughput(entries)
+    token_metrics = _compute_token_metrics(entries)
+
+    # Throughput summary
+    if throughput:
+        fpm_values = [fpm for _, fpm in throughput]
+        throughput_summary = {
+            "avg_fpm": round(sum(fpm_values) / len(fpm_values), 1),
+            "min_fpm": round(min(fpm_values), 1),
+            "max_fpm": round(max(fpm_values), 1),
+        }
+    else:
+        throughput_summary = {"avg_fpm": 0.0, "min_fpm": 0.0, "max_fpm": 0.0}
+
+    # New metrics
+    rss_slope = compute_rss_slope(entries)
+    drift = compute_latency_drift(entries)
+    thermal_dist = compute_thermal_distribution(entries)
+    scheduler = compute_scheduler_actions(entries)
+    stability = compute_stability_metrics(entries)
+
+    # RSS peak
+    rss_values = [e["value"] for e in entries if e.get("stage") == "rss_bytes"]
+    rss_peak_mb = round(max(rss_values) / (1024 * 1024), 1) if rss_values else 0.0
+
+    # Battery
+    battery_values = [e["value"] for e in entries if e.get("stage") == "battery_level"]
+    battery_metrics = {}
+    battery_drain_per_10min = None
+    if len(battery_values) >= 2:
+        start_pct = battery_values[0] * 100.0
+        end_pct = battery_values[-1] * 100.0
+        drain_pct = start_pct - end_pct
+        if duration_min > 0:
+            battery_drain_per_10min = drain_pct / duration_min * 10.0
+        battery_metrics = {
+            "start_pct": round(start_pct, 1),
+            "end_pct": round(end_pct, 1),
+            "drain_pct": round(drain_pct, 1),
+            "drain_per_10min": round(battery_drain_per_10min, 2) if battery_drain_per_10min else None,
+        }
+
+    # Evaluate hypotheses
+    hypotheses = evaluate_hypotheses(
+        duration_min=duration_min,
+        total_frames=total_frames,
+        latency_stats=latency_stats,
+        stability=stability,
+        drift=drift,
+        rss_slope=rss_slope,
+        thermal_dist=thermal_dist,
+        battery_drain_per_10min=battery_drain_per_10min,
+        scheduler=scheduler,
+        thresholds=thresholds,
+    )
+
+    # Summary
+    pass_count = sum(1 for h in hypotheses.values() if h["verdict"] == "PASS")
+    total_count = len(hypotheses)
+    summary = "%d/%d PASS" % (pass_count, total_count)
+
+    # Build latency sub-dict
+    latency_dict = {}
+    if latency_stats.get("count", 0) > 0:
+        latency_dict["total_inference"] = {
+            "p50": round(latency_stats["p50"], 1),
+            "p95": round(latency_stats["p95"], 1),
+            "p99": round(latency_stats["p99"], 1),
+            "mean": round(latency_stats["mean"], 1),
+        }
+
+    # Memory sub-dict
+    memory_dict = {"rss_peak_mb": rss_peak_mb}
+    if rss_slope:
+        memory_dict["rss_slope_mb_per_min"] = rss_slope["slope_mb_per_min"]
+        memory_dict["rss_slope_r_squared"] = rss_slope["r_squared"]
+
+    # Build record
+    record = {
+        "id": experiment_id,
+        "tag": tag,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "git_hash": git_hash,
+        "trace_file": os.path.basename(trace_path),
+        "device": {
+            "model": device_model or "unknown",
+            "os_version": device_os or "unknown",
+        },
+        "duration": {
+            "actual_min": round(duration_min, 1),
+        },
+        "metrics": {
+            "frames": {"total": total_frames, "dropped": dropped_count},
+            "latency": latency_dict,
+            "drift": drift,
+            "throughput": throughput_summary,
+            "tokens": token_metrics,
+            "memory": memory_dict,
+            "thermal": thermal_dist,
+            "battery": battery_metrics,
+            "scheduler": scheduler,
+            "stability": stability,
+        },
+        "hypotheses": hypotheses,
+        "summary": summary,
+    }
+
+    return record
+
+
+def append_to_experiments_json(
+    record: Dict[str, Any], db_path: str
+) -> None:
+    """Load/create experiments.json array, append record, write back."""
+    experiments = []
+    if os.path.isfile(db_path):
+        with open(db_path, "r", encoding="utf-8") as f:
+            try:
+                experiments = json.load(f)
+            except json.JSONDecodeError:
+                experiments = []
+
+    experiments.append(record)
+
+    with open(db_path, "w", encoding="utf-8") as f:
+        json.dump(experiments, f, indent=2)
+        f.write("\n")
+
+    print("Saved to %s" % db_path)
+
+
+def append_to_experiments_md(
+    record: Dict[str, Any], md_path: str
+) -> None:
+    """Format experiment as markdown section and append to EXPERIMENTS.md."""
+    lines = []
+
+    tag_suffix = " [%s]" % record["tag"] if record["tag"] else ""
+    lines.append("## Run: %s%s\n" % (record["id"], tag_suffix))
+
+    git_str = "`%s`" % record["git_hash"] if record["git_hash"] else "N/A"
+    lines.append(
+        "**Date:** %s | **Git:** %s | **Duration:** %.1f min | **Frames:** %d\n"
+        % (
+            record["timestamp"][:10],
+            git_str,
+            record["duration"]["actual_min"],
+            record["metrics"]["frames"]["total"],
+        )
+    )
+
+    # Hypothesis table
+    lines.append("| Hypothesis | Verdict | Evidence |")
+    lines.append("|:-----------|:-------:|:---------|")
+
+    h_labels = {
+        "H1_stability": "H1: Stability",
+        "H2_latency": "H2: Latency",
+        "H3_memory": "H3: Memory",
+        "H4_thermal": "H4: Thermal",
+        "H5_battery": "H5: Battery",
+        "H6_budget": "H6: Budget",
+    }
+
+    for key, label in h_labels.items():
+        h = record["hypotheses"].get(key)
+        if h:
+            lines.append("| %s | %s | %s |" % (label, h["verdict"], h["evidence"]))
+
+    lines.append("")
+    lines.append("**Result: %s**\n" % record["summary"])
+
+    # Full metrics in details block
+    lines.append("<details><summary>Full Metrics</summary>\n")
+    lines.append("```json")
+    lines.append(json.dumps(record["metrics"], indent=2))
+    lines.append("```\n")
+    lines.append("</details>\n")
+    lines.append("---\n")
+
+    content = "\n".join(lines)
+
+    # Create or append
+    if not os.path.isfile(md_path):
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("# Soak Test Experiments\n\n")
+            f.write(content)
+    else:
+        with open(md_path, "a", encoding="utf-8") as f:
+            f.write(content)
+
+    print("Saved to %s" % md_path)
+
+
+# ── Experiment Comparison & Listing ──────────────────────────────────────────
+
+
+def _load_experiments(db_path: str) -> List[Dict[str, Any]]:
+    """Load experiments from JSON file."""
+    if not os.path.isfile(db_path):
+        print("No experiments file found at %s" % db_path, file=sys.stderr)
+        return []
+    with open(db_path, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            print("Error: malformed experiments.json", file=sys.stderr)
+            return []
+
+
+def _find_experiment(experiments: List[Dict[str, Any]], exp_id: str) -> Optional[Dict[str, Any]]:
+    """Find experiment by ID (prefix match allowed)."""
+    for exp in experiments:
+        if exp["id"] == exp_id or exp["id"].startswith(exp_id):
+            return exp
+    return None
+
+
+def list_experiments(db_path: str) -> None:
+    """Print summary table of all recorded experiments."""
+    experiments = _load_experiments(db_path)
+    if not experiments:
+        print("No experiments recorded.")
+        return
+
+    # Header
+    print("%-28s %-14s %8s %6s %8s  %s" % (
+        "ID", "Tag", "Duration", "Frames", "p95(ms)", "Result",
+    ))
+    print("-" * 80)
+
+    for exp in experiments:
+        tag = exp.get("tag", "")[:14]
+        dur = exp.get("duration", {}).get("actual_min", 0)
+        frames = exp.get("metrics", {}).get("frames", {}).get("total", 0)
+
+        latency = exp.get("metrics", {}).get("latency", {}).get("total_inference", {})
+        p95 = latency.get("p95", 0)
+
+        summary = exp.get("summary", "N/A")
+
+        print("%-28s %-14s %7.1fm %6d %8.0f  %s" % (
+            exp["id"], tag, dur, frames, p95, summary,
+        ))
+
+
+def compare_experiments(
+    id1: Optional[str], id2: Optional[str], db_path: str
+) -> None:
+    """Compare two experiments side-by-side with delta annotations."""
+    experiments = _load_experiments(db_path)
+    if not experiments:
+        return
+
+    if id1 is None and len(experiments) >= 2:
+        # Compare last two
+        exp_a = experiments[-2]
+        exp_b = experiments[-1]
+    elif id1 is not None and id2 is None:
+        # Compare id1 against most recent
+        exp_a = _find_experiment(experiments, id1)
+        exp_b = experiments[-1]
+        if exp_a is None:
+            print("Experiment not found: %s" % id1, file=sys.stderr)
+            return
+    elif id1 is not None and id2 is not None:
+        exp_a = _find_experiment(experiments, id1)
+        exp_b = _find_experiment(experiments, id2)
+        if exp_a is None:
+            print("Experiment not found: %s" % id1, file=sys.stderr)
+            return
+        if exp_b is None:
+            print("Experiment not found: %s" % id2, file=sys.stderr)
+            return
+    else:
+        print("Need at least 2 experiments to compare.", file=sys.stderr)
+        return
+
+    print("=== Experiment Comparison ===\n")
+    print("  A: %s [%s]" % (exp_a["id"], exp_a.get("tag", "")))
+    print("  B: %s [%s]" % (exp_b["id"], exp_b.get("tag", "")))
+    print()
+
+    # Compare key metrics
+    _compare_metric("Duration (min)",
+                    exp_a.get("duration", {}).get("actual_min"),
+                    exp_b.get("duration", {}).get("actual_min"),
+                    higher_is_better=True)
+
+    _compare_metric("Frames",
+                    exp_a.get("metrics", {}).get("frames", {}).get("total"),
+                    exp_b.get("metrics", {}).get("frames", {}).get("total"),
+                    higher_is_better=True)
+
+    lat_a = exp_a.get("metrics", {}).get("latency", {}).get("total_inference", {})
+    lat_b = exp_b.get("metrics", {}).get("latency", {}).get("total_inference", {})
+    _compare_metric("p50 latency (ms)", lat_a.get("p50"), lat_b.get("p50"),
+                    higher_is_better=False)
+    _compare_metric("p95 latency (ms)", lat_a.get("p95"), lat_b.get("p95"),
+                    higher_is_better=False)
+
+    drift_a = exp_a.get("metrics", {}).get("drift") or {}
+    drift_b = exp_b.get("metrics", {}).get("drift") or {}
+    _compare_metric("Drift (%)", drift_a.get("drift_pct"), drift_b.get("drift_pct"),
+                    higher_is_better=False)
+
+    mem_a = exp_a.get("metrics", {}).get("memory", {})
+    mem_b = exp_b.get("metrics", {}).get("memory", {})
+    _compare_metric("RSS peak (MB)", mem_a.get("rss_peak_mb"), mem_b.get("rss_peak_mb"),
+                    higher_is_better=False)
+    _compare_metric("RSS slope (MB/min)",
+                    mem_a.get("rss_slope_mb_per_min"),
+                    mem_b.get("rss_slope_mb_per_min"),
+                    higher_is_better=False)
+
+    bat_a = exp_a.get("metrics", {}).get("battery", {})
+    bat_b = exp_b.get("metrics", {}).get("battery", {})
+    _compare_metric("Battery drain/10min",
+                    bat_a.get("drain_per_10min"),
+                    bat_b.get("drain_per_10min"),
+                    higher_is_better=False)
+
+    sched_a = exp_a.get("metrics", {}).get("scheduler", {})
+    sched_b = exp_b.get("metrics", {}).get("scheduler", {})
+    _compare_metric("Memory degrades",
+                    sched_a.get("memory_triggered_degrades"),
+                    sched_b.get("memory_triggered_degrades"),
+                    higher_is_better=False)
+
+    # Hypothesis comparison
+    print()
+    print("%-16s %12s %12s" % ("Hypothesis", "A", "B"))
+    print("-" * 42)
+    h_keys = ["H1_stability", "H2_latency", "H3_memory", "H4_thermal", "H5_battery", "H6_budget"]
+    for key in h_keys:
+        va = exp_a.get("hypotheses", {}).get(key, {}).get("verdict", "N/A")
+        vb = exp_b.get("hypotheses", {}).get(key, {}).get("verdict", "N/A")
+        print("%-16s %12s %12s" % (key, va, vb))
+
+    print()
+    print("Summary:  A=%s  B=%s" % (exp_a.get("summary", "N/A"), exp_b.get("summary", "N/A")))
+
+
+def _compare_metric(
+    label: str,
+    val_a: Optional[float],
+    val_b: Optional[float],
+    higher_is_better: bool,
+) -> None:
+    """Print one comparison row with delta and IMPROVED/REGRESSED annotation."""
+    if val_a is None and val_b is None:
+        return
+
+    a_str = "%.1f" % val_a if val_a is not None else "N/A"
+    b_str = "%.1f" % val_b if val_b is not None else "N/A"
+
+    if val_a is not None and val_b is not None:
+        delta = val_b - val_a
+        if abs(delta) < 0.01:
+            annotation = ""
+        elif (delta > 0) == higher_is_better:
+            annotation = "IMPROVED"
+        else:
+            annotation = "REGRESSED"
+        delta_str = "%+.1f" % delta
+    else:
+        delta_str = ""
+        annotation = ""
+
+    print("  %-24s %10s %10s %10s  %s" % (label, a_str, b_str, delta_str, annotation))
 
 
 # ── Console Output ───────────────────────────────────────────────────────────
@@ -534,27 +1342,152 @@ def _chart_latency_distribution(
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
+def _parse_args(argv: List[str]) -> Dict[str, Any]:
+    """Parse CLI arguments manually (consistent with existing style)."""
+    args = {
+        "trace_path": None,
+        "output_dir": None,
+        "experiment": False,
+        "tag": "",
+        "device_model": None,
+        "device_os": None,
+        "thresholds_file": None,
+        "compare": False,
+        "compare_ids": [],
+        "list": False,
+        "help": False,
+    }
+
+    i = 1
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("-h", "--help"):
+            args["help"] = True
+        elif arg == "--list":
+            args["list"] = True
+        elif arg == "--compare":
+            args["compare"] = True
+            # Collect up to 2 IDs that follow (non-flag arguments)
+            while i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                i += 1
+                args["compare_ids"].append(argv[i])
+                if len(args["compare_ids"]) >= 2:
+                    break
+        elif arg == "--output-dir" and i + 1 < len(argv):
+            i += 1
+            args["output_dir"] = argv[i]
+        elif arg == "--experiment":
+            args["experiment"] = True
+        elif arg == "--tag" and i + 1 < len(argv):
+            i += 1
+            args["tag"] = argv[i]
+        elif arg == "--device-model" and i + 1 < len(argv):
+            i += 1
+            args["device_model"] = argv[i]
+        elif arg == "--device-os" and i + 1 < len(argv):
+            i += 1
+            args["device_os"] = argv[i]
+        elif arg == "--thresholds" and i + 1 < len(argv):
+            i += 1
+            args["thresholds_file"] = argv[i]
+        elif not arg.startswith("-") and args["trace_path"] is None:
+            args["trace_path"] = arg
+        i += 1
+
+    return args
+
+
+def _print_help() -> None:
+    """Print usage information."""
+    print("Usage: analyze_trace.py <trace.jsonl> [options]")
+    print("       analyze_trace.py --list")
+    print("       analyze_trace.py --compare [ID1] [ID2]")
+    print()
+    print("Analyze PerfTrace JSONL files from Edge Veda soak tests.")
+    print()
+    print("Arguments:")
+    print("  trace.jsonl             Path to JSONL trace file")
+    print()
+    print("Options:")
+    print("  --output-dir DIR        Directory for chart PNGs (default: same as JSONL)")
+    print("  --experiment            Record as versioned experiment")
+    print("  --tag TAG               Human label (e.g., 'baseline', 'after-fix')")
+    print("  --device-model MODEL    Device name (e.g., 'iPhone 16 Pro')")
+    print("  --device-os VERSION     OS version (e.g., 'iOS 26.2.1')")
+    print("  --thresholds FILE       Custom hypothesis thresholds JSON")
+    print("  --compare [ID] [ID2]    Compare two runs (or latest two)")
+    print("  --list                  List all recorded experiments")
+
+
+def _print_verdicts(hypotheses: Dict[str, Dict[str, str]]) -> None:
+    """Print hypothesis verdicts to console."""
+    print()
+    print("=== Hypothesis Verdicts ===")
+    print()
+
+    h_labels = {
+        "H1_stability": "H1: Stability",
+        "H2_latency": "H2: Latency consistency",
+        "H3_memory": "H3: Memory discipline",
+        "H4_thermal": "H4: Thermal safety",
+        "H5_battery": "H5: Battery respect",
+        "H6_budget": "H6: Budget enforcement",
+    }
+
+    pass_count = 0
+    total = 0
+    for key, label in h_labels.items():
+        h = hypotheses.get(key)
+        if not h:
+            continue
+        total += 1
+        verdict = h["verdict"]
+        if verdict == "PASS":
+            pass_count += 1
+            marker = "+"
+        elif verdict == "FAIL":
+            marker = "X"
+        else:
+            marker = "?"
+        print("  [%s] %-28s %s" % (marker, label, h["evidence"]))
+
+    print()
+    print("Result: %d/%d PASS" % (pass_count, total))
+
+
 def main() -> None:
     """CLI entry point: parse args, load trace, print stats, generate charts."""
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print("Usage: %s <trace.jsonl> [--output-dir <dir>]" % sys.argv[0])
-        print()
-        print("Analyze PerfTrace JSONL files from Edge Veda soak tests.")
-        print()
-        print("Arguments:")
-        print("  trace.jsonl       Path to JSONL trace file")
-        print("  --output-dir DIR  Directory for chart PNGs (default: same as JSONL)")
-        sys.exit(0 if sys.argv[1] in ("-h", "--help") else 1)
+    args = _parse_args(sys.argv)
 
-    trace_path = sys.argv[1]
+    if args["help"] or (
+        not args["list"]
+        and not args["compare"]
+        and args["trace_path"] is None
+    ):
+        _print_help()
+        sys.exit(0 if args["help"] else 1)
 
-    # Parse --output-dir
-    output_dir = None
-    for i, arg in enumerate(sys.argv[2:], 2):
-        if arg == "--output-dir" and i + 1 < len(sys.argv):
-            output_dir = sys.argv[i + 1]
-            break
+    # Resolve paths for experiment files
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(tools_dir, "experiments.json")
+    md_path = os.path.join(tools_dir, "EXPERIMENTS.md")
 
+    # --list mode
+    if args["list"]:
+        list_experiments(db_path)
+        return
+
+    # --compare mode
+    if args["compare"]:
+        ids = args["compare_ids"]
+        id1 = ids[0] if len(ids) >= 1 else None
+        id2 = ids[1] if len(ids) >= 2 else None
+        compare_experiments(id1, id2, db_path)
+        return
+
+    # Normal trace analysis
+    trace_path = args["trace_path"]
+    output_dir = args["output_dir"]
     if output_dir is None:
         output_dir = os.path.dirname(os.path.abspath(trace_path))
 
@@ -583,6 +1516,33 @@ def main() -> None:
             print("  %s" % c)
     elif HAS_MATPLOTLIB:
         print("No chart data available.")
+
+    # Experiment recording
+    if args["experiment"]:
+        # Load custom thresholds
+        thresholds = None
+        if args["thresholds_file"]:
+            with open(args["thresholds_file"], "r", encoding="utf-8") as f:
+                thresholds = json.load(f)
+
+        git_hash = _get_git_hash()
+        experiment_id = _generate_experiment_id(git_hash)
+
+        record = build_experiment_record(
+            experiment_id=experiment_id,
+            tag=args["tag"],
+            trace_path=trace_path,
+            entries=entries,
+            device_model=args["device_model"],
+            device_os=args["device_os"],
+            thresholds=thresholds,
+        )
+
+        _print_verdicts(record["hypotheses"])
+
+        print()
+        append_to_experiments_json(record, db_path)
+        append_to_experiments_md(record, md_path)
 
 
 if __name__ == "__main__":
