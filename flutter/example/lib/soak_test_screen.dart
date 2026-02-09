@@ -5,7 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
 
@@ -502,15 +502,18 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
 
   // ── Trace Export ─────────────────────────────────────────────────────
 
+  static const _telemetryChannel =
+      MethodChannel('com.edgeveda.edge_veda/telemetry');
+
   Future<void> _shareTrace() async {
     if (_traceFilePath == null) return;
-    final file = XFile(_traceFilePath!);
-    await Share.shareXFiles(
-      [file],
-      subject: 'Edge Veda Soak Test Trace',
-      text: 'JSONL trace from soak test - $_frameCount frames, '
-          '${_formatDuration(_elapsed)} duration',
-    );
+    try {
+      await _telemetryChannel.invokeMethod('shareFile', {
+        'path': _traceFilePath,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('Share failed: $e');
+    }
   }
 
   // ── UI ─────────────────────────────────────────────────────────────────
