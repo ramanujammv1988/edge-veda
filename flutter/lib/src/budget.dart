@@ -51,6 +51,68 @@ enum WorkloadId {
   text,
 }
 
+/// Adaptive budget profile expressing intent as multipliers on measured device baseline.
+///
+/// Instead of hardcoding absolute values, profiles multiply the actual measured
+/// performance of THIS device with THIS model. The [Scheduler] resolves
+/// profile multipliers against [MeasuredBaseline] after warm-up.
+enum BudgetProfile {
+  /// Generous headroom: p95 x2.0, battery x0.6 (strict), thermal = max(current, 1).
+  /// Best for background/secondary workloads where stability matters more than speed.
+  conservative,
+
+  /// Moderate headroom: p95 x1.5, battery x1.0 (match baseline), thermal = max(current+1, 2).
+  /// Good default for most apps.
+  balanced,
+
+  /// Tight headroom: p95 x1.1, battery x1.5 (generous), thermal = 3 (allow critical).
+  /// For latency-sensitive apps willing to trade battery/thermal for speed.
+  performance,
+}
+
+/// Snapshot of actual device performance measured during warm-up.
+///
+/// The [Scheduler] builds this after its [LatencyTracker] and
+/// [BatteryDrainTracker] have collected sufficient data. Use
+/// [Scheduler.measuredBaseline] to access it.
+class MeasuredBaseline {
+  /// Measured p95 inference latency in milliseconds.
+  final double measuredP95Ms;
+
+  /// Measured battery drain rate per 10 minutes (percentage).
+  /// Null if battery data was insufficient (e.g., plugged in, simulator).
+  final double? measuredDrainPerTenMin;
+
+  /// Current thermal state at time of measurement (0-3, or -1 if unknown).
+  final int currentThermalState;
+
+  /// Current process RSS in megabytes at time of measurement.
+  final double currentRssMb;
+
+  /// Number of latency samples collected during warm-up.
+  final int sampleCount;
+
+  /// When this baseline was captured.
+  final DateTime measuredAt;
+
+  const MeasuredBaseline({
+    required this.measuredP95Ms,
+    this.measuredDrainPerTenMin,
+    required this.currentThermalState,
+    required this.currentRssMb,
+    required this.sampleCount,
+    required this.measuredAt,
+  });
+
+  @override
+  String toString() => 'MeasuredBaseline('
+      'p95=${measuredP95Ms.toStringAsFixed(0)}ms, '
+      'drain=${measuredDrainPerTenMin?.toStringAsFixed(1) ?? "n/a"}%/10min, '
+      'thermal=$currentThermalState, '
+      'rss=${currentRssMb.toStringAsFixed(0)}MB, '
+      'samples=$sampleCount)';
+}
+
 /// Declarative resource budget for on-device inference.
 ///
 /// Immutable once created. Pass to `Scheduler.setBudget()` to activate
@@ -86,6 +148,63 @@ class EdgeVedaBudget {
     this.maxThermalLevel,
     this.memoryCeilingMb,
   });
+
+  /// Create an adaptive budget that will be resolved against measured device
+  /// performance after warm-up.
+  ///
+  /// Unlike the default constructor where you specify absolute values, this
+  /// factory stores the [profile] and lets the [Scheduler] resolve concrete
+  /// values after its trackers have warmed up. Before resolution, no budget
+  /// enforcement occurs.
+  ///
+  /// See [BudgetProfile] for multiplier details.
+  factory EdgeVedaBudget.adaptive(BudgetProfile profile) {
+    return _AdaptiveBudget(profile);
+  }
+
+  /// The adaptive profile, if this budget was created via [EdgeVedaBudget.adaptive].
+  /// Returns null for budgets created with explicit values.
+  BudgetProfile? get adaptiveProfile => null;
+
+  /// Resolve an adaptive [profile] against a [baseline] to produce concrete
+  /// budget values.
+  ///
+  /// Called internally by [Scheduler] after warm-up. Not typically called
+  /// by application code.
+  static EdgeVedaBudget resolve(BudgetProfile profile, MeasuredBaseline baseline) {
+    final int resolvedP95;
+    final double? resolvedDrain;
+    final int resolvedThermal;
+
+    switch (profile) {
+      case BudgetProfile.conservative:
+        resolvedP95 = (baseline.measuredP95Ms * 2.0).round();
+        resolvedDrain = baseline.measuredDrainPerTenMin != null
+            ? baseline.measuredDrainPerTenMin! * 0.6
+            : null;
+        resolvedThermal = baseline.currentThermalState < 1 ? 1 : baseline.currentThermalState;
+      case BudgetProfile.balanced:
+        resolvedP95 = (baseline.measuredP95Ms * 1.5).round();
+        resolvedDrain = baseline.measuredDrainPerTenMin != null
+            ? baseline.measuredDrainPerTenMin! * 1.0
+            : null;
+        final thermalFloor = baseline.currentThermalState + 1;
+        resolvedThermal = thermalFloor < 2 ? 2 : thermalFloor;
+      case BudgetProfile.performance:
+        resolvedP95 = (baseline.measuredP95Ms * 1.1).round();
+        resolvedDrain = baseline.measuredDrainPerTenMin != null
+            ? baseline.measuredDrainPerTenMin! * 1.5
+            : null;
+        resolvedThermal = 3;
+    }
+
+    return EdgeVedaBudget(
+      p95LatencyMs: resolvedP95,
+      batteryDrainPerTenMinutes: resolvedDrain,
+      maxThermalLevel: resolvedThermal,
+      memoryCeilingMb: null, // Memory is always observe-only
+    );
+  }
 
   /// Validate budget parameters for sanity.
   ///
@@ -163,4 +282,22 @@ class BudgetViolation {
       '${observeOnly ? 'observeOnly=$observeOnly, ' : ''}'
       'mitigated=$mitigated, '
       'mitigation=$mitigation)';
+}
+
+/// Internal marker subclass for adaptive budgets.
+///
+/// The [Scheduler] checks `budget.adaptiveProfile != null` to determine
+/// whether resolution is needed. Before resolution, all constraint fields
+/// are null (no enforcement). After resolution, the scheduler replaces
+/// this with a concrete [EdgeVedaBudget] containing resolved values.
+class _AdaptiveBudget extends EdgeVedaBudget {
+  final BudgetProfile profile;
+
+  _AdaptiveBudget(this.profile) : super();
+
+  @override
+  BudgetProfile? get adaptiveProfile => profile;
+
+  @override
+  String toString() => 'EdgeVedaBudget.adaptive(${profile.name})';
 }

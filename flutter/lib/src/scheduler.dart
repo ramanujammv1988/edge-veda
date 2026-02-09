@@ -61,6 +61,11 @@ class Scheduler {
   final Map<WorkloadId, _WorkloadState> _workloads = {};
   final BatteryDrainTracker _batteryTracker = BatteryDrainTracker();
 
+  MeasuredBaseline? _measuredBaseline;
+  EdgeVedaBudget? _resolvedBudget;
+  bool _latencyResolved = false;
+  bool _batteryResolved = false;
+
   Timer? _timer;
   final StreamController<BudgetViolation> _violationController =
       StreamController<BudgetViolation>.broadcast();
@@ -92,6 +97,21 @@ class Scheduler {
   /// The currently active budget, or null if none set.
   EdgeVedaBudget? get budget => _budget;
 
+  /// The measured device baseline after warm-up, or null if trackers
+  /// haven't collected enough data yet.
+  ///
+  /// Populated when the latency tracker reaches [LatencyTracker.minSamplesForEnforcement]
+  /// samples (default 20). Use this to inspect what the device actually measured.
+  MeasuredBaseline? get measuredBaseline => _measuredBaseline;
+
+  /// The concrete budget being enforced after adaptive resolution,
+  /// or null if no adaptive budget has been resolved yet.
+  ///
+  /// For static budgets (created with explicit values), this returns the
+  /// same budget passed to [setBudget]. For adaptive budgets, this returns
+  /// the resolved budget with concrete values derived from [measuredBaseline].
+  EdgeVedaBudget? get resolvedBudget => _resolvedBudget;
+
   /// Set or replace the active budget.
   ///
   /// Calls [EdgeVedaBudget.validate] and logs any warnings via
@@ -99,9 +119,16 @@ class Scheduler {
   /// at runtime.
   void setBudget(EdgeVedaBudget budget) {
     _budget = budget;
+    _resolvedBudget = budget.adaptiveProfile == null ? budget : null;
+    _latencyResolved = budget.adaptiveProfile == null;
+    _batteryResolved = budget.adaptiveProfile == null;
     final warnings = budget.validate();
     for (final w in warnings) {
       debugPrint('[Scheduler] Budget warning: $w');
+    }
+    if (budget.adaptiveProfile != null) {
+      debugPrint('[Scheduler] Adaptive budget (${budget.adaptiveProfile!.name}) '
+          'set. Enforcement deferred until warm-up completes.');
     }
   }
 
@@ -166,18 +193,148 @@ class Scheduler {
     _violationController.close();
   }
 
+  /// Attempt to resolve an adaptive budget against measured baseline.
+  ///
+  /// Two-phase resolution:
+  /// 1. First resolution when latency tracker warms up (~40s). Battery
+  ///    constraint may be null if drain data isn't available yet.
+  /// 2. Second resolution (battery only) when BatteryDrainTracker first
+  ///    produces data, updating the resolved budget with the battery
+  ///    constraint. This is a one-time update, not continuous re-resolution.
+  ///
+  /// Called on every enforcement tick. Returns true if resolution happened
+  /// or was updated this tick.
+  bool _tryResolveAdaptiveBudget(TelemetrySnapshot snap) {
+    final budget = _budget;
+    if (budget == null || budget.adaptiveProfile == null) return false;
+
+    // Both phases complete -- nothing to do
+    if (_latencyResolved && _batteryResolved) return false;
+
+    // --- Phase 1: Initial resolution gated on latency warm-up ---
+    if (!_latencyResolved) {
+      // Check if ANY workload's latency tracker is warmed up
+      bool latencyWarmedUp = false;
+      double? worstP95;
+      int totalSamples = 0;
+      for (final state in _workloads.values) {
+        totalSamples += state.latencyTracker.sampleCount;
+        if (state.latencyTracker.isWarmedUp) {
+          latencyWarmedUp = true;
+          final p95 = state.latencyTracker.p95;
+          if (p95 != null && (worstP95 == null || p95 > worstP95)) {
+            worstP95 = p95;
+          }
+        }
+      }
+
+      if (!latencyWarmedUp || worstP95 == null) return false;
+
+      // Build measured baseline (battery may be null at this point)
+      final rssMb = snap.memoryRssBytes / (1024 * 1024);
+      final drainRate = _batteryTracker.drainPerTenMinutes;
+
+      _measuredBaseline = MeasuredBaseline(
+        measuredP95Ms: worstP95,
+        measuredDrainPerTenMin: drainRate,
+        currentThermalState: snap.thermalState,
+        currentRssMb: rssMb,
+        sampleCount: totalSamples,
+        measuredAt: DateTime.now(),
+      );
+
+      // Resolve adaptive budget (battery constraint will be null if drainRate is null)
+      _resolvedBudget = EdgeVedaBudget.resolve(budget.adaptiveProfile!, _measuredBaseline!);
+      _latencyResolved = true;
+      // If battery data was already available, mark battery as resolved too
+      if (drainRate != null) _batteryResolved = true;
+
+      debugPrint('[Scheduler] Warm-up complete. Measured baseline: $_measuredBaseline');
+      debugPrint('[Scheduler] Resolved budget: $_resolvedBudget');
+      if (drainRate == null) {
+        debugPrint('[Scheduler] Battery data not yet available. '
+            'Will update battery constraint when drain tracker warms up.');
+      }
+
+      _trace?.record(
+        stage: 'budget_resolved',
+        value: worstP95,
+        extra: {
+          'profile': budget.adaptiveProfile!.name,
+          'phase': drainRate != null ? 'full' : 'latency_only',
+          'measured_p95': worstP95,
+          'measured_drain': drainRate,
+          'resolved_p95': _resolvedBudget!.p95LatencyMs,
+          'resolved_drain': _resolvedBudget!.batteryDrainPerTenMinutes,
+          'resolved_thermal': _resolvedBudget!.maxThermalLevel,
+          'samples': totalSamples,
+        },
+      );
+
+      return true;
+    }
+
+    // --- Phase 2: Battery re-resolution (latency already resolved) ---
+    if (!_batteryResolved) {
+      final drainRate = _batteryTracker.drainPerTenMinutes;
+      if (drainRate == null) return false; // Still waiting for battery data
+
+      // Update baseline with battery data
+      _measuredBaseline = MeasuredBaseline(
+        measuredP95Ms: _measuredBaseline!.measuredP95Ms,
+        measuredDrainPerTenMin: drainRate,
+        currentThermalState: _measuredBaseline!.currentThermalState,
+        currentRssMb: _measuredBaseline!.currentRssMb,
+        sampleCount: _measuredBaseline!.sampleCount,
+        measuredAt: _measuredBaseline!.measuredAt,
+      );
+
+      // Re-resolve to add battery constraint
+      _resolvedBudget = EdgeVedaBudget.resolve(budget.adaptiveProfile!, _measuredBaseline!);
+      _batteryResolved = true;
+
+      debugPrint('[Scheduler] Battery data available. Updated resolved budget: $_resolvedBudget');
+
+      _trace?.record(
+        stage: 'budget_battery_resolved',
+        value: drainRate,
+        extra: {
+          'profile': budget.adaptiveProfile!.name,
+          'measured_drain': drainRate,
+          'resolved_drain': _resolvedBudget!.batteryDrainPerTenMinutes,
+        },
+      );
+
+      return true;
+    }
+
+    return false;
+  }
+
   /// The enforcement loop -- called every 2 seconds by the periodic timer.
   Future<void> _enforce() async {
-    final budget = _budget;
-    if (budget == null) return;
+    // Early exit: no budget set at all (neither static nor adaptive)
+    if (_budget == null) return;
 
-    // 1. Poll telemetry
+    // 1. Poll telemetry -- MUST happen before resolution check so that
+    //    battery tracker gets samples during adaptive warm-up period.
+    //    Without this, battery drain data would never accumulate and
+    //    phase 2 battery re-resolution would never trigger.
     final snap = await _telemetry.snapshot();
 
-    // 2. Feed battery level to drain tracker
+    // 2. Feed battery level to drain tracker (needs continuous samples)
     _batteryTracker.addSample(snap.batteryLevel);
 
-    // 3. Check each budget constraint
+    // 3. Try adaptive resolution (no-op if already fully resolved or not adaptive)
+    _tryResolveAdaptiveBudget(snap);
+
+    // 4. Use resolved budget for enforcement. Null means adaptive budget
+    //    hasn't resolved yet (latency tracker still warming up) -- skip
+    //    enforcement this tick but telemetry/battery polling above still ran.
+    final budget = _resolvedBudget;
+    if (budget == null) return;
+
+    // 5. Check each budget constraint
     // Separate into actionable (QoS changes help) and observe-only (QoS changes don't help).
     // Memory RSS is determined by model loading -- degrading fps/resolution/tokens won't free it.
     final actionableViolations = <BudgetConstraint>[];
