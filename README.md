@@ -1,360 +1,322 @@
-# Edge Veda SDK
+# Edge Veda
 
-**On-device AI SDK — LLM, STT, TTS across Flutter, iOS, Android, React Native & Web**
+**On-device LLM inference for Flutter. Text and vision. Private by default.**
 
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/ramanujammv1988/edge-veda)
+[![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/ramanujammv1988/edge-veda/build.yml?branch=main)](https://github.com/ramanujammv1988/edge-veda/actions)
-[![Platform](https://img.shields.io/badge/platform-Flutter%20|%20iOS%20|%20Android%20|%20React%20Native%20|%20Web-blue)](https://github.com/ramanujammv1988/edge-veda)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Knowledge at the Edge** - A unified, high-performance SDK for running AI models (LLM, STT, TTS) directly on-device across Flutter, iOS, Android, React Native, and Web platforms.
+---
 
-## Demo
+## What This Is
 
-![Edge Veda Demo](demo/demo.gif)
+Edge Veda is a Flutter SDK that runs LLMs directly on mobile devices. No servers, no API keys, no data leaving the phone. Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) with Metal GPU acceleration on iOS.
 
-## Overview
+**Current state:** iOS is fully working and validated on-device. Android is scaffolded but not yet validated.
 
-Edge Veda enables developers to integrate powerful AI capabilities into their applications with:
-- **Sub-200ms latency** - Fast, responsive AI interactions
-- **100% on-device processing** - Complete privacy, zero server costs
-- **Offline-first** - Works in airplane mode and areas with poor connectivity
-- **Cross-platform** - Single C++ core with native wrappers for 6+ platforms
-- **Production-ready** - Optimized for mobile with <25MB binary footprint (excluding models)
+### Capabilities
 
-## Architecture
+| Capability | Status | Details |
+|-----------|--------|---------|
+| Text generation | Shipping | Blocking and streaming, with cancellation |
+| Vision (VLM) | Shipping | Camera-to-text via SmolVLM2-500M |
+| Multi-turn chat | Shipping | Context management, auto-summarization, chat templates |
+| Model management | Shipping | Download, cache, verify (SHA-256), delete |
+| Runtime adaptation | Shipping | Thermal/battery/memory-aware QoS with hysteresis |
+| Android | In progress | CPU build scaffolded, Vulkan GPU planned |
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Application Layer                            │
-│  ┌──────────┬──────────┬──────────┬──────────┬──────────────┐  │
-│  │ Flutter  │  Swift   │  Kotlin  │ React    │ Flutter Web  │  │
-│  │ (Dart)   │ (iOS/Mac)│ (Android)│ Native   │   (WASM)     │  │
-│  └─────┬────┴────┬─────┴────┬─────┴────┬─────┴──────┬───────┘  │
-│        │         │          │          │            │           │
-│        │ Dart    │ Swift    │   JNI    │    JSI     │  WASM    │
-│        │  FFI    │  API     │          │            │          │
-└────────┼─────────┼──────────┼──────────┼────────────┼───────────┘
-         │         │          │          │            │
-         └─────────┴──────────┴──────────┴────────────┘
-                              │
-         ┌────────────────────┴───────────────────────┐
-         │         Edge Veda C++ Core                 │
-         │  ┌──────────────────────────────────────┐ │
-         │  │   Inference Engines                  │ │
-         │  │  • llama.cpp  (LLM)                  │ │
-         │  │  • whisper.cpp (STT)                 │ │
-         │  │  • Kokoro-82M (TTS)                  │ │
-         │  └──────────────────────────────────────┘ │
-         │  ┌──────────────────────────────────────┐ │
-         │  │   Hardware Acceleration              │ │
-         │  │  • Metal (iOS/macOS)                 │ │
-         │  │  • Vulkan/NNAPI (Android)            │ │
-         │  │  • WebGPU (Web)                      │ │
-         │  └──────────────────────────────────────┘ │
-         │  ┌──────────────────────────────────────┐ │
-         │  │   Model Management                   │ │
-         │  │  • GGUF/ONNX 4-bit quantization      │ │
-         │  │  • Memory watchdog                   │ │
-         │  │  • Local storage & checksums         │ │
-         │  └──────────────────────────────────────┘ │
-         └────────────────────────────────────────────┘
-```
+---
 
-## Platform Support Matrix
+## Why On-Device
 
-| Platform | Integration Method | Hardware Acceleration | Status |
-|----------|-------------------|----------------------|---------|
-| **Flutter (iOS/Android)** | Dart FFI | Metal / Vulkan | ✅ Active |
-| **Swift (iOS/macOS)** | Swift Package (XCFramework) | Metal | ✅ Active |
-| **Kotlin (Android)** | JNI / AAR Library | Vulkan / NNAPI | ✅ Active |
-| **React Native** | JSI (TurboModules) | Metal / Vulkan | ✅ Active |
-| **Flutter Web** | WASM / Emscripten | WebGPU | 🚧 In Progress |
-| **Desktop (Win/Linux)** | Native C++ | Vulkan | 📋 Planned |
+Running inference on-device instead of calling a cloud API changes what's possible:
+
+- **Privacy** — User data never leaves the device. No terms of service, no data processing agreements, no breach risk.
+- **Latency** — No network round-trip. Streaming tokens appear immediately.
+- **Cost** — Zero per-token cost. Zero server infrastructure.
+- **Offline** — Works in airplane mode, underground, rural areas.
+- **Compliance** — Simplifies HIPAA, GDPR, SOC 2 by eliminating data transmission.
+
+The tradeoff is model size and capability. On-device models (1B–3B parameters) are less capable than cloud models (70B+), but for many use cases — summarization, structured extraction, image description, conversational Q&A — they're sufficient.
+
+---
 
 ## Quick Start
-
-### Prerequisites
-
-- **macOS/iOS**: Xcode 14+, CMake 3.21+
-- **Android**: Android NDK r25+, CMake 3.21+
-- **Flutter**: Flutter 3.10+
-- **React Native**: Node 18+, React Native 0.72+
-
-### 5-Minute Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/ramanujammv1988/edge-veda.git
-cd edge-veda
-
-# Run the setup script
-./scripts/setup.sh
-
-# Build for your platform
-make build-macos    # macOS native
-make build-ios      # iOS (requires macOS)
-make build-android  # Android
-```
-
-### Flutter Example
 
 ```dart
 import 'package:edge_veda/edge_veda.dart';
 
-void main() async {
-  // Initialize the SDK
-  final veda = EdgeVeda();
-  await veda.initialize();
+final edgeVeda = EdgeVeda();
 
-  // Load a model
-  await veda.loadModel('llama-3.2-1b-instruct-q4.gguf');
+// Initialize with a GGUF model
+await edgeVeda.init(EdgeVedaConfig(
+  modelPath: modelPath,
+  contextLength: 2048,
+  useGpu: true,
+));
 
-  // Generate streaming response
-  await for (final chunk in veda.generateStream('What is AI?')) {
-    print(chunk);
-  }
+// Stream a response
+await for (final chunk in edgeVeda.generateStream('Explain recursion briefly')) {
+  stdout.write(chunk.token);
 }
+
+await edgeVeda.dispose();
 ```
 
-### Swift Example
+### Multi-Turn Conversation
 
-```swift
-import EdgeVeda
+```dart
+final session = ChatSession(
+  edgeVeda: edgeVeda,
+  preset: SystemPromptPreset.coder,
+);
 
-let veda = EdgeVeda()
-veda.initialize()
-
-// Load model
-try await veda.loadModel("llama-3.2-1b-instruct-q4.gguf")
-
-// Generate text
-for try await chunk in veda.generateStream(prompt: "What is AI?") {
-    print(chunk)
+// Streaming conversation with context management
+await for (final chunk in session.sendStream('Write hello world in Python')) {
+  stdout.write(chunk.token);
 }
-```
 
-### Kotlin Example
-
-```kotlin
-import com.edgeveda.sdk.EdgeVeda
-
-val veda = EdgeVeda()
-veda.initialize()
-
-// Load model
-veda.loadModel("llama-3.2-1b-instruct-q4.gguf")
-
-// Generate text
-veda.generateStream("What is AI?").collect { chunk ->
-    println(chunk)
+// Model remembers the conversation
+await for (final chunk in session.sendStream('Now convert it to Rust')) {
+  stdout.write(chunk.token);
 }
+
+print('Turns: ${session.turnCount}');
+print('Context used: ${(session.contextUsage * 100).toInt()}%');
 ```
 
-## Features
+### Vision (Camera to Text)
 
-### Text-to-Text (LLM)
-- **Models**: Llama 3.2 1B, Phi-3.5 Mini
-- **Capabilities**: Streaming responses, JSON mode, system prompting
-- **Performance**: >15 tokens/sec on mid-range mobile devices
-- **API**: `generateStream(prompt, options)`
+```dart
+await edgeVeda.initVision(VisionConfig(
+  modelPath: vlmModelPath,
+  mmprojPath: mmprojPath,
+));
 
-### Speech-to-Text (STT)
-- **Models**: Whisper Tiny/Base, Moonshine Tiny
-- **Capabilities**: Real-time transcription, multi-language support, Voice Activity Detection (VAD)
-- **Performance**: Sub-500ms latency for short audio clips
-- **API**: `transcribe(audioBuffer)`
-
-### Text-to-Speech (TTS)
-- **Models**: Kokoro-82M
-- **Capabilities**: Neural synthesis, adjustable pitch/rate
-- **Performance**: <100ms time-to-first-audio
-- **API**: `speak(text)`
-
-## Build Instructions
-
-### Building the C++ Core
-
-```bash
-# Create build directory
-mkdir -p build && cd build
-
-# Configure
-cmake .. -DCMAKE_BUILD_TYPE=Release
-
-# Build
-cmake --build . -j$(nproc)
-
-# Run tests
-ctest --output-on-failure
+// Describe a camera frame
+final rgb = CameraUtils.convertBgraToRgb(frame.planes[0].bytes, 640, 480);
+final description = await edgeVeda.describeImage(rgb, width: 640, height: 480);
 ```
-
-### Building for iOS
-
-```bash
-# Build iOS framework
-make build-ios
-
-# Output: build/ios/EdgeVeda.xcframework
-```
-
-### Building for Android
-
-```bash
-# Set NDK path
-export ANDROID_NDK=/path/to/ndk
-
-# Build Android AAR
-make build-android
-
-# Output: build/android/edgeveda.aar
-```
-
-### Building for Web (WASM)
-
-```bash
-# Requires Emscripten SDK
-source /path/to/emsdk/emsdk_env.sh
-
-# Build WASM
-make build-wasm
-
-# Output: build/wasm/edgeveda.wasm
-```
-
-## Development
-
-### Project Structure
-
-```
-edge-veda/
-├── core/                   # C++ inference engine
-│   ├── include/           # Public headers
-│   ├── src/               # Implementation
-│   ├── third_party/       # Dependencies (llama.cpp, whisper.cpp)
-│   └── cmake/             # Build toolchains
-├── flutter/               # Flutter plugin
-│   ├── lib/              # Dart code
-│   ├── ios/              # iOS FFI bindings
-│   └── android/          # Android JNI bindings
-├── swift/                 # Swift Package
-│   └── Sources/
-├── kotlin/                # Kotlin/Android SDK
-│   └── src/
-├── react-native/          # React Native module
-│   └── src/
-├── web/                   # Web WASM wrapper
-│   └── src/
-├── scripts/               # Build and setup scripts
-└── .github/workflows/     # CI/CD pipelines
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run C++ tests only
-cd build && ctest
-
-# Run Flutter tests
-cd flutter && flutter test
-
-# Run platform-specific tests
-make test-ios
-make test-android
-```
-
-### Code Formatting
-
-```bash
-# Format all code
-make format
-
-# C++ (clang-format)
-find core -name "*.cpp" -o -name "*.h" | xargs clang-format -i
-
-# Dart (dart format)
-cd flutter && dart format .
-
-# Swift (swiftformat)
-swiftformat swift/
-```
-
-## Performance Benchmarks
-
-| Device | Model | Tokens/sec | Time-to-First-Token | Memory |
-|--------|-------|-----------|---------------------|---------|
-| iPhone 14 Pro | Llama 3.2 1B Q4 | 24 tok/s | 180ms | 1.2GB |
-| Samsung S23 | Llama 3.2 1B Q4 | 18 tok/s | 220ms | 1.3GB |
-| iPad Pro M2 | Phi-3.5 Mini Q4 | 32 tok/s | 150ms | 1.8GB |
-| Pixel 7 | Whisper Tiny | - | 320ms | 400MB |
-
-## Comparison vs Alternatives
-
-| Feature | Edge Veda | MediaPipe LLM | ML Kit | CoreML (Raw) |
-|---------|-----------|---------------|--------|--------------|
-| **Cross-Platform** | ✅ Flutter, RN, iOS, Android, Web | ✅ Android, Web, iOS | ✅ Android, iOS | ❌ Apple Only |
-| **LLM Support** | ✅ Llama 3.2, Phi-3.5, etc. | ✅ Gemma, Phi-2, Falcon | ❌ No LLM | ✅ Custom |
-| **Speech-to-Text** | ✅ Whisper (High Accuracy) | ❌ | ❌ | ✅ |
-| **Text-to-Speech** | ✅ High Quality Neural | ❌ | ❌ | ✅ |
-| **Privacy** | ✅ 100% On-Device | ✅ On-Device | ⚠️ Cloud/On-Device Mix | ✅ On-Device |
-
-## Documentation
-
-- [Architecture Guide](docs/architecture.md)
-- [API Reference](docs/api-reference.md)
-- [Platform Integration Guides](docs/platforms/)
-  - [Flutter Integration](docs/platforms/flutter.md)
-  - [Swift/iOS Integration](docs/platforms/swift.md)
-  - [Kotlin/Android Integration](docs/platforms/kotlin.md)
-  - [React Native Integration](docs/platforms/react-native.md)
-- [Model Management](docs/models.md)
-- [Performance Optimization](docs/performance.md)
-- [Troubleshooting](docs/troubleshooting.md)
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`make test`)
-5. Format code (`make format`)
-6. Commit changes (`git commit -m 'Add amazing feature'`)
-7. Push to branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
-
-## Roadmap
-
-- [x] **Phase 1**: C++ Core + Flutter SDK (Weeks 1-4)
-- [x] **Phase 2**: Native SDKs (Swift, Kotlin, React Native) (Weeks 5-8)
-- [ ] **Phase 3**: Voice Pipeline (STT + TTS) (Weeks 9-10)
-- [ ] **Phase 4**: Web Support (WASM) (Week 8)
-- [ ] **Phase 5**: Control Plane & OTA Updates (Week 11)
-- [ ] **Phase 6**: Production Launch & Documentation (Week 12)
-
-## License
-
-[Apache 2.0](LICENSE) - See LICENSE file for details
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/ramanujammv1988/edge-veda/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ramanujammv1988/edge-veda/discussions)
-- **Community**: [Open a Discussion](https://github.com/ramanujammv1988/edge-veda/discussions)
-
-## Acknowledgments
-
-Built with:
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) - LLM inference
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Speech-to-text
-- [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) - Text-to-speech
 
 ---
 
-**Made with ❤️ by the Edge Veda team**
+## Architecture
+
+```
+Flutter App (Dart)
+    │
+    ├── ChatSession ─── Chat templates, context summarization, presets
+    │
+    ├── EdgeVeda ─────── generate(), generateStream(), describeImage()
+    │
+    ├── StreamingWorker ── Persistent isolate, keeps model loaded
+    ├── VisionWorker ───── Persistent isolate, keeps VLM loaded
+    │
+    └── FFI Bindings ──── 37 C functions via DynamicLibrary.process()
+         │
+    XCFramework (libedge_veda_full.a)
+    ├── engine.cpp ─────── Text inference (wraps llama.cpp)
+    ├── vision_engine.cpp ─ Vision inference (wraps libmtmd)
+    ├── memory_guard.cpp ── RSS monitoring, pressure callbacks
+    └── llama.cpp b7952 ── Metal GPU, GGUF models
+```
+
+**Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. The `StreamingWorker` and `VisionWorker` maintain persistent contexts so models load once and stay in memory.
+
+---
+
+## On-Device Performance
+
+### Soak Test (Vision, Physical iPhone)
+
+Continuous vision inference over 12.6 minutes on a physical iPhone:
+
+| Metric | Value |
+|--------|-------|
+| Duration | 12.6 minutes |
+| Frames processed | 254 |
+| p50 latency | 1,412 ms/frame |
+| Crashes | 0 |
+| Model reloads | 0 |
+| Memory stability | No growth over session |
+
+### Text Inference
+
+Demo app benchmark targets (Llama 3.2 1B Q4_K_M on iPhone with Metal):
+
+| Metric | Target |
+|--------|--------|
+| Throughput | > 15 tokens/sec |
+| Peak memory | < 1.2 GB |
+
+### Runtime Adaptation
+
+The SDK monitors thermal state, battery level, and available memory, then adjusts vision inference parameters:
+
+| QoS Level | FPS | Resolution | Tokens | Trigger |
+|-----------|-----|------------|--------|---------|
+| Full | 2 | 640px | 100 | No pressure |
+| Reduced | 1 | 480px | 75 | Thermal warning, low battery, low memory |
+| Minimal | 1 | 320px | 50 | Thermal serious, very low battery |
+| Paused | 0 | — | 0 | Thermal critical, memory critical |
+
+Escalation is immediate. Restoration requires 60s cooldown per level to prevent oscillation.
+
+---
+
+## Supported Models
+
+Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
+
+| Model | Size | Quantization | Use Case |
+|-------|------|-------------|----------|
+| Llama 3.2 1B Instruct | 668 MB | Q4_K_M | General chat, instruction following |
+| Phi 3.5 Mini Instruct | 2.3 GB | Q4_K_M | Reasoning, longer context |
+| Gemma 2 2B Instruct | 1.6 GB | Q4_K_M | General purpose |
+| TinyLlama 1.1B Chat | 669 MB | Q4_K_M | Lightweight, fast inference |
+| SmolVLM2 500M | 417 MB | Q8_0 | Vision / image description |
+
+Any GGUF model compatible with llama.cpp can be loaded by file path.
+
+---
+
+## SDK API Surface
+
+### Core
+
+| Method | Description |
+|--------|-------------|
+| `EdgeVeda.init()` | Load model with config (threads, context length, GPU) |
+| `EdgeVeda.generate()` | Blocking text generation |
+| `EdgeVeda.generateStream()` | Streaming token-by-token with `CancelToken` |
+| `EdgeVeda.initVision()` | Load VLM + mmproj for image inference |
+| `EdgeVeda.describeImage()` | Generate text description from RGB bytes |
+| `EdgeVeda.getMemoryStats()` | Current RSS, peak, available memory |
+| `EdgeVeda.dispose()` | Free all native resources |
+
+### Chat Session
+
+| Method | Description |
+|--------|-------------|
+| `ChatSession.send()` | Send message, get complete response |
+| `ChatSession.sendStream()` | Send message, stream response tokens |
+| `ChatSession.reset()` | Clear history, keep model loaded |
+| `ChatSession.messages` | Read-only conversation history |
+| `ChatSession.turnCount` | Number of user turns |
+| `ChatSession.contextUsage` | Estimated context window usage (0.0–1.0) |
+
+Context overflow triggers automatic summarization at 70% capacity — older messages are condensed by the model, keeping the last 2 turns intact.
+
+### Model Management
+
+| Method | Description |
+|--------|-------------|
+| `ModelManager.downloadModel()` | Download with progress stream |
+| `ModelManager.isModelDownloaded()` | Check if cached locally |
+| `ModelManager.deleteModel()` | Remove from device storage |
+| `ModelManager.verifyModelChecksum()` | SHA-256 verification |
+
+### Production Runtime
+
+| Class | Purpose |
+|-------|---------|
+| `VisionWorker` | Persistent isolate for vision inference (model loads once) |
+| `FrameQueue` | Drop-newest backpressure for camera frames |
+| `TelemetryService` | iOS thermal, battery, memory polling |
+| `RuntimePolicy` | QoS adaptation with hysteresis |
+| `PerfTrace` | JSONL performance trace logger |
+
+---
+
+## Project Structure
+
+```
+edge-veda/
+├── core/
+│   ├── include/edge_veda.h      # C API (37 functions)
+│   ├── src/engine.cpp           # Text inference
+│   ├── src/vision_engine.cpp    # Vision inference
+│   ├── src/memory_guard.cpp     # Memory monitoring
+│   └── third_party/llama.cpp/   # llama.cpp b7952 (submodule)
+├── flutter/
+│   ├── lib/                     # Dart SDK (18 files, ~6,200 LOC)
+│   ├── ios/                     # Podspec + XCFramework
+│   ├── android/                 # Android plugin (scaffolded)
+│   ├── example/                 # Demo app (7 files, ~3,900 LOC)
+│   └── test/                    # Unit tests
+├── scripts/
+│   └── build-ios.sh             # XCFramework build pipeline
+└── TECHNICAL_AUDIT.md           # Full technical audit
+```
+
+Total: ~14,700 LOC across 32 source files.
+
+---
+
+## Building
+
+### Prerequisites
+
+- macOS with Xcode 15+ (Xcode 26 tested)
+- Flutter 3.16+
+- CMake 3.21+
+
+### Build XCFramework
+
+```bash
+./scripts/build-ios.sh --clean --release
+```
+
+This compiles llama.cpp + Edge Veda C code for device (arm64) and simulator (arm64), merges 7 static libraries into a single XCFramework.
+
+### Run Demo App
+
+```bash
+cd flutter/example
+flutter run
+```
+
+The demo app includes Chat (multi-turn with ChatSession), Vision (continuous camera scanning), Settings (model management, device info), and a Soak Test screen for automated benchmarking.
+
+---
+
+## Platform Status
+
+| Platform | GPU | Status |
+|----------|-----|--------|
+| iOS (device) | Metal | Validated on iPhone, iOS 26.2 |
+| iOS (simulator) | CPU | Working (Metal stubs) |
+| Android | CPU | Scaffolded, APK not yet validated |
+| Android (Vulkan) | Vulkan | Planned |
+
+---
+
+## North Star
+
+Ship a production-quality SDK that lets any Flutter developer add private, on-device AI to their app in under 10 lines of code — text and vision, iOS and Android, no server required.
+
+**Near-term:**
+- Validate Android CPU build and ship APK
+- Add Vulkan GPU acceleration for Android
+- Publish to pub.dev with full documentation
+
+**Medium-term:**
+- Speech-to-text (Whisper) and text-to-speech integration
+- Background inference support
+- Model fine-tuning and LoRA adapters
+
+---
+
+## Technical Audit
+
+See [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md) for a comprehensive review of the codebase — architecture, API surfaces, performance data, dependencies, and known limitations.
+
+---
+
+## License
+
+[Apache 2.0](LICENSE)
+
+## Acknowledgments
+
+Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors.
