@@ -1339,6 +1339,232 @@ def _chart_latency_distribution(
     return out_path
 
 
+# ── Trace Comparison (Managed vs Raw) ────────────────────────────────────────
+
+
+def _detect_mode(entries: List[Dict[str, Any]]) -> str:
+    """Detect benchmark mode from trace header entry."""
+    for e in entries:
+        if e.get("stage") == "benchmark_mode":
+            return e.get("mode", e.get("extra", {}).get("mode", "unknown"))
+    return "unknown"
+
+
+def compare_traces(
+    path_a: str, path_b: str, output_dir: Optional[str] = None
+) -> None:
+    """Compare two JSONL trace files and produce overlay charts + summary table.
+
+    Designed for managed-vs-raw A/B benchmarks. Loads both traces, computes
+    stats for each, prints a side-by-side comparison table, and generates
+    overlay charts showing latency, thermal, and memory over time.
+    """
+    if not os.path.isfile(path_a):
+        print("Error: file not found: %s" % path_a, file=sys.stderr)
+        return
+    if not os.path.isfile(path_b):
+        print("Error: file not found: %s" % path_b, file=sys.stderr)
+        return
+
+    entries_a = load_trace(path_a)
+    entries_b = load_trace(path_b)
+    if not entries_a or not entries_b:
+        print("Error: one or both trace files are empty", file=sys.stderr)
+        return
+
+    mode_a = _detect_mode(entries_a)
+    mode_b = _detect_mode(entries_b)
+    label_a = mode_a.upper() if mode_a != "unknown" else os.path.basename(path_a)
+    label_b = mode_b.upper() if mode_b != "unknown" else os.path.basename(path_b)
+
+    # Compute stats
+    stats_a = compute_stats(entries_a, "total_inference")
+    stats_b = compute_stats(entries_b, "total_inference")
+
+    # Duration
+    all_ts_a = [e["ts_ms"] for e in entries_a if "ts_ms" in e]
+    all_ts_b = [e["ts_ms"] for e in entries_b if "ts_ms" in e]
+    dur_a = (max(all_ts_a) - min(all_ts_a)) / 60000.0 if all_ts_a else 0
+    dur_b = (max(all_ts_b) - min(all_ts_b)) / 60000.0 if all_ts_b else 0
+
+    # Frame counts
+    frames_a = stats_a.get("count", 0)
+    frames_b = stats_b.get("count", 0)
+
+    # Thermal: max thermal state reached
+    thermal_a = [e["value"] for e in entries_a if e.get("stage") == "thermal_state"]
+    thermal_b = [e["value"] for e in entries_b if e.get("stage") == "thermal_state"]
+    max_thermal_a = int(max(thermal_a)) if thermal_a else -1
+    max_thermal_b = int(max(thermal_b)) if thermal_b else -1
+
+    # Memory: peak RSS
+    rss_a = [e["value"] for e in entries_a if e.get("stage") == "rss_bytes"]
+    rss_b = [e["value"] for e in entries_b if e.get("stage") == "rss_bytes"]
+    peak_rss_a = max(rss_a) / (1024 * 1024) if rss_a else 0
+    peak_rss_b = max(rss_b) / (1024 * 1024) if rss_b else 0
+
+    # Scheduler decisions (managed only)
+    sched_a = sum(1 for e in entries_a if e.get("stage") == "scheduler_decision")
+    sched_b = sum(1 for e in entries_b if e.get("stage") == "scheduler_decision")
+
+    # Print comparison table
+    print("=" * 62)
+    print("  EDGE-VEDA A/B BENCHMARK COMPARISON")
+    print("=" * 62)
+    print()
+    print("  A: %-20s  %s" % (label_a, os.path.basename(path_a)))
+    print("  B: %-20s  %s" % (label_b, os.path.basename(path_b)))
+    print()
+    print("  %-24s %12s %12s %10s" % ("Metric", label_a, label_b, "Delta"))
+    print("  " + "-" * 58)
+
+    def _row(name: str, va: float, vb: float, fmt: str = "%.0f",
+             suffix: str = "", lower_better: bool = True) -> None:
+        sa = fmt % va + suffix if va else "n/a"
+        sb = fmt % vb + suffix if vb else "n/a"
+        if va and vb:
+            delta = vb - va
+            pct = ((vb - va) / va * 100) if va != 0 else 0
+            arrow = "+" if delta > 0 else ""
+            is_better = (delta < 0) if lower_better else (delta > 0)
+            marker = "<" if is_better else ">"
+            sd = "%s%s%s (%s%.0f%%)" % (arrow, fmt % delta, suffix, arrow, pct)
+        else:
+            sd = "-"
+            marker = " "
+        print("  %-24s %12s %12s %s %s" % (name, sa, sb, marker, sd))
+
+    _row("Duration", dur_a, dur_b, "%.1f", " min", lower_better=False)
+    _row("Frames", frames_a, frames_b, "%.0f", "", lower_better=False)
+    _row("p50 latency", stats_a.get("p50", 0), stats_b.get("p50", 0), "%.0f", " ms")
+    _row("p95 latency", stats_a.get("p95", 0), stats_b.get("p95", 0), "%.0f", " ms")
+    _row("p99 latency", stats_a.get("p99", 0), stats_b.get("p99", 0), "%.0f", " ms")
+    _row("Max thermal", max_thermal_a, max_thermal_b, "%.0f", "", lower_better=True)
+    _row("Peak RSS", peak_rss_a, peak_rss_b, "%.0f", " MB", lower_better=True)
+    _row("Scheduler actions", sched_a, sched_b, "%.0f", "", lower_better=False)
+
+    print()
+
+    # Generate overlay charts
+    if output_dir is None:
+        output_dir = os.path.dirname(os.path.abspath(path_a))
+
+    charts = _generate_comparison_charts(
+        entries_a, entries_b, label_a, label_b, output_dir
+    )
+    if charts:
+        print("Comparison charts generated:")
+        for c in charts:
+            print("  %s" % c)
+    elif not HAS_MATPLOTLIB:
+        print("Install matplotlib for comparison charts: pip install matplotlib")
+
+
+def _generate_comparison_charts(
+    entries_a: List[Dict[str, Any]],
+    entries_b: List[Dict[str, Any]],
+    label_a: str,
+    label_b: str,
+    output_dir: str,
+) -> List[str]:
+    """Generate overlay comparison charts for two traces."""
+    if not HAS_MATPLOTLIB:
+        return []
+
+    os.makedirs(output_dir, exist_ok=True)
+    generated = []
+
+    # Color scheme: managed=teal, raw=red
+    color_a = "#00BCD4"
+    color_b = "#FF5252"
+
+    # Chart 1: Latency over time (overlay)
+    ts_a, vals_a = extract_time_series(entries_a, "total_inference")
+    ts_b, vals_b = extract_time_series(entries_b, "total_inference")
+    if ts_a and ts_b:
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot([t / 60 for t in ts_a], vals_a, linewidth=0.8,
+                color=color_a, alpha=0.8, label=label_a)
+        ax.plot([t / 60 for t in ts_b], vals_b, linewidth=0.8,
+                color=color_b, alpha=0.8, label=label_b)
+        ax.set_xlabel("Time (minutes)")
+        ax.set_ylabel("Latency (ms)")
+        ax.set_title("Inference Latency: %s vs %s" % (label_a, label_b))
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = os.path.join(output_dir, "compare_latency.png")
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+        generated.append(out_path)
+
+    # Chart 2: Thermal state over time (overlay)
+    ts_a, vals_a = extract_time_series(entries_a, "thermal_state")
+    ts_b, vals_b = extract_time_series(entries_b, "thermal_state")
+    if ts_a and ts_b:
+        fig, ax = plt.subplots(figsize=(12, 4))
+        ax.step([t / 60 for t in ts_a], vals_a, where="post", linewidth=1.5,
+                color=color_a, alpha=0.9, label=label_a)
+        ax.step([t / 60 for t in ts_b], vals_b, where="post", linewidth=1.5,
+                color=color_b, alpha=0.9, label=label_b)
+        ax.set_xlabel("Time (minutes)")
+        ax.set_ylabel("Thermal State")
+        ax.set_yticks([0, 1, 2, 3])
+        ax.set_yticklabels(["Nominal", "Fair", "Serious", "Critical"])
+        ax.set_title("Thermal State: %s vs %s" % (label_a, label_b))
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = os.path.join(output_dir, "compare_thermal.png")
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+        generated.append(out_path)
+
+    # Chart 3: Memory RSS over time (overlay)
+    ts_a, vals_a = extract_time_series(entries_a, "rss_bytes")
+    ts_b, vals_b = extract_time_series(entries_b, "rss_bytes")
+    if ts_a and ts_b:
+        fig, ax = plt.subplots(figsize=(12, 4))
+        mb_a = [v / (1024 * 1024) for v in vals_a]
+        mb_b = [v / (1024 * 1024) for v in vals_b]
+        ax.plot([t / 60 for t in ts_a], mb_a, linewidth=1.0,
+                color=color_a, alpha=0.8, label=label_a)
+        ax.plot([t / 60 for t in ts_b], mb_b, linewidth=1.0,
+                color=color_b, alpha=0.8, label=label_b)
+        ax.set_xlabel("Time (minutes)")
+        ax.set_ylabel("RSS (MB)")
+        ax.set_title("Memory RSS: %s vs %s" % (label_a, label_b))
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = os.path.join(output_dir, "compare_memory.png")
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+        generated.append(out_path)
+
+    # Chart 4: Latency distribution (side-by-side histograms)
+    lat_a = [e["value"] for e in entries_a if e.get("stage") == "total_inference"]
+    lat_b = [e["value"] for e in entries_b if e.get("stage") == "total_inference"]
+    if lat_a and lat_b and HAS_NUMPY:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        all_vals = lat_a + lat_b
+        bins = np.linspace(min(all_vals), max(all_vals), 40)
+        ax.hist(lat_a, bins=bins, alpha=0.6, color=color_a, label=label_a, edgecolor="none")
+        ax.hist(lat_b, bins=bins, alpha=0.6, color=color_b, label=label_b, edgecolor="none")
+        ax.set_xlabel("Latency (ms)")
+        ax.set_ylabel("Count")
+        ax.set_title("Latency Distribution: %s vs %s" % (label_a, label_b))
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        out_path = os.path.join(output_dir, "compare_distribution.png")
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+        generated.append(out_path)
+
+    return generated
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
@@ -1354,6 +1580,8 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
         "thresholds_file": None,
         "compare": False,
         "compare_ids": [],
+        "compare_traces": False,
+        "compare_trace_paths": [],
         "list": False,
         "help": False,
     }
@@ -1365,6 +1593,14 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
             args["help"] = True
         elif arg == "--list":
             args["list"] = True
+        elif arg == "--compare-traces":
+            args["compare_traces"] = True
+            # Collect exactly 2 file paths
+            while i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                i += 1
+                args["compare_trace_paths"].append(argv[i])
+                if len(args["compare_trace_paths"]) >= 2:
+                    break
         elif arg == "--compare":
             args["compare"] = True
             # Collect up to 2 IDs that follow (non-flag arguments)
@@ -1415,7 +1651,8 @@ def _print_help() -> None:
     print("  --device-model MODEL    Device name (e.g., 'iPhone 16 Pro')")
     print("  --device-os VERSION     OS version (e.g., 'iOS 26.2.1')")
     print("  --thresholds FILE       Custom hypothesis thresholds JSON")
-    print("  --compare [ID] [ID2]    Compare two runs (or latest two)")
+    print("  --compare [ID] [ID2]    Compare two experiment runs (or latest two)")
+    print("  --compare-traces A B    Compare two JSONL files (managed vs raw)")
     print("  --list                  List all recorded experiments")
 
 
@@ -1462,6 +1699,7 @@ def main() -> None:
     if args["help"] or (
         not args["list"]
         and not args["compare"]
+        and not args["compare_traces"]
         and args["trace_path"] is None
     ):
         _print_help()
@@ -1475,6 +1713,16 @@ def main() -> None:
     # --list mode
     if args["list"]:
         list_experiments(db_path)
+        return
+
+    # --compare-traces mode (A/B benchmark)
+    if args["compare_traces"]:
+        paths = args["compare_trace_paths"]
+        if len(paths) < 2:
+            print("Error: --compare-traces requires 2 JSONL file paths",
+                  file=sys.stderr)
+            sys.exit(1)
+        compare_traces(paths[0], paths[1], args["output_dir"])
         return
 
     # --compare mode

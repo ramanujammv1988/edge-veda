@@ -73,6 +73,9 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
   Timer? _elapsedTimer;
   DateTime? _startTime;
 
+  // Benchmark mode: managed (full Edge-Veda stack) vs raw (bare llama.cpp)
+  bool _isManaged = true;
+
   // Test configuration
   static const _testDuration = Duration(minutes: 15);
   static const _telemetryInterval = Duration(seconds: 2);
@@ -123,34 +126,44 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
           .replaceAll(':', '')
           .replaceAll('-', '')
           .substring(0, 15);
-      final traceFile = File('${docsDir.path}/soak_test_$timestamp.jsonl');
+      final modeLabel = _isManaged ? 'managed' : 'raw';
+      final traceFile = File('${docsDir.path}/soak_${modeLabel}_$timestamp.jsonl');
       _trace = PerfTrace(traceFile);
       _traceFilePath = traceFile.path;
 
-      // Step 4.5: Create Scheduler with budget
-      _scheduler = Scheduler(
-        telemetry: _telemetry,
-        perfTrace: _trace,
+      // Record benchmark mode in trace header
+      _trace!.record(
+        stage: 'benchmark_mode',
+        value: _isManaged ? 1.0 : 0.0,
+        extra: {'mode': modeLabel},
       );
-      _scheduler!.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
-      _scheduler!.registerWorkload(
-        WorkloadId.vision,
-        priority: WorkloadPriority.high,
-      );
-      _scheduler!.onBudgetViolation.listen((violation) {
-        if (!mounted) return;
-        setState(() {
-          if (violation.observeOnly) {
-            _observeOnlyViolationCount++;
-          } else {
-            _actionableViolationCount++;
-            _lastViolation = '${violation.constraint.name}: '
-                '${violation.currentValue.toStringAsFixed(1)} '
-                '(budget: ${violation.budgetValue.toStringAsFixed(1)})';
-          }
+
+      // Step 4.5: Create Scheduler with budget (managed mode only)
+      if (_isManaged) {
+        _scheduler = Scheduler(
+          telemetry: _telemetry,
+          perfTrace: _trace,
+        );
+        _scheduler!.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
+        _scheduler!.registerWorkload(
+          WorkloadId.vision,
+          priority: WorkloadPriority.high,
+        );
+        _scheduler!.onBudgetViolation.listen((violation) {
+          if (!mounted) return;
+          setState(() {
+            if (violation.observeOnly) {
+              _observeOnlyViolationCount++;
+            } else {
+              _actionableViolationCount++;
+              _lastViolation = '${violation.constraint.name}: '
+                  '${violation.currentValue.toStringAsFixed(1)} '
+                  '(budget: ${violation.budgetValue.toStringAsFixed(1)})';
+            }
+          });
         });
-      });
-      _scheduler!.start();
+        _scheduler!.start();
+      }
 
       // Step 5: Reset counters
       _frameCount = 0;
@@ -347,11 +360,17 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
     final frame = _frameQueue.dequeue();
     if (frame == null) return;
 
-    // Check Scheduler-controlled QoS -- if paused, skip inference
-    final knobs = _scheduler?.getKnobsForWorkload(WorkloadId.vision) ?? _policy.knobs;
-    if (knobs.maxFps == 0) {
-      _frameQueue.markDone();
-      return;
+    // In managed mode, Scheduler controls QoS (may pause inference).
+    // In raw mode, always run at full capacity — no throttling.
+    final QoSKnobs knobs;
+    if (_isManaged) {
+      knobs = _scheduler?.getKnobsForWorkload(WorkloadId.vision) ?? _policy.knobs;
+      if (knobs.maxFps == 0) {
+        _frameQueue.markDone();
+        return;
+      }
+    } else {
+      knobs = const QoSKnobs(maxFps: 2, resolution: 640, maxTokens: 100);
     }
     final stopwatch = Stopwatch()..start();
 
@@ -423,7 +442,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
         value: snap.availableMemoryBytes.toDouble(),
       );
 
-      // Evaluate RuntimePolicy
+      // Evaluate RuntimePolicy (display-only in managed mode, primary display in raw mode)
       final newQoS = _policy.evaluate(
         thermalState: snap.thermalState,
         batteryLevel: snap.batteryLevel,
@@ -431,12 +450,9 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
         isLowPowerMode: snap.isLowPowerMode,
       );
 
-      // RuntimePolicy QoS is display-only; Scheduler controls inference gating
-      // via getKnobsForWorkload() in _processNextFrame()
-
-      // Pick up adaptive resolution state from Scheduler
-      final baseline = _scheduler?.measuredBaseline;
-      final resolved = _scheduler?.resolvedBudget;
+      // Pick up adaptive resolution state from Scheduler (managed mode only)
+      final baseline = _isManaged ? _scheduler?.measuredBaseline : null;
+      final resolved = _isManaged ? _scheduler?.resolvedBudget : null;
 
       if (mounted) {
         setState(() {
@@ -596,13 +612,81 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
             ),
           ),
 
-          // Start/Stop button + status
+          // Mode selector + Start/Stop button
           SafeArea(
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  // Mode selector (disabled while running)
+                  if (!_isRunning && !_isInitializing) ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isManaged = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: _isManaged ? AppTheme.accent : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Text(
+                                  'Managed',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: _isManaged ? AppTheme.background : AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isManaged = false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: !_isManaged ? AppTheme.danger : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Text(
+                                  'Raw (Baseline)',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: !_isManaged ? AppTheme.textPrimary : AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!_isManaged)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'No thermal/battery protection. Device may throttle.',
+                          style: TextStyle(
+                            color: AppTheme.warning,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                  ],
                   Text(
                     _statusMessage,
                     style: const TextStyle(
@@ -636,7 +720,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
                               ),
                             )
                           : Text(
-                              _isRunning ? 'Stop' : 'Start 15-min Soak Test',
+                              _isRunning ? 'Stop' : 'Start ${_isManaged ? "Managed" : "Raw"} Soak Test',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -664,14 +748,35 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'LIVE METRICS',
-            style: TextStyle(
-              color: AppTheme.accent,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-              letterSpacing: 1.2,
-            ),
+          Row(
+            children: [
+              const Text(
+                'LIVE METRICS',
+                style: TextStyle(
+                  color: AppTheme.accent,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _isManaged ? AppTheme.accent.withValues(alpha: 0.2) : AppTheme.danger.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _isManaged ? 'MANAGED' : 'RAW',
+                  style: TextStyle(
+                    color: _isManaged ? AppTheme.accent : AppTheme.danger,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           _buildMetricRow('Frames Processed', '$_frameCount'),
@@ -716,76 +821,98 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
             _currentQoS.name,
             valueColor: _qosColor(_currentQoS),
           ),
-          const Divider(color: AppTheme.border, height: 24),
-          const Text(
-            'ADAPTIVE BUDGET',
-            style: TextStyle(
-              color: AppTheme.accent,
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-              letterSpacing: 1.0,
+          if (_isManaged) ...[
+            const Divider(color: AppTheme.border, height: 24),
+            const Text(
+              'ADAPTIVE BUDGET',
+              style: TextStyle(
+                color: AppTheme.accent,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                letterSpacing: 1.0,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          _buildMetricRow(
-            'Profile',
-            'balanced',
-          ),
-          _buildMetricRow(
-            'Status',
-            _resolvedBudget != null ? 'Resolved' : 'Warming up…',
-            valueColor: _resolvedBudget != null ? AppTheme.success : AppTheme.textTertiary,
-          ),
-          if (_measuredBaseline != null) ...[
+            const SizedBox(height: 8),
             _buildMetricRow(
-              'Measured p95',
-              '${_measuredBaseline!.measuredP95Ms.toStringAsFixed(0)} ms',
+              'Profile',
+              'balanced',
             ),
             _buildMetricRow(
-              'Measured Drain',
-              _measuredBaseline!.measuredDrainPerTenMin != null
-                  ? '${_measuredBaseline!.measuredDrainPerTenMin!.toStringAsFixed(1)}%/10min'
-                  : 'pending…',
-              valueColor: _measuredBaseline!.measuredDrainPerTenMin != null
-                  ? AppTheme.textPrimary
-                  : AppTheme.textTertiary,
+              'Status',
+              _resolvedBudget != null ? 'Resolved' : 'Warming up…',
+              valueColor: _resolvedBudget != null ? AppTheme.success : AppTheme.textTertiary,
             ),
-          ],
-          if (_resolvedBudget != null) ...[
-            _buildMetricRow(
-              'Budget p95',
-              '${_resolvedBudget!.p95LatencyMs ?? "-"} ms',
-              valueColor: AppTheme.accent,
-            ),
-            _buildMetricRow(
-              'Budget Thermal',
-              '≤ ${_resolvedBudget!.maxThermalLevel ?? "-"}',
-              valueColor: AppTheme.accent,
-            ),
-            if (_resolvedBudget!.batteryDrainPerTenMinutes != null)
+            if (_measuredBaseline != null) ...[
               _buildMetricRow(
-                'Budget Drain',
-                '≤ ${_resolvedBudget!.batteryDrainPerTenMinutes!.toStringAsFixed(1)}%/10min',
+                'Measured p95',
+                '${_measuredBaseline!.measuredP95Ms.toStringAsFixed(0)} ms',
+              ),
+              _buildMetricRow(
+                'Measured Drain',
+                _measuredBaseline!.measuredDrainPerTenMin != null
+                    ? '${_measuredBaseline!.measuredDrainPerTenMin!.toStringAsFixed(1)}%/10min'
+                    : 'pending…',
+                valueColor: _measuredBaseline!.measuredDrainPerTenMin != null
+                    ? AppTheme.textPrimary
+                    : AppTheme.textTertiary,
+              ),
+            ],
+            if (_resolvedBudget != null) ...[
+              _buildMetricRow(
+                'Budget p95',
+                '${_resolvedBudget!.p95LatencyMs ?? "-"} ms',
                 valueColor: AppTheme.accent,
               ),
-          ],
-          const Divider(color: AppTheme.border, height: 24),
-          _buildMetricRow(
-            'Actionable Violations',
-            '$_actionableViolationCount',
-            valueColor: _actionableViolationCount > 0 ? AppTheme.warning : AppTheme.success,
-          ),
-          _buildMetricRow(
-            'Observe-Only (memory)',
-            '$_observeOnlyViolationCount',
-            valueColor: AppTheme.textTertiary,
-          ),
-          if (_lastViolation != null)
+              _buildMetricRow(
+                'Budget Thermal',
+                '≤ ${_resolvedBudget!.maxThermalLevel ?? "-"}',
+                valueColor: AppTheme.accent,
+              ),
+              if (_resolvedBudget!.batteryDrainPerTenMinutes != null)
+                _buildMetricRow(
+                  'Budget Drain',
+                  '≤ ${_resolvedBudget!.batteryDrainPerTenMinutes!.toStringAsFixed(1)}%/10min',
+                  valueColor: AppTheme.accent,
+                ),
+            ],
+            const Divider(color: AppTheme.border, height: 24),
             _buildMetricRow(
-              'Last Violation',
-              _lastViolation!,
-              valueColor: AppTheme.warning,
+              'Actionable Violations',
+              '$_actionableViolationCount',
+              valueColor: _actionableViolationCount > 0 ? AppTheme.warning : AppTheme.success,
             ),
+            _buildMetricRow(
+              'Observe-Only (memory)',
+              '$_observeOnlyViolationCount',
+              valueColor: AppTheme.textTertiary,
+            ),
+            if (_lastViolation != null)
+              _buildMetricRow(
+                'Last Violation',
+                _lastViolation!,
+                valueColor: AppTheme.warning,
+              ),
+          ] else ...[
+            const Divider(color: AppTheme.border, height: 24),
+            const Text(
+              'RAW MODE',
+              style: TextStyle(
+                color: AppTheme.danger,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'No Scheduler, no budget enforcement, no QoS adaptation. '
+              'Inference runs at full capacity regardless of device pressure.',
+              style: TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 11,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -824,6 +951,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
             'QoS Knobs',
             _isRunning
                 ? () {
+                    if (!_isManaged) return 'fps=2 res=640 tok=100 (fixed)';
                     final k = _scheduler?.getKnobsForWorkload(WorkloadId.vision) ?? _policy.knobs;
                     return 'fps=${k.maxFps} res=${k.resolution} tok=${k.maxTokens}';
                   }()
