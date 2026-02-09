@@ -129,3 +129,15 @@ export 'src/model_manager.dart' show ModelManager, ModelRegistry;
 export 'src/chat_session.dart' show ChatSession;
 export 'src/chat_types.dart' show ChatMessage, ChatRole, SystemPromptPreset;
 export 'src/chat_template.dart' show ChatTemplateFormat;
+
+// Budget contracts and scheduler
+export 'src/budget.dart' show
+    EdgeVedaBudget,
+    BudgetViolation,
+    BudgetConstraint,
+    WorkloadPriority,
+    WorkloadId;
+
+export 'src/scheduler.dart' show Scheduler;
+
+export 'src/latency_tracker.dart' show LatencyTracker, BatteryDrainTracker;
