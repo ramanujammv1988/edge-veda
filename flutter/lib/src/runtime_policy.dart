@@ -103,7 +103,7 @@ class RuntimePolicy {
   QoSLevel get currentLevel => _currentLevel;
 
   /// The current QoS knob values for the active level.
-  QoSKnobs get knobs => _knobsForLevel(_currentLevel);
+  QoSKnobs get knobs => knobsForLevel(_currentLevel);
 
   /// The timestamp of the last escalation event, or null if never escalated.
   DateTime? get lastEscalation => _lastEscalation;
@@ -231,7 +231,7 @@ class RuntimePolicy {
   }
 
   /// Map a [QoSLevel] to its corresponding [QoSKnobs].
-  static QoSKnobs _knobsForLevel(QoSLevel level) {
+  static QoSKnobs knobsForLevel(QoSLevel level) {
     return switch (level) {
       QoSLevel.full => const QoSKnobs(
           maxFps: 2,
