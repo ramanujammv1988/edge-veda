@@ -1,6 +1,8 @@
-# Edge Veda
+# Edge-Veda
 
-**On-device LLM inference for Flutter. Text and vision. Private by default.**
+**A managed on-device AI runtime for Flutter that keeps text and vision models running sustainably on real phones under real constraints — private by default.**
+
+`~14,700 LOC | 37 C API functions | 18 Dart SDK files | 0 cloud dependencies`
 
 [![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/ramanujammv1988/edge-veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
@@ -8,59 +10,125 @@
 
 ---
 
-## What This Is
+## Why Edge-Veda Exists
 
-Edge Veda is a Flutter SDK that runs LLMs directly on mobile devices. No servers, no API keys, no data leaving the phone. Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) with Metal GPU acceleration on iOS.
+Modern on-device AI demos break instantly in real usage:
 
-**Current state:** iOS is fully working and validated on-device. Android is scaffolded but not yet validated.
+- Thermal throttling collapses throughput
+- Memory spikes cause silent crashes
+- Sessions longer than ~60 seconds become unstable
+- Developers have no visibility into runtime behavior
+- Debugging failures is nearly impossible
 
-### Capabilities
-
-| Capability | Status | Details |
-|-----------|--------|---------|
-| Text generation | Shipping | Blocking and streaming, with cancellation |
-| Vision (VLM) | Shipping | Camera-to-text via SmolVLM2-500M |
-| Multi-turn chat | Shipping | Context management, auto-summarization, chat templates |
-| Model management | Shipping | Download, cache, verify (SHA-256), delete |
-| Runtime adaptation | Shipping | Thermal/battery/memory-aware QoS with hysteresis |
-| Android | In progress | CPU build scaffolded, Vulkan GPU planned |
+Edge-Veda exists to make on-device AI **predictable, observable, and sustainable** — not just runnable.
 
 ---
 
-## Why On-Device
+## What Edge-Veda Is
 
-Running inference on-device instead of calling a cloud API changes what's possible:
+Edge-Veda is a **supervised on-device AI runtime** that:
 
-- **Privacy** — User data never leaves the device. No terms of service, no data processing agreements, no breach risk.
-- **Latency** — No network round-trip. Streaming tokens appear immediately.
-- **Cost** — Zero per-token cost. Zero server infrastructure.
-- **Offline** — Works in airplane mode, underground, rural areas.
-- **Compliance** — Simplifies HIPAA, GDPR, SOC 2 by eliminating data transmission.
+- Runs **text and vision models fully on device**
+- Keeps models **alive across long sessions**
+- Adapts automatically to **thermal, memory, and battery pressure**
+- Applies **runtime policies** instead of crashing
+- Provides **structured observability** for debugging and analysis
+- Is **private by default** (no network calls during inference)
 
-The tradeoff is model size and capability. On-device models (1B–3B parameters) are less capable than cloud models (70B+), but for many use cases — summarization, structured extraction, image description, conversational Q&A — they're sufficient.
+It is **not** a model, a cloud service, or a thin inference wrapper.
+
+---
+
+## What Makes Edge-Veda Different
+
+Edge-Veda is not optimized for benchmark bursts.
+It is designed for **behavior over time**.
+
+**Edge-Veda is NOT:**
+- A simple Flutter binding over llama.cpp
+- A raw inference speed optimization tool
+- A model hosting framework
+- A cloud-dependent SDK
+
+**Edge-Veda IS:**
+- A long-lived runtime with persistent workers
+- A system that supervises AI under physical device limits
+- A runtime that degrades gracefully instead of failing
+- An observable, debuggable on-device AI layer
+
+---
+
+## Current Capabilities
+
+- Persistent **text and vision inference workers** (models load once, stay in memory)
+- **Thermal, memory, and battery-aware runtime policy** with hysteresis
+- Backpressure-controlled frame processing (drop-newest, not queue-forever)
+- Multi-turn **chat session management** with auto-summarization at context overflow
+- Long-session stability validated on-device (12+ minutes, 0 crashes, 0 model reloads)
+- Structured **performance tracing** (JSONL) with offline analysis tooling
+- Fully on-device execution — zero telemetry, zero network calls during inference
+
+---
+
+## Architecture
+
+```
+Flutter App (Dart)
+    |
+    +-- ChatSession ---------- Chat templates, context summarization, system presets
+    |
+    +-- EdgeVeda ------------- generate(), generateStream(), describeImage()
+    |
+    +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
+    +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
+    |
+    +-- RuntimePolicy -------- Thermal/battery/memory QoS with hysteresis
+    +-- TelemetryService ----- iOS thermal, battery, memory polling
+    +-- FrameQueue ----------- Drop-newest backpressure for camera frames
+    +-- PerfTrace ------------ JSONL flight recorder for offline analysis
+    |
+    +-- FFI Bindings --------- 37 C functions via DynamicLibrary.process()
+         |
+    XCFramework (libedge_veda_full.a, ~15MB)
+    +-- engine.cpp ----------- Text inference (wraps llama.cpp)
+    +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
+    +-- memory_guard.cpp ----- Cross-platform RSS monitoring, pressure callbacks
+    +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
+```
+
+**Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. The `StreamingWorker` and `VisionWorker` maintain persistent contexts so models load once and stay in memory across the entire session.
 
 ---
 
 ## Quick Start
 
-```dart
-import 'package:edge_veda/edge_veda.dart';
+### Installation
 
+```yaml
+# pubspec.yaml
+dependencies:
+  edge_veda: ^1.1.0
+```
+
+### Text Generation
+
+```dart
 final edgeVeda = EdgeVeda();
 
-// Initialize with a GGUF model
 await edgeVeda.init(EdgeVedaConfig(
   modelPath: modelPath,
   contextLength: 2048,
   useGpu: true,
 ));
 
-// Stream a response
+// Streaming
 await for (final chunk in edgeVeda.generateStream('Explain recursion briefly')) {
   stdout.write(chunk.token);
 }
 
-await edgeVeda.dispose();
+// Blocking
+final response = await edgeVeda.generate('Hello from on-device AI');
+print(response.text);
 ```
 
 ### Multi-Turn Conversation
@@ -71,7 +139,6 @@ final session = ChatSession(
   preset: SystemPromptPreset.coder,
 );
 
-// Streaming conversation with context management
 await for (final chunk in session.sendStream('Write hello world in Python')) {
   stdout.write(chunk.token);
 }
@@ -82,85 +149,90 @@ await for (final chunk in session.sendStream('Now convert it to Rust')) {
 }
 
 print('Turns: ${session.turnCount}');
-print('Context used: ${(session.contextUsage * 100).toInt()}%');
+print('Context: ${(session.contextUsage * 100).toInt()}%');
+
+// Start fresh (model stays loaded)
+session.reset();
 ```
 
-### Vision (Camera to Text)
+### Continuous Vision Inference
 
 ```dart
-await edgeVeda.initVision(VisionConfig(
+final visionWorker = VisionWorker();
+await visionWorker.spawn();
+await visionWorker.initVision(
   modelPath: vlmModelPath,
   mmprojPath: mmprojPath,
-));
+  numThreads: 4,
+  contextSize: 2048,
+  useGpu: true,
+);
 
-// Describe a camera frame
-final rgb = CameraUtils.convertBgraToRgb(frame.planes[0].bytes, 640, 480);
-final description = await edgeVeda.describeImage(rgb, width: 640, height: 480);
+// Process camera frames — model stays loaded across all calls
+final result = await visionWorker.describeFrame(
+  rgbBytes, width, height,
+  prompt: 'Describe what you see.',
+  maxTokens: 100,
+);
+print(result.description);
+
+// Clean up when done
+await visionWorker.dispose();
 ```
 
 ---
 
-## Architecture
+## Runtime Supervision
 
-```
-Flutter App (Dart)
-    │
-    ├── ChatSession ─── Chat templates, context summarization, presets
-    │
-    ├── EdgeVeda ─────── generate(), generateStream(), describeImage()
-    │
-    ├── StreamingWorker ── Persistent isolate, keeps model loaded
-    ├── VisionWorker ───── Persistent isolate, keeps VLM loaded
-    │
-    └── FFI Bindings ──── 37 C functions via DynamicLibrary.process()
-         │
-    XCFramework (libedge_veda_full.a)
-    ├── engine.cpp ─────── Text inference (wraps llama.cpp)
-    ├── vision_engine.cpp ─ Vision inference (wraps libmtmd)
-    ├── memory_guard.cpp ── RSS monitoring, pressure callbacks
-    └── llama.cpp b7952 ── Metal GPU, GGUF models
-```
+Edge-Veda continuously monitors:
 
-**Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. The `StreamingWorker` and `VisionWorker` maintain persistent contexts so models load once and stay in memory.
+- Device thermal state (nominal / fair / serious / critical)
+- Available memory (`os_proc_available_memory`)
+- Battery level and Low Power Mode
 
----
-
-## On-Device Performance
-
-### Soak Test (Vision, Physical iPhone)
-
-Continuous vision inference over 12.6 minutes on a physical iPhone:
-
-| Metric | Value |
-|--------|-------|
-| Duration | 12.6 minutes |
-| Frames processed | 254 |
-| p50 latency | 1,412 ms/frame |
-| Crashes | 0 |
-| Model reloads | 0 |
-| Memory stability | No growth over session |
-
-### Text Inference
-
-Demo app benchmark targets (Llama 3.2 1B Q4_K_M on iPhone with Metal):
-
-| Metric | Target |
-|--------|--------|
-| Throughput | > 15 tokens/sec |
-| Peak memory | < 1.2 GB |
-
-### Runtime Adaptation
-
-The SDK monitors thermal state, battery level, and available memory, then adjusts vision inference parameters:
+Based on these signals, it dynamically adjusts:
 
 | QoS Level | FPS | Resolution | Tokens | Trigger |
 |-----------|-----|------------|--------|---------|
 | Full | 2 | 640px | 100 | No pressure |
-| Reduced | 1 | 480px | 75 | Thermal warning, low battery, low memory |
-| Minimal | 1 | 320px | 50 | Thermal serious, very low battery |
-| Paused | 0 | — | 0 | Thermal critical, memory critical |
+| Reduced | 1 | 480px | 75 | Thermal warning, battery <15%, memory <200MB |
+| Minimal | 1 | 320px | 50 | Thermal serious, battery <5%, memory <100MB |
+| Paused | 0 | -- | 0 | Thermal critical, memory <50MB |
 
-Escalation is immediate. Restoration requires 60s cooldown per level to prevent oscillation.
+**Escalation is immediate.** Thermal spikes are dangerous and must be responded to without delay.
+
+**Restoration requires cooldown** (60s per level) and happens one level at a time. Full recovery from paused to full takes 3 minutes. This prevents oscillation where the system rapidly alternates between high and low quality.
+
+---
+
+## Performance (Vision Soak Test)
+
+Validated on physical iPhone, continuous vision inference:
+
+| Metric | Value |
+|--------|-------|
+| Sustained runtime | 12.6 minutes |
+| Frames processed | 254 |
+| p50 latency | 1,412 ms |
+| p95 latency | 2,283 ms |
+| p99 latency | 2,597 ms |
+| Model reloads | 0 |
+| Crashes | 0 |
+| Memory stability | No growth over session |
+| Thermal handling | Graceful pause and resume |
+
+Edge-Veda is inference-limited by design — excess camera frames are intentionally dropped via backpressure, not queued.
+
+### Observability
+
+Built-in performance flight recorder writes per-frame JSONL traces:
+
+- Per-stage timing (image encode / prompt eval / decode)
+- Runtime policy transitions (QoS level changes)
+- Frame drop statistics
+- Memory and thermal telemetry
+
+Traces are analyzed offline using `tools/analyze_trace.py` (p50/p95/p99 stats, throughput charts, thermal overlays).
 
 ---
 
@@ -180,51 +252,14 @@ Any GGUF model compatible with llama.cpp can be loaded by file path.
 
 ---
 
-## SDK API Surface
+## Platform Status
 
-### Core
-
-| Method | Description |
-|--------|-------------|
-| `EdgeVeda.init()` | Load model with config (threads, context length, GPU) |
-| `EdgeVeda.generate()` | Blocking text generation |
-| `EdgeVeda.generateStream()` | Streaming token-by-token with `CancelToken` |
-| `EdgeVeda.initVision()` | Load VLM + mmproj for image inference |
-| `EdgeVeda.describeImage()` | Generate text description from RGB bytes |
-| `EdgeVeda.getMemoryStats()` | Current RSS, peak, available memory |
-| `EdgeVeda.dispose()` | Free all native resources |
-
-### Chat Session
-
-| Method | Description |
-|--------|-------------|
-| `ChatSession.send()` | Send message, get complete response |
-| `ChatSession.sendStream()` | Send message, stream response tokens |
-| `ChatSession.reset()` | Clear history, keep model loaded |
-| `ChatSession.messages` | Read-only conversation history |
-| `ChatSession.turnCount` | Number of user turns |
-| `ChatSession.contextUsage` | Estimated context window usage (0.0–1.0) |
-
-Context overflow triggers automatic summarization at 70% capacity — older messages are condensed by the model, keeping the last 2 turns intact.
-
-### Model Management
-
-| Method | Description |
-|--------|-------------|
-| `ModelManager.downloadModel()` | Download with progress stream |
-| `ModelManager.isModelDownloaded()` | Check if cached locally |
-| `ModelManager.deleteModel()` | Remove from device storage |
-| `ModelManager.verifyModelChecksum()` | SHA-256 verification |
-
-### Production Runtime
-
-| Class | Purpose |
-|-------|---------|
-| `VisionWorker` | Persistent isolate for vision inference (model loads once) |
-| `FrameQueue` | Drop-newest backpressure for camera frames |
-| `TelemetryService` | iOS thermal, battery, memory polling |
-| `RuntimePolicy` | QoS adaptation with hysteresis |
-| `PerfTrace` | JSONL performance trace logger |
+| Platform | GPU | Status |
+|----------|-----|--------|
+| iOS (device) | Metal | Fully validated on-device |
+| iOS (simulator) | CPU | Working (Metal stubs) |
+| Android | CPU | Scaffolded, validation pending |
+| Android (Vulkan) | -- | Planned |
 
 ---
 
@@ -232,24 +267,23 @@ Context overflow triggers automatic summarization at 70% capacity — older mess
 
 ```
 edge-veda/
-├── core/
-│   ├── include/edge_veda.h      # C API (37 functions)
-│   ├── src/engine.cpp           # Text inference
-│   ├── src/vision_engine.cpp    # Vision inference
-│   ├── src/memory_guard.cpp     # Memory monitoring
-│   └── third_party/llama.cpp/   # llama.cpp b7952 (submodule)
-├── flutter/
-│   ├── lib/                     # Dart SDK (18 files, ~6,200 LOC)
-│   ├── ios/                     # Podspec + XCFramework
-│   ├── android/                 # Android plugin (scaffolded)
-│   ├── example/                 # Demo app (7 files, ~3,900 LOC)
-│   └── test/                    # Unit tests
-├── scripts/
-│   └── build-ios.sh             # XCFramework build pipeline
-└── TECHNICAL_AUDIT.md           # Full technical audit
++-- core/
+|   +-- include/edge_veda.h       C API (37 functions, 621 LOC)
+|   +-- src/engine.cpp            Text inference (965 LOC)
+|   +-- src/vision_engine.cpp     Vision inference (484 LOC)
+|   +-- src/memory_guard.cpp      Memory monitoring (625 LOC)
+|   +-- third_party/llama.cpp/    llama.cpp b7952 (git submodule)
++-- flutter/
+|   +-- lib/                      Dart SDK (18 files, 6,166 LOC)
+|   +-- ios/                      Podspec + XCFramework (~15MB)
+|   +-- android/                  Android plugin (scaffolded)
+|   +-- example/                  Demo app (7 files, 3,930 LOC)
+|   +-- test/                     Unit tests (253 LOC, 14 tests)
++-- scripts/
+|   +-- build-ios.sh              XCFramework build pipeline (383 LOC)
++-- tools/
+|   +-- analyze_trace.py          Soak test JSONL analysis (589 LOC)
 ```
-
-Total: ~14,700 LOC across 32 source files.
 
 ---
 
@@ -257,8 +291,8 @@ Total: ~14,700 LOC across 32 source files.
 
 ### Prerequisites
 
-- macOS with Xcode 15+ (Xcode 26 tested)
-- Flutter 3.16+
+- macOS with Xcode 15+ (tested with Xcode 26.1)
+- Flutter 3.16+ (tested with 3.38.9)
 - CMake 3.21+
 
 ### Build XCFramework
@@ -267,7 +301,7 @@ Total: ~14,700 LOC across 32 source files.
 ./scripts/build-ios.sh --clean --release
 ```
 
-This compiles llama.cpp + Edge Veda C code for device (arm64) and simulator (arm64), merges 7 static libraries into a single XCFramework.
+Compiles llama.cpp + Edge Veda C code for device (arm64) and simulator (arm64), merges 7 static libraries into a single XCFramework.
 
 ### Run Demo App
 
@@ -280,36 +314,56 @@ The demo app includes Chat (multi-turn with ChatSession), Vision (continuous cam
 
 ---
 
-## Platform Status
+## Roadmap (Directional)
 
-| Platform | GPU | Status |
-|----------|-----|--------|
-| iOS (device) | Metal | Validated on iPhone, iOS 26.2 |
-| iOS (simulator) | CPU | Working (Metal stubs) |
-| Android | CPU | Scaffolded, APK not yet validated |
-| Android (Vulkan) | Vulkan | Planned |
-
----
-
-## North Star
-
-Ship a production-quality SDK that lets any Flutter developer add private, on-device AI to their app in under 10 lines of code — text and vision, iOS and Android, no server required.
-
-**Near-term:**
-- Validate Android CPU build and ship APK
-- Add Vulkan GPU acceleration for Android
-- Publish to pub.dev with full documentation
-
-**Medium-term:**
+- Compute budget contracts (predictable resource guarantees)
+- Long-horizon memory management
+- Semantic perception APIs (event-driven vision)
+- Android sustained runtime validation
+- On-device trace viewer and replay
 - Speech-to-text (Whisper) and text-to-speech integration
-- Background inference support
-- Model fine-tuning and LoRA adapters
 
 ---
 
-## Technical Audit
+## Who This Is For
 
-See [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md) for a comprehensive review of the codebase — architecture, API surfaces, performance data, dependencies, and known limitations.
+Edge-Veda is designed for teams building:
+
+- On-device AI assistants
+- Continuous perception apps
+- Privacy-sensitive AI systems
+- Long-running edge agents
+- Regulated or offline-first applications
+
+---
+
+## Contributing
+
+Contributions are welcome. Here's how to get started:
+
+### Areas of Interest
+
+- **Platform validation** — Android CPU/Vulkan testing on real devices
+- **Runtime policy** — New QoS strategies, thermal adaptation improvements
+- **Trace analysis** — Visualization tools, anomaly detection, regression tracking
+- **Model support** — Testing additional GGUF models, quantization profiles
+- **Example apps** — Minimal examples for specific use cases (document scanner, voice assistant, visual QA)
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Make changes and verify with `dart analyze` (SDK) and `flutter analyze` (demo app)
+4. Run tests: `cd flutter && flutter test`
+5. Commit with descriptive messages
+6. Open a Pull Request with a summary of what changed and why
+
+### Code Standards
+
+- Dart: follow standard `dart format` conventions
+- C++: match existing style in `core/src/`
+- All FFI calls must run in isolates (never on main thread)
+- New C API functions must be added to the podspec symbol whitelist
 
 ---
 
@@ -317,6 +371,6 @@ See [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md) for a comprehensive review of the c
 
 [Apache 2.0](LICENSE)
 
-## Acknowledgments
+---
 
 Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors.
