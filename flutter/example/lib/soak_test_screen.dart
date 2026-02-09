@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'app_theme.dart';
 
@@ -61,7 +62,8 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
 
   // Budget enforcement
   Scheduler? _scheduler;
-  int _budgetViolationCount = 0;
+  int _actionableViolationCount = 0;
+  int _observeOnlyViolationCount = 0;
   String? _lastViolation;
 
   // Timers
@@ -132,7 +134,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
         p95LatencyMs: 3000,             // 3 second p95 target
         batteryDrainPerTenMinutes: 5.0,  // max 5% per 10 min
         maxThermalLevel: 2,              // don't exceed "serious"
-        memoryCeilingMb: 1200,           // 1.2 GB ceiling
+        memoryCeilingMb: 2500,           // 2.5 GB ceiling (VLM model ~1.9GB)
       ));
       _scheduler!.registerWorkload(
         WorkloadId.vision,
@@ -141,10 +143,14 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       _scheduler!.onBudgetViolation.listen((violation) {
         if (!mounted) return;
         setState(() {
-          _budgetViolationCount++;
-          _lastViolation = '${violation.constraint.name}: '
-              '${violation.currentValue.toStringAsFixed(1)} '
-              '(budget: ${violation.budgetValue.toStringAsFixed(1)})';
+          if (violation.observeOnly) {
+            _observeOnlyViolationCount++;
+          } else {
+            _actionableViolationCount++;
+            _lastViolation = '${violation.constraint.name}: '
+                '${violation.currentValue.toStringAsFixed(1)} '
+                '(budget: ${violation.budgetValue.toStringAsFixed(1)})';
+          }
         });
       });
       _scheduler!.start();
@@ -155,7 +161,8 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       _lastLatencyMs = 0;
       _avgLatencyMs = 0;
       _totalLatencyMs = 0;
-      _budgetViolationCount = 0;
+      _actionableViolationCount = 0;
+      _observeOnlyViolationCount = 0;
       _lastViolation = null;
       _frameQueue.resetCounters();
       _policy.reset();
@@ -493,6 +500,19 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
     return _totalTokens / _elapsed.inSeconds;
   }
 
+  // ── Trace Export ─────────────────────────────────────────────────────
+
+  Future<void> _shareTrace() async {
+    if (_traceFilePath == null) return;
+    final file = XFile(_traceFilePath!);
+    await Share.shareXFiles(
+      [file],
+      subject: 'Edge Veda Soak Test Trace',
+      text: 'JSONL trace from soak test - $_frameCount frames, '
+          '${_formatDuration(_elapsed)} duration',
+    );
+  }
+
   // ── UI ─────────────────────────────────────────────────────────────────
 
   @override
@@ -690,9 +710,14 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
           ),
           const Divider(color: AppTheme.border, height: 24),
           _buildMetricRow(
-            'Budget Violations',
-            '$_budgetViolationCount',
-            valueColor: _budgetViolationCount > 0 ? AppTheme.warning : AppTheme.success,
+            'Actionable Violations',
+            '$_actionableViolationCount',
+            valueColor: _actionableViolationCount > 0 ? AppTheme.warning : AppTheme.success,
+          ),
+          _buildMetricRow(
+            'Observe-Only (memory)',
+            '$_observeOnlyViolationCount',
+            valueColor: AppTheme.textTertiary,
           ),
           if (_lastViolation != null)
             _buildMetricRow(
@@ -751,6 +776,21 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
                 color: AppTheme.textTertiary,
                 fontSize: 11,
                 fontFamily: 'monospace',
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _traceFilePath != null && !_isRunning
+                  ? () => _shareTrace()
+                  : null,
+              icon: const Icon(Icons.share, size: 16),
+              label: const Text('Export Trace'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.accent,
+                side: const BorderSide(color: AppTheme.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
