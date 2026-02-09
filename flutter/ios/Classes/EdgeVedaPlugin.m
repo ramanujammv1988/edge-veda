@@ -92,6 +92,8 @@
         [self handleGetAvailableMemory:result];
     } else if ([@"isLowPowerMode" isEqualToString:call.method]) {
         [self handleIsLowPowerMode:result];
+    } else if ([@"shareFile" isEqualToString:call.method]) {
+        [self handleShareFile:call result:result];
     } else {
         result(FlutterMethodNotImplemented);
     }
@@ -151,6 +153,50 @@
 - (void)handleIsLowPowerMode:(FlutterResult)result {
     BOOL lowPower = [[NSProcessInfo processInfo] isLowPowerModeEnabled];
     result(@(lowPower));
+}
+
+#pragma mark - Share
+
+/// Present iOS share sheet for a file at the given path.
+- (void)handleShareFile:(FlutterMethodCall *)call result:(FlutterResult)result {
+    NSString *filePath = call.arguments[@"path"];
+    if (!filePath) {
+        result([FlutterError errorWithCode:@"INVALID_ARG"
+                                   message:@"Missing 'path' argument"
+                                   details:nil]);
+        return;
+    }
+
+    NSURL *fileURL = [NSURL fileURLWithPath:filePath];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+        result([FlutterError errorWithCode:@"FILE_NOT_FOUND"
+                                   message:@"File not found"
+                                   details:filePath]);
+        return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIActivityViewController *activityVC =
+            [[UIActivityViewController alloc] initWithActivityItems:@[fileURL]
+                                             applicationActivities:nil];
+
+        UIViewController *rootVC =
+            [UIApplication sharedApplication].keyWindow.rootViewController;
+        if (rootVC) {
+            // iPad popover anchor
+            activityVC.popoverPresentationController.sourceView = rootVC.view;
+            activityVC.popoverPresentationController.sourceRect =
+                CGRectMake(CGRectGetMidX(rootVC.view.bounds),
+                           CGRectGetMaxY(rootVC.view.bounds) - 100,
+                           0, 0);
+            [rootVC presentViewController:activityVC animated:YES completion:nil];
+            result(@(YES));
+        } else {
+            result([FlutterError errorWithCode:@"NO_VIEW"
+                                       message:@"No root view controller"
+                                       details:nil]);
+        }
+    });
 }
 
 - (void)detachFromEngineForRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {
