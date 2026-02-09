@@ -35,22 +35,12 @@ Edge-Veda is a **supervised on-device AI runtime** that:
 - Provides **structured observability** for debugging and analysis
 - Is **private by default** (no network calls during inference)
 
-It is **not** a model, a cloud service, or a thin inference wrapper.
-
 ---
 
 ## What Makes Edge-Veda Different
 
-Edge-Veda is not optimized for benchmark bursts.
-It is designed for **behavior over time**.
+Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 
-**Edge-Veda is NOT:**
-- A simple Flutter binding over llama.cpp
-- A raw inference speed optimization tool
-- A model hosting framework
-- A cloud-dependent SDK
-
-**Edge-Veda IS:**
 - A long-lived runtime with persistent workers
 - A system that supervises AI under physical device limits
 - A runtime that degrades gracefully instead of failing
