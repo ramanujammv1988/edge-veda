@@ -143,6 +143,8 @@ internal enum FFIBridge {
     }
 
     /// Generate text with streaming
+    /// - Parameter onStreamCreated: Called with the ev_stream handle immediately after creation,
+    ///   allowing the caller to store it for external cancellation via ev_stream_cancel().
     static func generateStream(
         ctx: ev_context,
         prompt: String,
@@ -154,6 +156,7 @@ internal enum FFIBridge {
         frequencyPenalty: Float,
         presencePenalty: Float,
         stopSequences: [String],
+        onStreamCreated: ((ev_stream) -> Void)? = nil,
         onToken: @escaping (String) -> Void
     ) async throws {
         var params = ev_generation_params()
@@ -195,6 +198,9 @@ internal enum FFIBridge {
         }
         
         defer { ev_stream_free(stream) }
+        
+        // Notify caller of stream handle for external cancellation
+        onStreamCreated?(stream)
         
         // Read tokens from stream
         while ev_stream_has_next(stream) {

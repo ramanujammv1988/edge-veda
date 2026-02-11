@@ -248,8 +248,9 @@ class EdgeVeda private constructor(
     /**
      * Cancel an ongoing generation.
      *
-     * Cancels any active generation or stream operation by cancelling the underlying
-     * coroutine Job. This will interrupt the inference operation at the Kotlin level.
+     * Cancels any active generation or stream operation. For streaming, this sets
+     * a cancel flag in the native bridge that aborts token delivery at the JNI
+     * callback level, then cancels the Kotlin coroutine Jobs.
      *
      * @throws IllegalStateException if not initialized or closed
      */
@@ -257,6 +258,8 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         withContext(Dispatchers.Default) {
+            // Signal the native bridge to abort token delivery in the stream callback
+            nativeBridge.cancelCurrentStream()
             // Cancel both generation and stream jobs if they exist
             currentGenerationJob.getAndSet(null)?.cancel()
             currentStreamJob.getAndSet(null)?.cancel()

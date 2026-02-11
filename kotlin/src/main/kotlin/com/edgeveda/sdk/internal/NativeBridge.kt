@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class NativeBridge {
 
     private val disposed = AtomicBoolean(false)
+    private val streamCancelFlag = AtomicBoolean(false)
     private var nativeHandle: Long = 0L
 
     init {
@@ -95,9 +96,16 @@ internal class NativeBridge {
     ) {
         checkNotDisposed()
 
+        // Reset cancel flag before starting a new stream
+        streamCancelFlag.set(false)
+
         // Create a callback bridge that the native code can invoke
         val callbackBridge = object : StreamCallbackBridge {
             override fun onToken(token: String) {
+                // Check cancel flag before delivering token
+                if (streamCancelFlag.get()) {
+                    throw kotlinx.coroutines.CancellationException("Stream cancelled via cancelCurrentStream()")
+                }
                 // Note: We can't use suspend here directly with JNI
                 // In production, this would need a more sophisticated approach
                 // using coroutine contexts or channels
@@ -123,6 +131,17 @@ internal class NativeBridge {
         if (!success) {
             throw EdgeVedaException.GenerationError("Native stream generation failed")
         }
+    }
+
+    /**
+     * Cancel the current streaming generation.
+     *
+     * Sets an atomic flag that is checked in the StreamCallbackBridge.onToken()
+     * callback. When the flag is set, the callback throws a CancellationException
+     * which aborts the native generation loop.
+     */
+    fun cancelCurrentStream() {
+        streamCancelFlag.set(true)
     }
 
     /**

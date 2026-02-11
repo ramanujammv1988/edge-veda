@@ -22,6 +22,11 @@ public actor EdgeVeda {
     private var currentGenerationTask: Task<String, Error>?
     private var currentStreamTask: Task<Void, Never>?
     
+    /// The active C-level ev_stream handle for cancellation propagation.
+    /// Marked nonisolated(unsafe) because ev_stream_cancel() is thread-safe (atomic flag)
+    /// and we need to call it from the onTermination closure outside actor isolation.
+    private nonisolated(unsafe) var currentStream: ev_stream?
+    
     /// Memory warning observer
     private var memoryWarningObserver: Any?
     
@@ -146,10 +151,14 @@ public actor EdgeVeda {
                         repeatPenalty: options.repeatPenalty,
                         frequencyPenalty: 0.0,
                         presencePenalty: 0.0,
-                        stopSequences: options.stopSequences
+                        stopSequences: options.stopSequences,
+                        onStreamCreated: { [weak self] stream in
+                            self?.currentStream = stream
+                        }
                     ) { @Sendable token in
                         continuation.yield(token)
                     }
+                    self.currentStream = nil
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -162,6 +171,11 @@ public actor EdgeVeda {
             }
             
             continuation.onTermination = { [weak self] _ in
+                // Cancel at C level first (thread-safe atomic flag)
+                if let stream = self?.currentStream {
+                    FFIBridge.cancelStream(stream)
+                    self?.currentStream = nil
+                }
                 task.cancel()
                 Task { [weak self] in
                     await self?.clearStreamTask()
@@ -251,13 +265,20 @@ public actor EdgeVeda {
     }
 
     /// Cancel an ongoing generation
-    /// Cancels the current generation task at the Swift concurrency level
+    /// Cancels at both the C core level (ev_stream_cancel) and Swift concurrency level
     public func cancelGeneration() async throws {
         guard context != nil else {
             throw EdgeVedaError.modelNotLoaded
         }
         
-        // Cancel any active Swift tasks
+        // Cancel at C level first — ev_stream_cancel sets an atomic bool
+        // that ev_stream_next checks before each token, causing it to return early
+        if let stream = currentStream {
+            FFIBridge.cancelStream(stream)
+            currentStream = nil
+        }
+        
+        // Then cancel Swift concurrency tasks
         currentGenerationTask?.cancel()
         currentGenerationTask = nil
         
