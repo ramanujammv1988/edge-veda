@@ -134,6 +134,26 @@ internal class NativeBridge {
     }
 
     /**
+     * Set memory pressure callback.
+     *
+     * @param callback Callback to invoke on memory pressure events (null to unregister)
+     * @return true if successful, false otherwise
+     */
+    fun setMemoryPressureCallback(callback: ((Long, Long) -> Unit)?): Boolean {
+        checkNotDisposed()
+        val callbackBridge = if (callback != null) {
+            object : MemoryPressureCallback {
+                override fun onMemoryPressure(currentBytes: Long, limitBytes: Long) {
+                    callback(currentBytes, limitBytes)
+                }
+            }
+        } else {
+            null
+        }
+        return nativeSetMemoryPressureCallback(nativeHandle, callbackBridge)
+    }
+
+    /**
      * Unload the model from memory.
      */
     fun unloadModel() {
@@ -211,6 +231,72 @@ internal class NativeBridge {
 
     private external fun nativeDispose(handle: Long)
 
+    // Context Management
+    private external fun nativeIsValid(handle: Long): Boolean
+
+    private external fun nativeReset(handle: Long): Boolean
+
+    // Memory Management
+    private external fun nativeSetMemoryLimit(handle: Long, limitBytes: Long): Boolean
+
+    private external fun nativeMemoryCleanup(handle: Long): Boolean
+
+    private external fun nativeSetMemoryPressureCallback(handle: Long, callback: MemoryPressureCallback?): Boolean
+
+    private external fun nativeGetMemoryStats(handle: Long): LongArray?
+
+    // Model Information
+    private external fun nativeGetModelInfo(handle: Long): Array<String>?
+
+    // Backend Detection (static methods)
+    private external fun nativeDetectBackend(): Int
+
+    private external fun nativeIsBackendAvailable(backend: Int): Boolean
+
+    private external fun nativeGetBackendName(backend: Int): String
+
+    // Utility Functions (static methods)
+    private external fun nativeGetVersion(): String
+
+    private external fun nativeSetVerbose(enable: Boolean)
+
+    // Stream Control
+    private external fun nativeCancelStream(streamHandle: Long)
+
+    // Vision API
+    private external fun nativeVisionCreate(): Long
+
+    private external fun nativeVisionInit(
+        handle: Long,
+        modelPath: String,
+        mmprojPath: String,
+        numThreads: Int,
+        contextSize: Int,
+        batchSize: Int,
+        memoryLimitBytes: Long,
+        gpuLayers: Int,
+        useMmap: Boolean
+    ): Boolean
+
+    private external fun nativeVisionDescribe(
+        handle: Long,
+        imageBytes: ByteArray,
+        width: Int,
+        height: Int,
+        prompt: String,
+        maxTokens: Int,
+        temperature: Float,
+        topP: Float,
+        topK: Int,
+        repeatPenalty: Float
+    ): String?
+
+    private external fun nativeVisionIsValid(handle: Long): Boolean
+
+    private external fun nativeVisionGetLastTimings(handle: Long): DoubleArray?
+
+    private external fun nativeVisionDispose(handle: Long)
+
     companion object {
         private const val LIBRARY_NAME = "edgeveda_jni"
         private val libraryLoaded = AtomicBoolean(false)
@@ -272,4 +358,11 @@ internal class NativeBridge {
  */
 internal interface StreamCallbackBridge {
     fun onToken(token: String)
+}
+
+/**
+ * Internal callback interface for memory pressure events.
+ */
+internal interface MemoryPressureCallback {
+    fun onMemoryPressure(currentBytes: Long, limitBytes: Long)
 }

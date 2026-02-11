@@ -24,7 +24,16 @@ let package = Package(
             path: "Sources/CEdgeVeda",
             publicHeadersPath: "include",
             cSettings: [
-                .headerSearchPath("include")
+                .headerSearchPath("include"),
+                .headerSearchPath("../../core/include")
+            ],
+            linkerSettings: [
+                // Link against the edge_veda core library
+                .linkedLibrary("edge_veda"),
+                .linkedLibrary("c++"),
+                // Add library search path for the compiled core library
+                .unsafeFlags(["-L../../core/build"], .when(configuration: .debug)),
+                .unsafeFlags(["-L../../core/build"], .when(configuration: .release))
             ]
         ),
 

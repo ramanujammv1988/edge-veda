@@ -5,332 +5,551 @@ import CEdgeVeda
 /// Handles all unsafe pointer operations and C interop
 internal enum FFIBridge {
 
-    // MARK: - Model Management
+    // MARK: - Memory Pressure Callback Management
 
-    /// Load a model from disk
-    static func loadModel(
-        path: String,
-        backend: Backend,
-        threads: Int,
-        contextSize: Int
-    ) throws -> OpaquePointer {
-        // Create C config struct
-        var config = edge_veda_config()
-        config.backend = backend.cValue
-        config.threads = Int32(threads)
-        config.context_size = Int32(contextSize)
-        config.verbose = false
+    /// Storage for memory pressure callbacks
+    private static var memoryCallbacks: [UnsafeMutableRawPointer: (UInt64, UInt64) -> Void] = [:]
+    private static var callbackLock = NSLock()
 
-        // Call C function
-        var errorBuffer = [CChar](repeating: 0, count: 512)
-        guard let handle = path.withCString({ pathPtr in
-            edge_veda_load_model(pathPtr, &config, &errorBuffer)
-        }) else {
-            let errorMessage = String(cString: errorBuffer)
-            if errorMessage.contains("file not found") || errorMessage.contains("No such file") {
-                throw EdgeVedaError.modelNotFound(path: path)
-            } else if errorMessage.contains("out of memory") || errorMessage.contains("OOM") {
-                throw EdgeVedaError.outOfMemory
-            } else {
-                throw EdgeVedaError.loadFailed(reason: errorMessage)
-            }
-        }
-
-        return handle
+    /// C callback trampoline for memory pressure events
+    private static let cMemoryCallback: ev_memory_pressure_callback = { userDataPtr, currentBytes, limitBytes in
+        guard let userDataPtr = userDataPtr else { return }
+        
+        callbackLock.lock()
+        let ctxPtr = userDataPtr.assumingMemoryBound(to: ev_context_impl.self)
+        let callback = memoryCallbacks[UnsafeMutableRawPointer(ctxPtr)]
+        callbackLock.unlock()
+        
+        callback?(UInt64(currentBytes), UInt64(limitBytes))
     }
 
-    /// Unload a model and free resources
-    static func unloadModel(handle: OpaquePointer) {
-        edge_veda_free_model(handle)
+    // MARK: - Context Management
+
+    /// Initialize Edge Veda context with configuration
+    static func initContext(
+        modelPath: String,
+        backend: Backend,
+        threads: Int,
+        contextSize: Int,
+        gpuLayers: Int,
+        batchSize: Int,
+        useMmap: Bool,
+        useMlock: Bool,
+        seed: Int
+    ) throws -> ev_context {
+        var config = ev_config()
+        
+        // Set configuration
+        modelPath.withCString { pathPtr in
+            config.model_path = pathPtr
+        }
+        config.backend = backend.cValue
+        config.num_threads = Int32(threads)
+        config.context_size = Int32(contextSize)
+        config.batch_size = Int32(batchSize)
+        config.memory_limit_bytes = 0 // No limit by default
+        config.auto_unload_on_memory_pressure = false
+        config.gpu_layers = Int32(gpuLayers)
+        config.use_mmap = useMmap
+        config.use_mlock = useMlock
+        config.seed = Int32(seed)
+        config.reserved = nil
+
+        var error: ev_error_t = EV_SUCCESS
+        
+        // Initialize context
+        let ctx = modelPath.withCString { pathPtr in
+            var mutableConfig = config
+            mutableConfig.model_path = pathPtr
+            return ev_init(&mutableConfig, &error)
+        }
+        
+        // Check for errors
+        if ctx == nil || error != EV_SUCCESS {
+            throw mapError(error, ctx: ctx)
+        }
+        
+        return ctx!
+    }
+
+    /// Free Edge Veda context
+    static func freeContext(_ ctx: ev_context) {
+        ev_free(ctx)
+    }
+
+    /// Check if context is valid
+    static func isValid(_ ctx: ev_context) -> Bool {
+        return ev_is_valid(ctx)
     }
 
     // MARK: - Text Generation
 
     /// Generate text synchronously
     static func generate(
-        handle: OpaquePointer,
+        ctx: ev_context,
         prompt: String,
         maxTokens: Int,
         temperature: Float,
         topP: Float,
         topK: Int,
         repeatPenalty: Float,
+        frequencyPenalty: Float,
+        presencePenalty: Float,
         stopSequences: [String]
     ) throws -> String {
-        // Create generation params
-        var params = edge_veda_generate_params()
+        var params = ev_generation_params()
         params.max_tokens = Int32(maxTokens)
         params.temperature = temperature
         params.top_p = topP
         params.top_k = Int32(topK)
         params.repeat_penalty = repeatPenalty
+        params.frequency_penalty = frequencyPenalty
+        params.presence_penalty = presencePenalty
+        params.reserved = nil
 
         // Convert stop sequences to C array
-        let stopSeqPointers = stopSequences.map { $0.withCString { strdup($0) } }
-        defer {
-            stopSeqPointers.forEach { free($0) }
+        var cStopSequences: [UnsafePointer<CChar>?] = []
+        var managedStrings: [ContiguousArray<CChar>] = []
+        
+        for seq in stopSequences {
+            let cString = seq.utf8CString
+            managedStrings.append(ContiguousArray(cString))
+            cStopSequences.append(managedStrings.last!.withUnsafeBufferPointer { $0.baseAddress })
         }
+        cStopSequences.append(nil) // NULL terminator
+        
+        params.num_stop_sequences = Int32(stopSequences.count)
 
-        var cStopSequences = stopSeqPointers
-        params.stop_sequences = &cStopSequences
-        params.stop_sequences_count = Int32(stopSequences.count)
-
+        var output: UnsafeMutablePointer<CChar>?
+        let error: ev_error_t
+        
         // Call C function
-        var errorBuffer = [CChar](repeating: 0, count: 512)
-        guard let resultPtr = prompt.withCString({ promptPtr in
-            edge_veda_generate(handle, promptPtr, &params, &errorBuffer)
-        }) else {
-            let errorMessage = String(cString: errorBuffer)
-            throw EdgeVedaError.generationFailed(reason: errorMessage)
+        error = prompt.withCString { promptPtr in
+            cStopSequences.withUnsafeBufferPointer { stopPtr in
+                var mutableParams = params
+                mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                return ev_generate(ctx, promptPtr, &mutableParams, &output)
+            }
         }
-
-        defer { edge_veda_free_string(resultPtr) }
+        
+        // Check for errors
+        guard error == EV_SUCCESS, let resultPtr = output else {
+            throw mapError(error, ctx: ctx)
+        }
+        
+        defer { ev_free_string(resultPtr) }
         return String(cString: resultPtr)
     }
 
-    /// Generate text with streaming callback
+    /// Generate text with streaming
     static func generateStream(
-        handle: OpaquePointer,
+        ctx: ev_context,
         prompt: String,
         maxTokens: Int,
         temperature: Float,
         topP: Float,
         topK: Int,
         repeatPenalty: Float,
+        frequencyPenalty: Float,
+        presencePenalty: Float,
         stopSequences: [String],
         onToken: @escaping (String) -> Void
     ) async throws {
-        // Create generation params
-        var params = edge_veda_generate_params()
+        var params = ev_generation_params()
         params.max_tokens = Int32(maxTokens)
         params.temperature = temperature
         params.top_p = topP
         params.top_k = Int32(topK)
         params.repeat_penalty = repeatPenalty
+        params.frequency_penalty = frequencyPenalty
+        params.presence_penalty = presencePenalty
+        params.reserved = nil
 
         // Convert stop sequences to C array
-        let stopSeqPointers = stopSequences.map { $0.withCString { strdup($0) } }
-        defer {
-            stopSeqPointers.forEach { free($0) }
+        var cStopSequences: [UnsafePointer<CChar>?] = []
+        var managedStrings: [ContiguousArray<CChar>] = []
+        
+        for seq in stopSequences {
+            let cString = seq.utf8CString
+            managedStrings.append(ContiguousArray(cString))
+            cStopSequences.append(managedStrings.last!.withUnsafeBufferPointer { $0.baseAddress })
         }
+        cStopSequences.append(nil) // NULL terminator
+        
+        params.num_stop_sequences = Int32(stopSequences.count)
 
-        var cStopSequences = stopSeqPointers
-        params.stop_sequences = &cStopSequences
-        params.stop_sequences_count = Int32(stopSequences.count)
-
-        // Create callback context
-        let callbackContext = UnsafeMutablePointer<(String) -> Void>.allocate(capacity: 1)
-        callbackContext.initialize(to: onToken)
-        defer {
-            callbackContext.deinitialize(count: 1)
-            callbackContext.deallocate()
-        }
-
-        // C callback wrapper
-        let callback: edge_veda_stream_callback = { tokenPtr, _, contextPtr in
-            guard let tokenPtr = tokenPtr,
-                  let contextPtr = contextPtr else {
-                return
+        var error: ev_error_t = EV_SUCCESS
+        
+        // Start streaming
+        let stream = prompt.withCString { promptPtr in
+            cStopSequences.withUnsafeBufferPointer { stopPtr in
+                var mutableParams = params
+                mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                return ev_generate_stream(ctx, promptPtr, &mutableParams, &error)
             }
-
+        }
+        
+        guard error == EV_SUCCESS, let stream = stream else {
+            throw mapError(error, ctx: ctx)
+        }
+        
+        defer { ev_stream_free(stream) }
+        
+        // Read tokens from stream
+        while ev_stream_has_next(stream) {
+            var tokenError: ev_error_t = EV_SUCCESS
+            guard let tokenPtr = ev_stream_next(stream, &tokenError) else {
+                if tokenError != EV_ERROR_STREAM_ENDED {
+                    throw mapError(tokenError, ctx: ctx)
+                }
+                break
+            }
+            
+            defer { ev_free_string(tokenPtr) }
             let token = String(cString: tokenPtr)
-            let onToken = contextPtr.assumingMemoryBound(to: ((String) -> Void).self).pointee
             onToken(token)
         }
+    }
 
-        // Call C streaming function
-        var errorBuffer = [CChar](repeating: 0, count: 512)
-        let result = prompt.withCString { promptPtr in
-            edge_veda_generate_stream(
-                handle,
-                promptPtr,
-                &params,
-                callback,
-                callbackContext,
-                &errorBuffer
-            )
+    /// Cancel streaming generation
+    static func cancelStream(_ stream: ev_stream) {
+        ev_stream_cancel(stream)
+    }
+
+    // MARK: - Memory Management
+
+    /// Get memory usage statistics
+    static func getMemoryUsage(ctx: ev_context) throws -> (current: UInt64, peak: UInt64, model: UInt64, context: UInt64) {
+        var stats = ev_memory_stats()
+        let error = ev_get_memory_usage(ctx, &stats)
+        
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: ctx)
         }
+        
+        return (
+            current: UInt64(stats.current_bytes),
+            peak: UInt64(stats.peak_bytes),
+            model: UInt64(stats.model_bytes),
+            context: UInt64(stats.context_bytes)
+        )
+    }
 
-        if result != 0 {
-            let errorMessage = String(cString: errorBuffer)
-            throw EdgeVedaError.generationFailed(reason: errorMessage)
+    /// Set memory limit
+    static func setMemoryLimit(ctx: ev_context, limitBytes: UInt64) throws {
+        let error = ev_set_memory_limit(ctx, limitBytes)
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: ctx)
+        }
+    }
+
+    /// Trigger memory cleanup
+    static func memoryCleanup(ctx: ev_context) throws {
+        let error = ev_memory_cleanup(ctx)
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: ctx)
+        }
+    }
+
+    /// Set memory pressure callback
+    static func setMemoryPressureCallback(
+        ctx: ev_context,
+        callback: ((UInt64, UInt64) -> Void)?
+    ) throws {
+        let ctxPtr = UnsafeMutableRawPointer(ctx)
+        
+        callbackLock.lock()
+        defer { callbackLock.unlock() }
+        
+        if let callback = callback {
+            // Register callback
+            memoryCallbacks[ctxPtr] = callback
+            let error = ev_set_memory_pressure_callback(ctx, cMemoryCallback, ctxPtr)
+            guard error == EV_SUCCESS else {
+                memoryCallbacks.removeValue(forKey: ctxPtr)
+                throw mapError(error, ctx: ctx)
+            }
+        } else {
+            // Unregister callback
+            memoryCallbacks.removeValue(forKey: ctxPtr)
+            let error = ev_set_memory_pressure_callback(ctx, nil, nil)
+            guard error == EV_SUCCESS else {
+                throw mapError(error, ctx: ctx)
+            }
         }
     }
 
     // MARK: - Model Information
 
-    /// Get current memory usage
-    static func getMemoryUsage(handle: OpaquePointer) -> UInt64 {
-        return edge_veda_get_memory_usage(handle)
+    /// Get model information
+    static func getModelInfo(ctx: ev_context) throws -> [String: String] {
+        var info = ev_model_info()
+        let error = ev_get_model_info(ctx, &info)
+        
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: ctx)
+        }
+        
+        var result: [String: String] = [:]
+        
+        if let name = info.name {
+            result["name"] = String(cString: name)
+        }
+        if let architecture = info.architecture {
+            result["architecture"] = String(cString: architecture)
+        }
+        result["parameters"] = String(info.num_parameters)
+        result["contextLength"] = String(info.context_length)
+        result["embeddingDim"] = String(info.embedding_dim)
+        result["numLayers"] = String(info.num_layers)
+        
+        return result
     }
 
-    /// Get model metadata
-    static func getModelMetadata(handle: OpaquePointer) -> [String: String] {
-        var metadata: [String: String] = [:]
+    // MARK: - Context Reset
 
-        // Get metadata count
-        let count = edge_veda_get_metadata_count(handle)
-        guard count > 0 else {
-            return metadata
+    /// Reset context state
+    static func resetContext(ctx: ev_context) throws {
+        let error = ev_reset(ctx)
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: ctx)
         }
+    }
 
-        // Iterate through metadata entries
-        for i in 0..<count {
-            var keyBuffer = [CChar](repeating: 0, count: 256)
-            var valueBuffer = [CChar](repeating: 0, count: 1024)
+    // MARK: - Vision API
 
-            if edge_veda_get_metadata_entry(handle, i, &keyBuffer, &valueBuffer) == 0 {
-                let key = String(cString: keyBuffer)
-                let value = String(cString: valueBuffer)
-                metadata[key] = value
+    /// Initialize vision context
+    static func initVisionContext(
+        modelPath: String,
+        mmprojPath: String,
+        threads: Int,
+        contextSize: Int,
+        gpuLayers: Int,
+        batchSize: Int,
+        useMmap: Bool
+    ) throws -> ev_vision_context {
+        var config = ev_vision_config()
+        config.num_threads = Int32(threads)
+        config.context_size = Int32(contextSize)
+        config.batch_size = Int32(batchSize)
+        config.memory_limit_bytes = 0
+        config.gpu_layers = Int32(gpuLayers)
+        config.use_mmap = useMmap
+        config.reserved = nil
+
+        var error: ev_error_t = EV_SUCCESS
+        
+        let ctx = modelPath.withCString { modelPtr in
+            mmprojPath.withCString { mmprojPtr in
+                var mutableConfig = config
+                mutableConfig.model_path = modelPtr
+                mutableConfig.mmproj_path = mmprojPtr
+                return ev_vision_init(&mutableConfig, &error)
             }
         }
-
-        return metadata
-    }
-
-    /// Reset context/KV cache
-    static func resetContext(handle: OpaquePointer) {
-        edge_veda_reset_context(handle)
-    }
-
-    // MARK: - Helper Functions
-
-    /// Convert Swift string array to C string array
-    private static func stringArrayToC(_ strings: [String]) -> UnsafeMutablePointer<UnsafeMutablePointer<CChar>?> {
-        let cStrings = strings.map { $0.withCString { strdup($0) } }
-        let cArray = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: cStrings.count + 1)
-
-        for (index, cString) in cStrings.enumerated() {
-            cArray[index] = cString
+        
+        guard ctx != nil && error == EV_SUCCESS else {
+            throw mapVisionError(error, ctx: ctx)
         }
-        cArray[cStrings.count] = nil
-
-        return cArray
+        
+        return ctx!
     }
 
-    /// Free C string array
-    private static func freeCStringArray(_ cArray: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>, count: Int) {
-        for i in 0..<count {
-            if let cString = cArray[i] {
-                free(cString)
+    /// Free vision context
+    static func freeVisionContext(_ ctx: ev_vision_context) {
+        ev_vision_free(ctx)
+    }
+
+    /// Check if vision context is valid
+    static func isVisionValid(_ ctx: ev_vision_context) -> Bool {
+        return ev_vision_is_valid(ctx)
+    }
+
+    /// Describe image
+    static func describeImage(
+        ctx: ev_vision_context,
+        imageBytes: [UInt8],
+        width: Int,
+        height: Int,
+        prompt: String,
+        maxTokens: Int,
+        temperature: Float,
+        topP: Float,
+        topK: Int,
+        repeatPenalty: Float
+    ) throws -> String {
+        var params = ev_generation_params()
+        params.max_tokens = Int32(maxTokens)
+        params.temperature = temperature
+        params.top_p = topP
+        params.top_k = Int32(topK)
+        params.repeat_penalty = repeatPenalty
+        params.frequency_penalty = 0.0
+        params.presence_penalty = 0.0
+        params.stop_sequences = nil
+        params.num_stop_sequences = 0
+        params.reserved = nil
+
+        var output: UnsafeMutablePointer<CChar>?
+        
+        let error = imageBytes.withUnsafeBytes { imagePtr in
+            prompt.withCString { promptPtr in
+                ev_vision_describe(
+                    ctx,
+                    imagePtr.baseAddress!.assumingMemoryBound(to: UInt8.self),
+                    Int32(width),
+                    Int32(height),
+                    promptPtr,
+                    &params,
+                    &output
+                )
             }
         }
-        cArray.deallocate()
-    }
-
-    /// Check if error occurred and throw if needed
-    private static func checkError(_ errorBuffer: [CChar]) throws {
-        let errorMessage = String(cString: errorBuffer)
-        guard !errorMessage.isEmpty else {
-            return
+        
+        guard error == EV_SUCCESS, let resultPtr = output else {
+            throw mapVisionError(error, ctx: ctx)
         }
-        throw EdgeVedaError.ffiError(message: errorMessage)
+        
+        defer { ev_free_string(resultPtr) }
+        return String(cString: resultPtr)
+    }
+
+    /// Get vision timings
+    static func getVisionTimings(ctx: ev_vision_context) throws -> (
+        modelLoadMs: Double,
+        imageEncodeMs: Double,
+        promptEvalMs: Double,
+        decodeMs: Double,
+        promptTokens: Int,
+        generatedTokens: Int
+    ) {
+        var timings = ev_timings_data()
+        let error = ev_vision_get_last_timings(ctx, &timings)
+        
+        guard error == EV_SUCCESS else {
+            throw mapVisionError(error, ctx: ctx)
+        }
+        
+        return (
+            modelLoadMs: timings.model_load_ms,
+            imageEncodeMs: timings.image_encode_ms,
+            promptEvalMs: timings.prompt_eval_ms,
+            decodeMs: timings.decode_ms,
+            promptTokens: Int(timings.prompt_tokens),
+            generatedTokens: Int(timings.generated_tokens)
+        )
+    }
+
+    // MARK: - Backend Detection
+
+    /// Detect best backend
+    static func detectBackend() -> Backend {
+        let backend = ev_detect_backend()
+        return Backend(cValue: backend) ?? .auto
+    }
+
+    /// Check if backend is available
+    static func isBackendAvailable(_ backend: Backend) -> Bool {
+        return ev_is_backend_available(backend.cValue)
+    }
+
+    /// Get backend name
+    static func backendName(_ backend: Backend) -> String {
+        guard let name = ev_backend_name(backend.cValue) else {
+            return "Unknown"
+        }
+        return String(cString: name)
+    }
+
+    // MARK: - Utility
+
+    /// Get version string
+    static func version() -> String {
+        guard let version = ev_version() else {
+            return "Unknown"
+        }
+        return String(cString: version)
+    }
+
+    /// Enable verbose logging
+    static func setVerbose(_ enable: Bool) {
+        ev_set_verbose(enable)
+    }
+
+    // MARK: - Error Mapping
+
+    private static func mapError(_ error: ev_error_t, ctx: ev_context?) -> EdgeVedaError {
+        let message: String
+        if let ctx = ctx, let lastError = ev_get_last_error(ctx) {
+            message = String(cString: lastError)
+        } else {
+            message = String(cString: ev_error_string(error))
+        }
+        
+        switch error {
+        case EV_ERROR_INVALID_PARAM:
+            return .invalidParameter(name: "unknown", value: message)
+        case EV_ERROR_OUT_OF_MEMORY:
+            return .outOfMemory
+        case EV_ERROR_MODEL_LOAD_FAILED:
+            return .loadFailed(reason: message)
+        case EV_ERROR_BACKEND_INIT_FAILED:
+            return .unsupportedBackend(.auto)
+        case EV_ERROR_INFERENCE_FAILED:
+            return .generationFailed(reason: message)
+        case EV_ERROR_CONTEXT_INVALID:
+            return .ffiError(message: "Invalid context")
+        case EV_ERROR_UNSUPPORTED_BACKEND:
+            return .unsupportedBackend(.auto)
+        default:
+            return .unknown(message: message)
+        }
+    }
+
+    private static func mapVisionError(_ error: ev_error_t, ctx: ev_vision_context?) -> EdgeVedaError {
+        let message = String(cString: ev_error_string(error))
+        
+        switch error {
+        case EV_ERROR_INVALID_PARAM:
+            return .invalidParameter(name: "unknown", value: message)
+        case EV_ERROR_OUT_OF_MEMORY:
+            return .outOfMemory
+        case EV_ERROR_MODEL_LOAD_FAILED:
+            return .loadFailed(reason: message)
+        case EV_ERROR_BACKEND_INIT_FAILED:
+            return .unsupportedBackend(.auto)
+        case EV_ERROR_INFERENCE_FAILED:
+            return .generationFailed(reason: message)
+        default:
+            return .unknown(message: message)
+        }
     }
 }
 
-// MARK: - C Function Declarations (Placeholder)
+// MARK: - Backend Extension
 
-// These will be provided by the C library (edge_veda.h)
-// The actual implementation will come from the compiled C library
-
-/// C configuration struct
-internal struct edge_veda_config {
-    var backend: Int32
-    var threads: Int32
-    var context_size: Int32
-    var gpu_layers: Int32
-    var batch_size: Int32
-    var use_mmap: Bool
-    var use_mlock: Bool
-    var verbose: Bool
-
-    init() {
-        self.backend = 0
-        self.threads = 0
-        self.context_size = 2048
-        self.gpu_layers = -1
-        self.batch_size = 512
-        self.use_mmap = true
-        self.use_mlock = false
-        self.verbose = false
+extension Backend {
+    var cValue: ev_backend_t {
+        switch self {
+        case .cpu:
+            return EV_BACKEND_CPU
+        case .metal:
+            return EV_BACKEND_METAL
+        case .auto:
+            return EV_BACKEND_AUTO
+        }
+    }
+    
+    init?(cValue: ev_backend_t) {
+        switch cValue {
+        case EV_BACKEND_CPU:
+            self = .cpu
+        case EV_BACKEND_METAL:
+            self = .metal
+        case EV_BACKEND_AUTO:
+            self = .auto
+        default:
+            return nil
+        }
     }
 }
-
-/// C generation parameters struct
-internal struct edge_veda_generate_params {
-    var max_tokens: Int32
-    var temperature: Float
-    var top_p: Float
-    var top_k: Int32
-    var repeat_penalty: Float
-    var stop_sequences: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-    var stop_sequences_count: Int32
-
-    init() {
-        self.max_tokens = 512
-        self.temperature = 0.7
-        self.top_p = 0.9
-        self.top_k = 40
-        self.repeat_penalty = 1.1
-        self.stop_sequences = nil
-        self.stop_sequences_count = 0
-    }
-}
-
-/// Stream callback type
-internal typealias edge_veda_stream_callback = @convention(c) (
-    UnsafePointer<CChar>?,  // token
-    Int32,                   // token_id
-    UnsafeMutableRawPointer? // user_data
-) -> Void
-
-// MARK: - C Function Stubs (to be replaced by actual C library)
-
-@_silgen_name("edge_veda_load_model")
-internal func edge_veda_load_model(
-    _ path: UnsafePointer<CChar>,
-    _ config: UnsafePointer<edge_veda_config>,
-    _ error: UnsafeMutablePointer<CChar>
-) -> OpaquePointer?
-
-@_silgen_name("edge_veda_free_model")
-internal func edge_veda_free_model(_ handle: OpaquePointer)
-
-@_silgen_name("edge_veda_generate")
-internal func edge_veda_generate(
-    _ handle: OpaquePointer,
-    _ prompt: UnsafePointer<CChar>,
-    _ params: UnsafePointer<edge_veda_generate_params>,
-    _ error: UnsafeMutablePointer<CChar>
-) -> UnsafeMutablePointer<CChar>?
-
-@_silgen_name("edge_veda_generate_stream")
-internal func edge_veda_generate_stream(
-    _ handle: OpaquePointer,
-    _ prompt: UnsafePointer<CChar>,
-    _ params: UnsafePointer<edge_veda_generate_params>,
-    _ callback: edge_veda_stream_callback,
-    _ user_data: UnsafeMutableRawPointer?,
-    _ error: UnsafeMutablePointer<CChar>
-) -> Int32
-
-@_silgen_name("edge_veda_free_string")
-internal func edge_veda_free_string(_ str: UnsafeMutablePointer<CChar>)
-
-@_silgen_name("edge_veda_get_memory_usage")
-internal func edge_veda_get_memory_usage(_ handle: OpaquePointer) -> UInt64
-
-@_silgen_name("edge_veda_get_metadata_count")
-internal func edge_veda_get_metadata_count(_ handle: OpaquePointer) -> Int32
-
-@_silgen_name("edge_veda_get_metadata_entry")
-internal func edge_veda_get_metadata_entry(
-    _ handle: OpaquePointer,
-    _ index: Int32,
-    _ key: UnsafeMutablePointer<CChar>,
-    _ value: UnsafeMutablePointer<CChar>
-) -> Int32
-
-@_silgen_name("edge_veda_reset_context")
-internal func edge_veda_reset_context(_ handle: OpaquePointer)
