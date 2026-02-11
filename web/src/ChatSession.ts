@@ -53,16 +53,17 @@ export class ChatSession {
     const prompt = this.formatPrompt();
     
     // Generate response
-    const response = await this.edgeVeda.generate({ prompt, ...options });
+    const result = await this.edgeVeda.generate({ prompt, ...options });
+    const responseText = result.text;
     
     // Add assistant response
     this.messages.push({
       role: ChatRole.ASSISTANT,
-      content: response,
+      content: responseText,
       timestamp: new Date(),
     });
     
-    return response;
+    return responseText;
   }
   
   /**

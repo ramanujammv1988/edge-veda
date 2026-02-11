@@ -61,6 +61,8 @@ export { ThermalMonitor } from './ThermalMonitor';
 export { BatteryDrainTracker } from './BatteryDrainTracker';
 
 export { Scheduler } from './Scheduler';
+export { TaskPriority, TaskStatus } from './Scheduler';
+export type { TaskHandle, QueueStatus } from './Scheduler';
 
 export type { RuntimePolicy } from './RuntimePolicy';
 export {

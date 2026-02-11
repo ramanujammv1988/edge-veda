@@ -21,8 +21,6 @@ import type {
   VisionConfig,
   VisionResult,
   VisionGenerationParams,
-  VisionTimings,
-  FrameData,
 } from './types';
 
 /**
