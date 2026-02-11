@@ -11,6 +11,10 @@ public actor EdgeVeda {
     private nonisolated(unsafe) var context: ev_context?
     private let config: EdgeVedaConfig
     private let modelPath: String
+    
+    /// Track the current generation task for cancellation support
+    private var currentGenerationTask: Task<String, Error>?
+    private var currentStreamTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -70,7 +74,7 @@ public actor EdgeVeda {
             throw EdgeVedaError.modelNotLoaded
         }
 
-        return try await Task {
+        let task = Task {
             try FFIBridge.generate(
                 ctx: ctx,
                 prompt: prompt,
@@ -83,7 +87,12 @@ public actor EdgeVeda {
                 presencePenalty: 0.0,
                 stopSequences: options.stopSequences
             )
-        }.value
+        }
+        
+        currentGenerationTask = task
+        defer { currentGenerationTask = nil }
+        
+        return try await task.value
     }
 
     /// Generate text with streaming token-by-token output
@@ -100,7 +109,7 @@ public actor EdgeVeda {
     /// - Returns: AsyncThrowingStream yielding tokens as they're generated
     public func generateStream(_ prompt: String, options: GenerateOptions) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 guard let ctx = context else {
                     continuation.finish(throwing: EdgeVedaError.modelNotLoaded)
                     return
@@ -126,7 +135,29 @@ public actor EdgeVeda {
                     continuation.finish(throwing: error)
                 }
             }
+            
+            // Store task reference for cancellation (must be done in actor context)
+            Task { [weak self] in
+                await self?.storeStreamTask(task)
+            }
+            
+            continuation.onTermination = { [weak self] _ in
+                task.cancel()
+                Task { [weak self] in
+                    await self?.clearStreamTask()
+                }
+            }
         }
+    }
+    
+    /// Helper to store stream task from non-isolated context
+    private func storeStreamTask(_ task: Task<Void, Never>) {
+        currentStreamTask = task
+    }
+    
+    /// Helper to clear stream task from non-isolated context
+    private func clearStreamTask() {
+        currentStreamTask = nil
     }
 
     // MARK: - Model Information
@@ -188,13 +219,18 @@ public actor EdgeVeda {
     }
 
     /// Cancel an ongoing generation
-    /// Note: This is a placeholder for future implementation with proper cancellation support
+    /// Cancels the current generation task at the Swift concurrency level
     public func cancelGeneration() async throws {
         guard context != nil else {
             throw EdgeVedaError.modelNotLoaded
         }
-        // TODO: Implement native cancellation when FFI supports it
-        throw EdgeVedaError.unknown(message: "Cancellation not yet implemented in native layer")
+        
+        // Cancel any active Swift tasks
+        currentGenerationTask?.cancel()
+        currentGenerationTask = nil
+        
+        currentStreamTask?.cancel()
+        currentStreamTask = nil
     }
 
     // MARK: - Vision Inference

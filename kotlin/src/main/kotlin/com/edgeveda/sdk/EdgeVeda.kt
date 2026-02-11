@@ -2,12 +2,14 @@ package com.edgeveda.sdk
 
 import com.edgeveda.sdk.internal.NativeBridge
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * EdgeVeda SDK - Main API for on-device LLM inference.
@@ -43,6 +45,8 @@ class EdgeVeda private constructor(
 
     private val initialized = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
+    private val currentGenerationJob = AtomicReference<Job?>(null)
+    private val currentStreamJob = AtomicReference<Job?>(null)
 
     /**
      * Initialize the model with the given path and configuration.
@@ -87,10 +91,14 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         return withContext(Dispatchers.Default) {
+            val job = coroutineContext[Job]
+            currentGenerationJob.set(job)
             try {
                 nativeBridge.generate(prompt, options)
             } catch (e: Exception) {
                 throw EdgeVedaException.GenerationError("Generation failed: ${e.message}", e)
+            } finally {
+                currentGenerationJob.set(null)
             }
         }
     }
@@ -114,11 +122,17 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         try {
+            // Track the stream job for cancellation
+            val job = coroutineContext[Job]
+            currentStreamJob.set(job)
+            
             nativeBridge.generateStream(prompt, options) { token ->
                 emit(token)
             }
         } catch (e: Exception) {
             throw EdgeVedaException.GenerationError("Stream generation failed: ${e.message}", e)
+        } finally {
+            currentStreamJob.set(null)
         }
     }.flowOn(Dispatchers.Default)
 
@@ -196,26 +210,18 @@ class EdgeVeda private constructor(
     /**
      * Cancel an ongoing generation.
      *
-     * Note: This is a placeholder for future implementation with proper cancellation support.
+     * Cancels any active generation or stream operation by cancelling the underlying
+     * coroutine Job. This will interrupt the inference operation at the Kotlin level.
      *
-     * @throws EdgeVedaException.GenerationError if cancellation fails
      * @throws IllegalStateException if not initialized or closed
      */
     suspend fun cancelGeneration() {
         checkInitialized()
 
         withContext(Dispatchers.Default) {
-            try {
-                // TODO: Implement native cancellation when native layer supports it
-                throw EdgeVedaException.GenerationError(
-                    "Cancellation not yet implemented in native layer",
-                    null
-                )
-            } catch (e: EdgeVedaException) {
-                throw e
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Failed to cancel generation: ${e.message}", e)
-            }
+            // Cancel both generation and stream jobs if they exist
+            currentGenerationJob.getAndSet(null)?.cancel()
+            currentStreamJob.getAndSet(null)?.cancel()
         }
     }
 
