@@ -169,12 +169,18 @@ export interface ModelInfo {
  * Error codes
  */
 export enum EdgeVedaErrorCode {
+  MODEL_NOT_FOUND = 'MODEL_NOT_FOUND',
   MODEL_NOT_LOADED = 'MODEL_NOT_LOADED',
   MODEL_LOAD_FAILED = 'MODEL_LOAD_FAILED',
   INVALID_MODEL_PATH = 'INVALID_MODEL_PATH',
   GENERATION_FAILED = 'GENERATION_FAILED',
   INVALID_PARAMETER = 'INVALID_PARAMETER',
+  INVALID_CONFIG = 'INVALID_CONFIG',
   OUT_OF_MEMORY = 'OUT_OF_MEMORY',
+  CONTEXT_OVERFLOW = 'CONTEXT_OVERFLOW',
+  CANCELLATION = 'CANCELLATION',
+  VISION_ERROR = 'VISION_ERROR',
+  UNLOAD_ERROR = 'UNLOAD_ERROR',
   GPU_NOT_AVAILABLE = 'GPU_NOT_AVAILABLE',
   UNSUPPORTED_ARCHITECTURE = 'UNSUPPORTED_ARCHITECTURE',
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
@@ -198,6 +204,105 @@ export class EdgeVedaError extends Error {
       Error.captureStackTrace(this, EdgeVedaError);
     }
   }
+}
+
+/**
+ * Cancellation token for aborting downloads and generation.
+ *
+ * Thread-safe cancellation token that notifies listeners when cancel() is called.
+ * Integrates with AbortController for fetch-based operations.
+ */
+export class CancelToken {
+  private _cancelled = false;
+  private _callbacks: Array<() => void> = [];
+
+  /** Whether cancellation has been requested */
+  get isCancelled(): boolean {
+    return this._cancelled;
+  }
+
+  /** Request cancellation of the operation */
+  cancel(): void {
+    if (this._cancelled) return;
+    this._cancelled = true;
+
+    for (const callback of this._callbacks) {
+      try {
+        callback();
+      } catch (_) {
+        // Ignore callback errors
+      }
+    }
+    this._callbacks = [];
+  }
+
+  /** Register a callback for when cancellation is requested */
+  onCancel(callback: () => void): void {
+    if (this._cancelled) {
+      callback();
+    } else {
+      this._callbacks.push(callback);
+    }
+  }
+
+  /** Throw if cancelled */
+  throwIfCancelled(): void {
+    if (this._cancelled) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.CANCELLATION,
+        'Operation was cancelled'
+      );
+    }
+  }
+
+  /** Reset the token for reuse */
+  reset(): void {
+    this._cancelled = false;
+    this._callbacks = [];
+  }
+}
+
+/**
+ * Model download progress information.
+ */
+export interface DownloadProgress {
+  /** Total bytes to download */
+  totalBytes: number;
+  /** Bytes downloaded so far */
+  downloadedBytes: number;
+  /** Download speed in bytes per second */
+  speedBytesPerSecond?: number;
+  /** Estimated time remaining in seconds */
+  estimatedSecondsRemaining?: number;
+  /** Progress as fraction (0.0 - 1.0) */
+  progress: number;
+  /** Progress as percentage (0 - 100) */
+  progressPercent: number;
+}
+
+/**
+ * Downloadable model information descriptor.
+ *
+ * Represents a model that can be downloaded from a remote URL.
+ * Distinct from loaded model metadata returned by getModelInfo().
+ */
+export interface DownloadableModelInfo {
+  /** Model identifier (e.g., "llama-3.2-1b-instruct-q4") */
+  id: string;
+  /** Human-readable model name */
+  name: string;
+  /** Model size in bytes */
+  sizeBytes: number;
+  /** Model description */
+  description?: string;
+  /** Download URL */
+  downloadUrl: string;
+  /** SHA256 checksum for verification */
+  checksum?: string;
+  /** Model format (e.g., "GGUF") */
+  format: string;
+  /** Quantization level (e.g., "Q4_K_M") */
+  quantization?: string;
 }
 
 /**

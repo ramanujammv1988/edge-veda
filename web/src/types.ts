@@ -559,6 +559,78 @@ export interface ModelInfo {
 }
 
 /**
+ * Downloadable model descriptor (for ModelManager/ModelRegistry)
+ */
+export interface DownloadableModelInfo {
+  /** Unique model identifier */
+  id: string;
+  /** Human-readable model name */
+  name: string;
+  /** Model file size in bytes */
+  sizeBytes: number;
+  /** Description of the model */
+  description: string;
+  /** Direct download URL for the GGUF file */
+  downloadUrl: string;
+  /** Expected SHA-256 checksum (hex) */
+  checksum?: string;
+  /** Model file format (e.g., 'GGUF') */
+  format: string;
+  /** Quantization type (e.g., 'Q4_K_M', 'Q8_0', 'F16') */
+  quantization: string;
+}
+
+/**
+ * Download progress information
+ */
+export interface DownloadProgress {
+  /** Total bytes to download */
+  totalBytes: number;
+  /** Bytes downloaded so far */
+  downloadedBytes: number;
+  /** Download speed in bytes per second */
+  speedBytesPerSecond: number;
+  /** Estimated seconds remaining (null if unknown) */
+  estimatedSecondsRemaining: number | null;
+  /** Progress percentage 0-100 */
+  percentage: number;
+}
+
+/**
+ * Error codes for EdgeVeda operations
+ */
+export enum EdgeVedaErrorCode {
+  MODEL_NOT_FOUND = 'MODEL_NOT_FOUND',
+  MODEL_LOAD_FAILED = 'MODEL_LOAD_FAILED',
+  GENERATION_FAILED = 'GENERATION_FAILED',
+  OUT_OF_MEMORY = 'OUT_OF_MEMORY',
+  CONTEXT_OVERFLOW = 'CONTEXT_OVERFLOW',
+  INVALID_CONFIG = 'INVALID_CONFIG',
+  CANCELLATION = 'CANCELLATION',
+  VISION_ERROR = 'VISION_ERROR',
+  UNLOAD_ERROR = 'UNLOAD_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+}
+
+/**
+ * Typed error for EdgeVeda operations.
+ *
+ * Provides a structured error with a machine-readable `code` and optional `details`
+ * string for additional context.
+ */
+export class EdgeVedaError extends Error {
+  code: EdgeVedaErrorCode;
+  details?: string;
+
+  constructor(code: EdgeVedaErrorCode, message: string, details?: string) {
+    super(message);
+    this.name = 'EdgeVedaError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+/**
  * Cancellation token for aborting generation
  */
 export class CancelToken {
@@ -621,7 +693,10 @@ export class CancelToken {
    */
   throwIfCancelled(): void {
     if (this._cancelled) {
-      throw new Error('Operation was cancelled');
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.CANCELLATION,
+        'Operation was cancelled'
+      );
     }
   }
 }
