@@ -42,6 +42,53 @@ export type {
   FrameData,
 } from './types';
 
+// Phase 4: Runtime Supervision exports
+export {
+  Budget,
+  BudgetProfile,
+  BudgetConstraint,
+  WorkloadPriority,
+  WorkloadId,
+} from './Budget';
+export type { EdgeVedaBudget, MeasuredBaseline, BudgetViolation } from './Budget';
+
+export { LatencyTracker } from './LatencyTracker';
+
+export { ResourceMonitor } from './ResourceMonitor';
+
+export { ThermalMonitor } from './ThermalMonitor';
+
+export { BatteryDrainTracker } from './BatteryDrainTracker';
+
+export { Scheduler } from './Scheduler';
+
+export type { RuntimePolicy } from './RuntimePolicy';
+export {
+  RuntimePolicyPresets,
+  RuntimePolicyEnforcer,
+  detectCapabilities,
+  throttleRecommendationToString,
+} from './RuntimePolicy';
+export type {
+  RuntimePolicyOptions,
+  RuntimeCapabilities,
+  ThrottleRecommendation,
+  RuntimePolicyEnforcerOptions,
+} from './RuntimePolicy';
+
+export {
+  Telemetry,
+  BudgetViolationType,
+  ViolationSeverity,
+  latencyStatsToString,
+} from './Telemetry';
+export type {
+  LatencyMetric,
+  BudgetViolationRecord,
+  ResourceSnapshot,
+  LatencyStats,
+} from './Telemetry';
+
 /**
  * Main EdgeVeda class for browser-based inference
  */

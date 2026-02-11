@@ -42,3 +42,38 @@ export type {
 // Export native module spec (for advanced users)
 export { default as NativeEdgeVeda } from './NativeEdgeVeda';
 export type { Spec as NativeEdgeVedaSpec } from './NativeEdgeVeda';
+
+// =============================================================================
+// Phase 4: Runtime Supervision
+// =============================================================================
+
+// Budget types and utilities
+export { Budget } from './Budget';
+export type { EdgeVedaBudget, MeasuredBaseline, BudgetViolation } from './Budget';
+export { BudgetProfile, BudgetConstraint, WorkloadPriority, WorkloadId } from './Budget';
+
+// LatencyTracker
+export { LatencyTracker } from './LatencyTracker';
+
+// ResourceMonitor
+export { ResourceMonitor } from './ResourceMonitor';
+
+// ThermalMonitor
+export { ThermalMonitor } from './ThermalMonitor';
+
+// BatteryDrainTracker
+export { BatteryDrainTracker } from './BatteryDrainTracker';
+
+// Scheduler
+export { Scheduler } from './Scheduler';
+export type { TaskHandle, QueueStatus } from './Scheduler';
+export { TaskPriority, TaskStatus } from './Scheduler';
+
+// RuntimePolicy
+export { RuntimePolicyPresets, RuntimePolicyEnforcer, detectCapabilities, throttleRecommendationToString } from './RuntimePolicy';
+export type { RuntimePolicy, RuntimePolicyOptions, RuntimeCapabilities, ThrottleRecommendation, RuntimePolicyEnforcerOptions } from './RuntimePolicy';
+
+// Telemetry
+export { Telemetry, latencyStatsToString } from './Telemetry';
+export type { LatencyMetric, BudgetViolationRecord, ResourceSnapshot, LatencyStats } from './Telemetry';
+export { BudgetViolationType, ViolationSeverity } from './Telemetry';
