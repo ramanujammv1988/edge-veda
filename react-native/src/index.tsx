@@ -28,6 +28,17 @@ export type { ChatMessage } from './ChatTypes';
 export { ChatRole, SystemPromptPreset } from './ChatTypes';
 export { ChatTemplate } from './ChatTemplate';
 
+// Export VisionWorker and related types
+export { VisionWorker } from './VisionWorker';
+export { FrameQueue } from './FrameQueue';
+export type {
+  VisionConfig,
+  VisionResult,
+  VisionTimings,
+  VisionGenerationParams,
+  FrameData,
+} from './types';
+
 // Export native module spec (for advanced users)
 export { default as NativeEdgeVeda } from './NativeEdgeVeda';
 export type { Spec as NativeEdgeVedaSpec } from './NativeEdgeVeda';

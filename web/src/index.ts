@@ -30,6 +30,17 @@ export type { ChatMessage } from './ChatTypes';
 export { ChatRole, SystemPromptPreset } from './ChatTypes';
 export { ChatTemplate } from './ChatTemplate';
 
+// Export VisionWorker and related types
+export { VisionWorker } from './VisionWorker';
+export { FrameQueue } from './FrameQueue';
+export type {
+  VisionConfig,
+  VisionResult,
+  VisionTimings,
+  VisionGenerationParams,
+  FrameData,
+} from './types';
+
 /**
  * Main EdgeVeda class for browser-based inference
  */

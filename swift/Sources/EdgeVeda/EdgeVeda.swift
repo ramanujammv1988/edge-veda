@@ -197,6 +197,56 @@ public actor EdgeVeda {
         throw EdgeVedaError.unknown(message: "Cancellation not yet implemented in native layer")
     }
 
+    // MARK: - Vision Inference
+
+    /// Create and initialize a vision worker for image description
+    /// - Parameter config: Vision configuration including model and mmproj paths
+    /// - Returns: Initialized VisionWorker ready for frame processing
+    /// - Throws: EdgeVedaError if initialization fails
+    public static func createVisionWorker(config: VisionConfig) async throws -> VisionWorker {
+        let worker = VisionWorker()
+        try await worker.initialize(config: config)
+        return worker
+    }
+
+    /// One-shot vision inference - describe a single image
+    /// Creates a temporary worker, performs inference, and cleans up automatically
+    /// For repeated inferences, use createVisionWorker() to reuse the worker
+    ///
+    /// - Parameters:
+    ///   - config: Vision configuration including model and mmproj paths
+    ///   - rgb: RGB888 image data (width * height * 3 bytes)
+    ///   - width: Image width in pixels
+    ///   - height: Image height in pixels
+    ///   - prompt: The prompt for describing the image (default: "Describe what you see.")
+    ///   - params: Generation parameters (default: VisionGenerationParams with sensible defaults)
+    /// - Returns: VisionResult with description and timing information
+    /// - Throws: EdgeVedaError if inference fails
+    public static func describeImage(
+        config: VisionConfig,
+        rgb: Data,
+        width: Int,
+        height: Int,
+        prompt: String = "Describe what you see.",
+        params: VisionGenerationParams = VisionGenerationParams()
+    ) async throws -> VisionResult {
+        let worker = VisionWorker()
+        try await worker.initialize(config: config)
+        defer {
+            Task {
+                await worker.cleanup()
+            }
+        }
+        
+        return try await worker.describeFrame(
+            rgb: rgb,
+            width: width,
+            height: height,
+            prompt: prompt,
+            params: params
+        )
+    }
+
     // MARK: - Static Methods
 
     /// Get SDK version

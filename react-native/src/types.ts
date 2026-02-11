@@ -209,3 +209,167 @@ export type TokenCallback = (token: string, isComplete: boolean) => void;
  * Progress callback for model loading
  */
 export type ProgressCallback = (progress: number, message: string) => void;
+
+// =============================================================================
+// Vision Inference Types
+// =============================================================================
+
+/**
+ * Configuration for vision inference with VLM models
+ */
+export interface VisionConfig {
+  /**
+   * Path to the vision-language model (GGUF format)
+   */
+  modelPath: string;
+
+  /**
+   * Path to the multimodal projection weights (mmproj file)
+   */
+  mmprojPath: string;
+
+  /**
+   * Number of threads for inference
+   * @default 4
+   */
+  numThreads?: number;
+
+  /**
+   * Context window size
+   * @default 2048
+   */
+  contextSize?: number;
+
+  /**
+   * Number of GPU layers to offload (-1 = all)
+   * @default -1
+   */
+  gpuLayers?: number;
+
+  /**
+   * Memory limit in bytes (0 = no limit)
+   * @default 0
+   */
+  memoryLimitBytes?: number;
+
+  /**
+   * Use memory mapping for faster loading
+   * @default true
+   */
+  useMmap?: boolean;
+}
+
+/**
+ * Result from vision inference
+ */
+export interface VisionResult {
+  /**
+   * Generated description of the image
+   */
+  description: string;
+
+  /**
+   * Performance timing data
+   */
+  timings: VisionTimings;
+}
+
+/**
+ * Performance timing data for vision inference
+ */
+export interface VisionTimings {
+  /**
+   * Model loading time in milliseconds
+   */
+  modelLoadMs: number;
+
+  /**
+   * Image encoding time in milliseconds
+   */
+  imageEncodeMs: number;
+
+  /**
+   * Prompt evaluation time in milliseconds
+   */
+  promptEvalMs: number;
+
+  /**
+   * Token generation time in milliseconds
+   */
+  decodeMs: number;
+
+  /**
+   * Number of prompt tokens processed
+   */
+  promptTokens: number;
+
+  /**
+   * Number of tokens generated
+   */
+  generatedTokens: number;
+
+  /**
+   * Total inference time in milliseconds
+   */
+  totalMs: number;
+
+  /**
+   * Generation speed in tokens per second
+   */
+  tokensPerSecond: number;
+}
+
+/**
+ * Generation parameters for vision inference
+ */
+export interface VisionGenerationParams {
+  /**
+   * Maximum tokens to generate
+   * @default 100
+   */
+  maxTokens?: number;
+
+  /**
+   * Sampling temperature (0.0 - 2.0)
+   * @default 0.3
+   */
+  temperature?: number;
+
+  /**
+   * Top-p sampling parameter
+   * @default 0.9
+   */
+  topP?: number;
+
+  /**
+   * Top-k sampling parameter
+   * @default 40
+   */
+  topK?: number;
+
+  /**
+   * Repetition penalty
+   * @default 1.1
+   */
+  repeatPenalty?: number;
+}
+
+/**
+ * Frame data for vision processing
+ */
+export interface FrameData {
+  /**
+   * RGB888 pixel data (width * height * 3 bytes)
+   */
+  rgb: Uint8Array;
+
+  /**
+   * Frame width in pixels
+   */
+  width: number;
+
+  /**
+   * Frame height in pixels
+   */
+  height: number;
+}
