@@ -214,6 +214,69 @@ export class EdgeVeda {
   }
 
   /**
+   * Gets current memory usage statistics
+   */
+  async getMemoryUsage(): Promise<import('./types').MemoryStats> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    const response = await this.sendWorkerMessage({
+      type: 'get_memory_usage' as WorkerMessageType.GET_MEMORY_USAGE,
+    });
+
+    return response.stats;
+  }
+
+  /**
+   * Gets information about the loaded model
+   */
+  async getModelInfo(): Promise<import('./types').ModelInfo> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    const response = await this.sendWorkerMessage({
+      type: 'get_model_info' as WorkerMessageType.GET_MODEL_INFO,
+    });
+
+    return response.info;
+  }
+
+  /**
+   * Cancels the currently running generation
+   */
+  async cancelGeneration(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'cancel_generation' as WorkerMessageType.CANCEL_GENERATION,
+    });
+  }
+
+  /**
+   * Unloads the current model and frees memory
+   */
+  async unloadModel(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'unload_model' as WorkerMessageType.UNLOAD_MODEL,
+    });
+  }
+
+  /**
+   * Gets the SDK version
+   */
+  static getVersion(): string {
+    return '1.0.0';
+  }
+
+  /**
    * Sends a message to the worker and waits for response
    */
   private sendWorkerMessage(
@@ -289,6 +352,26 @@ export class EdgeVeda {
         if (request.onChunk) {
           request.onChunk(message as any);
         }
+        break;
+
+      case 'memory_usage_response':
+        request.resolve(message);
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'model_info_response':
+        request.resolve(message);
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'cancel_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'unload_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
         break;
 
       default:
