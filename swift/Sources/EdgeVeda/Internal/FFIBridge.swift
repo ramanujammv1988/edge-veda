@@ -8,19 +8,20 @@ internal enum FFIBridge {
     // MARK: - Memory Pressure Callback Management
 
     /// Storage for memory pressure callbacks
-    private static var memoryCallbacks: [UnsafeMutableRawPointer: (UInt64, UInt64) -> Void] = [:]
-    private static var callbackLock = NSLock()
+    /// Note: Marked as nonisolated(unsafe) because we handle synchronization with callbackLock
+    private static nonisolated(unsafe) let memoryCallbacks: NSMapTable<NSValue, AnyObject> = NSMapTable.strongToStrongObjects()
+    private static let callbackLock = NSLock()
 
     /// C callback trampoline for memory pressure events
     private static let cMemoryCallback: ev_memory_pressure_callback = { userDataPtr, currentBytes, limitBytes in
         guard let userDataPtr = userDataPtr else { return }
         
         callbackLock.lock()
-        let ctxPtr = userDataPtr.assumingMemoryBound(to: ev_context_impl.self)
-        let callback = memoryCallbacks[UnsafeMutableRawPointer(ctxPtr)]
+        let key = NSValue(pointer: userDataPtr)
+        let callbackObj = memoryCallbacks.object(forKey: key) as? (UInt64, UInt64) -> Void
         callbackLock.unlock()
         
-        callback?(UInt64(currentBytes), UInt64(limitBytes))
+        callbackObj?(UInt64(currentBytes), UInt64(limitBytes))
     }
 
     // MARK: - Context Management
@@ -237,7 +238,7 @@ internal enum FFIBridge {
 
     /// Set memory limit
     static func setMemoryLimit(ctx: ev_context, limitBytes: UInt64) throws {
-        let error = ev_set_memory_limit(ctx, limitBytes)
+        let error = ev_set_memory_limit(ctx, Int(limitBytes))
         guard error == EV_SUCCESS else {
             throw mapError(error, ctx: ctx)
         }
@@ -257,21 +258,22 @@ internal enum FFIBridge {
         callback: ((UInt64, UInt64) -> Void)?
     ) throws {
         let ctxPtr = UnsafeMutableRawPointer(ctx)
+        let key = NSValue(pointer: ctxPtr)
         
         callbackLock.lock()
         defer { callbackLock.unlock() }
         
         if let callback = callback {
             // Register callback
-            memoryCallbacks[ctxPtr] = callback
+            memoryCallbacks.setObject(callback as AnyObject, forKey: key)
             let error = ev_set_memory_pressure_callback(ctx, cMemoryCallback, ctxPtr)
             guard error == EV_SUCCESS else {
-                memoryCallbacks.removeValue(forKey: ctxPtr)
+                memoryCallbacks.removeObject(forKey: key)
                 throw mapError(error, ctx: ctx)
             }
         } else {
             // Unregister callback
-            memoryCallbacks.removeValue(forKey: ctxPtr)
+            memoryCallbacks.removeObject(forKey: key)
             let error = ev_set_memory_pressure_callback(ctx, nil, nil)
             guard error == EV_SUCCESS else {
                 throw mapError(error, ctx: ctx)
