@@ -1,6 +1,6 @@
 {
   "name": "@edgeveda/react-native",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "Edge Veda SDK for React Native - On-device LLM inference with TurboModule support",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",

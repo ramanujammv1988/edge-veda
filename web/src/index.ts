@@ -91,6 +91,16 @@ export type {
   LatencyStats,
 } from './Telemetry';
 
+// Phase 5: Model Management exports
+export { ModelRegistry } from './ModelRegistry';
+
+// Phase 6: Camera Utilities exports
+export { CameraUtils } from './CameraUtils';
+
+// Phase 7: Observability exports
+export { PerfTrace } from './PerfTrace';
+export { NativeErrorCode } from './NativeErrorCode';
+
 /**
  * Main EdgeVeda class for browser-based inference
  */

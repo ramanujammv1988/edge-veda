@@ -1,4 +1,4 @@
-plugins {
+e plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android") version "1.9.22"
     id("maven-publish")
@@ -16,7 +16,7 @@ android {
         consumerProguardFiles("consumer-rules.pro")
         
         // Generate BuildConfig with version
-        buildConfigField("String", "VERSION_NAME", "\"1.0.0\"")
+        buildConfigField("String", "VERSION_NAME", "\"1.2.0\"")
 
         externalNativeBuild {
             cmake {
@@ -112,7 +112,7 @@ publishing {
         create<MavenPublication>("release") {
             groupId = "com.edgeveda"
             artifactId = "sdk"
-            version = "1.0.0"
+            version = "1.2.0"
 
             afterEvaluate {
                 from(components["release"])

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-02
+
+### Added
+- **Phase 4 — Runtime Supervision** (Swift, Kotlin, React Native, Web):
+  - `Budget`: Declarative compute budget contracts with adaptive profiles
+  - `LatencyTracker`: P50/P95/P99 latency percentile tracking
+  - `ResourceMonitor`: Memory usage monitoring with configurable thresholds
+  - `ThermalMonitor`: Platform-specific thermal state monitoring
+  - `BatteryDrainTracker`: Battery drain rate tracking and alerts
+  - `Scheduler`: Priority-based task scheduling with budget enforcement
+  - `RuntimePolicy`: Adaptive QoS combining thermal/battery/memory signals
+  - `Telemetry`: Unified telemetry aggregation with JSON export
+- **Phase 5 — Model Management** (Swift, Kotlin, React Native, Web):
+  - `ModelManager`: Download, cache, verify (SHA-256), and delete models
+  - `ModelRegistry`: Curated registry of compatible models with metadata
+- **Phase 6 — Camera Utilities** (Swift, Kotlin, React Native, Web):
+  - `CameraUtils`: BGRA/YUV420→RGB pixel format conversion for vision pipelines
+- **Phase 7 — Observability** (Swift, Kotlin, React Native, Web):
+  - `PerfTrace`: JSONL performance trace logger for soak test analysis
+  - `NativeErrorCode`: Typed mapping of C-level error codes to platform exceptions
+- **Tests**: Unit tests for all Phase 4 modules (Swift 7 files, Kotlin 6 files, React Native 8 files, Web 8 files)
+- **Examples**: RuntimeSupervision examples for Swift, Kotlin, React Native, Web
+
+### Changed
+- All platform SDK entry points now export Phase 5-7 modules
+- SDK version bumped to 1.2.0 across all platforms
+
+### Fixed
+- Documentation incorrectly listed `cancelGeneration()` as placeholder on Swift/Kotlin; verified both implementations correctly cancel at C level and coroutine/Task level
+
 ## [1.1.1] - 2026-02-09
 
 ### Fixed

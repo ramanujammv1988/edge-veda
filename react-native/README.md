@@ -1,16 +1,20 @@
-# Edge Veda SDK for React Native
+# Edge Veda SDK for React Native (v1.2.0)
 
-On-device LLM inference for React Native with TurboModule support and the New Architecture.
+On-device LLM inference for React Native — with chat sessions, vision, runtime supervision, model management, camera utilities, and observability.
 
 ## Features
 
 - **TurboModule Support**: Built with React Native's New Architecture for maximum performance
 - **On-Device Inference**: Run LLMs locally without internet connection
+- **Chat Sessions**: Multi-turn conversation management with template support
+- **Vision Inference**: Process images and camera frames through vision models
+- **Runtime Supervision**: Budget, latency, thermal, battery, resource monitoring, scheduling, and telemetry
+- **Model Management**: Download, cache, and manage models with ModelManager and ModelRegistry
+- **Camera Utilities**: Capture and preprocess camera frames for vision pipelines
+- **Observability**: Performance tracing and native error codes
 - **Streaming Generation**: Real-time token streaming with callbacks
-- **Cross-Platform**: iOS and Android support with native implementations
-- **Type-Safe**: Full TypeScript support with comprehensive type definitions
-- **Memory Efficient**: Monitor and control memory usage
-- **GPU Acceleration**: Automatic GPU acceleration when available (Metal on iOS, Vulkan on Android)
+- **Cross-Platform**: iOS and Android with native C++ core
+- **TypeScript**: Full type safety with comprehensive type definitions
 
 ## Installation
 
@@ -28,245 +32,325 @@ cd ios && pod install
 
 ### Android
 
-No additional setup required. The package automatically links with autolinking.
+No additional setup required — autolinking handles everything.
 
 ## Requirements
 
 - React Native >= 0.68.0
 - iOS >= 13.0
 - Android minSdkVersion >= 21
-- Expo SDK >= 49 (with development builds only)
+- Expo SDK >= 49 (development builds only, not Expo Go)
 
-### Architecture Support
-
-This package supports both React Native architectures:
-
-- **Old Architecture (Bridge)**: React Native 0.68 - 0.72
-- **New Architecture (TurboModules)**: React Native 0.73+
-
-Architecture detection is automatic at build time - no configuration needed. The appropriate native module implementation is selected based on your app's architecture settings.
-
-### Expo Support
-
-Edge Veda works with Expo using **development builds** (not Expo Go):
-
-```bash
-# Install in Expo project
-npx expo install @edgeveda/react-native
-
-# Create development build
-eas build --profile development --platform ios
-eas build --profile development --platform android
-```
-
-**Important**: Edge Veda **does NOT work with Expo Go** because it requires native C++ code (llama.cpp) that cannot be bundled in Expo Go. You must create a development build or bare workflow project.
-
-The package includes an Expo config plugin that automatically configures your project during `expo prebuild`.
-
-## Usage
-
-### Initialize the Model
+## Quick Start
 
 ```typescript
 import EdgeVeda from '@edgeveda/react-native';
 
-// Initialize with model path
 await EdgeVeda.init('/path/to/model.gguf', {
   maxTokens: 512,
   temperature: 0.7,
   useGpu: true,
-  numThreads: 4,
 });
-```
 
-### Generate Text
-
-```typescript
-// Simple generation
 const response = await EdgeVeda.generate('What is the capital of France?');
 console.log(response);
 
-// With options
-const response = await EdgeVeda.generate(
-  'Explain quantum computing',
-  {
-    temperature: 0.8,
-    maxTokens: 1024,
-    systemPrompt: 'You are a helpful AI assistant.',
-  }
-);
+await EdgeVeda.unloadModel();
 ```
 
-### Streaming Generation
+### Streaming
 
 ```typescript
 await EdgeVeda.generateStream(
   'Write a short story',
   (token, isComplete) => {
-    if (!isComplete) {
-      // Handle each token
-      console.log(token);
-    } else {
-      // Generation complete
-      console.log('Done!');
-    }
+    if (!isComplete) process.stdout.write(token);
+    else console.log('\nDone!');
   },
-  {
-    temperature: 0.9,
-    maxTokens: 2048,
-  }
+  { temperature: 0.9, maxTokens: 2048 }
 );
 ```
 
-### Monitor Memory Usage
+## Chat Sessions
+
+Multi-turn conversation management with automatic prompt formatting.
 
 ```typescript
-const memoryUsage = EdgeVeda.getMemoryUsage();
-console.log('Total memory:', memoryUsage.totalBytes);
-console.log('Model memory:', memoryUsage.modelBytes);
-console.log('KV cache:', memoryUsage.kvCacheBytes);
-console.log('Available:', memoryUsage.availableBytes);
+import { ChatSession, ChatTemplate } from '@edgeveda/react-native';
+
+const template = new ChatTemplate('llama3');
+const session = new ChatSession(edgeVeda, template, {
+  systemPrompt: 'You are a helpful assistant.',
+});
+
+const reply1 = await session.send('What is React Native?');
+console.log(reply1);
+
+const reply2 = await session.send('How does it differ from Flutter?');
+console.log(reply2); // context-aware follow-up
+
+session.clearHistory();
 ```
 
-### Get Model Information
+## Vision Inference
+
+Process images and camera frames through vision-capable models.
 
 ```typescript
-const modelInfo = EdgeVeda.getModelInfo();
-console.log('Model:', modelInfo.name);
-console.log('Architecture:', modelInfo.architecture);
-console.log('Parameters:', modelInfo.parameters);
-console.log('Context length:', modelInfo.contextLength);
-console.log('Quantization:', modelInfo.quantization);
+import { VisionWorker, FrameQueue } from '@edgeveda/react-native';
+
+const vision = new VisionWorker(edgeVeda, {
+  maxFrames: 30,
+  resolution: { width: 224, height: 224 },
+});
+const queue = new FrameQueue(30);
+
+queue.enqueue(frameData);
+
+const result = await vision.processFrame(queue.dequeue());
+console.log(result.description);
 ```
 
-### Unload Model
+## Runtime Supervision
+
+### Budget
+
+Control token and time limits for generation.
 
 ```typescript
-await EdgeVeda.unloadModel();
+import { Budget } from '@edgeveda/react-native';
+
+const budget = new Budget({ maxTokens: 500, maxTimeMs: 10000, maxMemoryBytes: 512 * 1024 * 1024 });
+budget.startTracking();
+
+if (budget.isExhausted()) console.log('Budget exceeded');
+console.log(budget.snapshot());
 ```
 
-## Configuration Options
+### Latency Tracker
 
-### EdgeVedaConfig
+Track token generation latency with percentile statistics.
 
 ```typescript
-interface EdgeVedaConfig {
-  maxTokens?: number;          // Default: 512
-  temperature?: number;        // Default: 0.7 (0.0 - 2.0)
-  topP?: number;              // Default: 0.9 (0.0 - 1.0)
-  topK?: number;              // Default: 40
-  repetitionPenalty?: number; // Default: 1.1
-  numThreads?: number;        // Default: 4
-  useGpu?: boolean;           // Default: true
-  contextSize?: number;       // Default: 2048
-  batchSize?: number;         // Default: 512
-}
+import { LatencyTracker } from '@edgeveda/react-native';
+
+const tracker = new LatencyTracker({ windowSize: 100 });
+tracker.recordLatency(12.5);
+tracker.recordLatency(15.3);
+
+const stats = tracker.getStats();
+console.log(`p50=${stats.p50}ms, p99=${stats.p99}ms, avg=${stats.avg}ms`);
 ```
 
-### GenerateOptions
+### Resource Monitor
+
+Monitor memory and system resource consumption.
 
 ```typescript
-interface GenerateOptions {
-  systemPrompt?: string;
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  topK?: number;
-  stopSequences?: string[];
-}
+import { ResourceMonitor } from '@edgeveda/react-native';
+
+const monitor = new ResourceMonitor({ pollingIntervalMs: 1000 });
+monitor.start();
+monitor.onThreshold('memory', 0.85, () => console.warn('High memory'));
+
+const snapshot = monitor.snapshot();
+console.log(`Memory: ${snapshot.memoryUsagePercent}%`);
+monitor.stop();
 ```
 
-## Error Handling
+### Thermal Monitor
+
+Track device thermal state.
 
 ```typescript
-import { EdgeVedaError, EdgeVedaErrorCode } from '@edgeveda/react-native';
+import { ThermalMonitor } from '@edgeveda/react-native';
+
+const thermal = new ThermalMonitor();
+thermal.start();
+thermal.onStateChange((state) => console.log(`Thermal: ${state}`));
+// States: nominal, fair, serious, critical
+thermal.stop();
+```
+
+### Battery Drain Tracker
+
+Monitor battery impact during inference.
+
+```typescript
+import { BatteryDrainTracker } from '@edgeveda/react-native';
+
+const battery = new BatteryDrainTracker();
+await battery.start();
+
+const drain = battery.snapshot();
+console.log(`Drain rate: ${drain.drainRatePerHour}%/hr, level: ${drain.level}%`);
+battery.stop();
+```
+
+### Scheduler
+
+Schedule and prioritize inference tasks.
+
+```typescript
+import { Scheduler } from '@edgeveda/react-native';
+
+const scheduler = new Scheduler({ maxConcurrent: 2, defaultPriority: 'normal' });
+
+const handle = scheduler.enqueue({ prompt: 'Task 1', priority: 'high' });
+const result = await handle.result;
+```
+
+### Runtime Policy
+
+Combine budget, thermal, and resource constraints into adaptive policies.
+
+```typescript
+import { RuntimePolicy } from '@edgeveda/react-native';
+
+const policy = new RuntimePolicy({
+  maxTokens: 1000,
+  thermalThrottleState: 'serious',
+  memoryThresholdPercent: 90,
+  action: 'throttle', // 'throttle' | 'cancel' | 'warn'
+});
+
+policy.evaluate(currentContext); // returns recommended action
+```
+
+### Telemetry
+
+Collect and export SDK usage metrics.
+
+```typescript
+import { Telemetry } from '@edgeveda/react-native';
+
+const telemetry = new Telemetry({ enabled: true, batchSize: 50 });
+telemetry.record('inference_start', { model: 'llama-3.2-1b', tokens: 100 });
+telemetry.record('inference_end', { durationMs: 450, tokensPerSec: 22.1 });
+
+const events = telemetry.flush();
+```
+
+## Model Management
+
+### ModelManager
+
+Download, cache, and lifecycle-manage models.
+
+```typescript
+import { ModelManager } from '@edgeveda/react-native';
+
+const manager = new ModelManager({ cacheDir: '/path/to/cache' });
+
+await manager.download('llama-3.2-1b', {
+  onProgress: (p) => console.log(`${p.percent}%`),
+});
+
+const modelPath = manager.getModelPath('llama-3.2-1b');
+const cached = manager.listCachedModels();
+await manager.deleteModel('llama-3.2-1b');
+```
+
+### ModelRegistry
+
+Discover available models and their metadata.
+
+```typescript
+import { ModelRegistry } from '@edgeveda/react-native';
+
+const registry = new ModelRegistry();
+await registry.refresh();
+
+const models = registry.listModels();
+models.forEach(m => console.log(`${m.id}: ${m.name} (${m.sizeBytes} bytes)`));
+
+const model = registry.getModel('llama-3.2-1b');
+console.log(model.quantization, model.contextLength);
+```
+
+## Camera Utilities
+
+Capture and preprocess camera frames for vision pipelines.
+
+```typescript
+import { CameraUtils } from '@edgeveda/react-native';
+
+const camera = new CameraUtils({ facing: 'back', width: 640, height: 480 });
+await camera.start();
+
+const frame = await camera.captureFrame();
+const resized = camera.resize(frame, 224, 224);
+const normalized = camera.normalize(resized);
+
+camera.stop();
+```
+
+## Observability
+
+### PerfTrace
+
+Capture detailed performance traces for inference runs.
+
+```typescript
+import { PerfTrace } from '@edgeveda/react-native';
+
+const trace = new PerfTrace('inference-run-1');
+trace.begin('tokenize');
+// ... tokenization ...
+trace.end('tokenize');
+
+trace.begin('generate');
+// ... generation ...
+trace.end('generate');
+
+const report = trace.report();
+console.log(report.spans); // [{name, startMs, endMs, durationMs}, ...]
+console.log(`Total: ${report.totalDurationMs}ms`);
+```
+
+### NativeErrorCode
+
+Structured error codes from the native C core.
+
+```typescript
+import { NativeErrorCode, isRecoverable } from '@edgeveda/react-native';
 
 try {
-  await EdgeVeda.generate('Hello');
-} catch (error) {
-  if (error instanceof EdgeVedaError) {
-    switch (error.code) {
-      case EdgeVedaErrorCode.MODEL_NOT_LOADED:
-        console.error('Model not loaded');
-        break;
-      case EdgeVedaErrorCode.OUT_OF_MEMORY:
-        console.error('Out of memory');
-        break;
-      // Handle other error codes
-    }
-  }
+  await EdgeVeda.generate('test');
+} catch (e) {
+  const code = NativeErrorCode.fromError(e);
+  console.log(`Error ${code.code}: ${code.message} (domain: ${code.domain})`);
+  console.log(`Recoverable: ${isRecoverable(code)}`);
 }
 ```
 
-## Architecture Configuration
+## Architecture
 
-### Dual Architecture Support
+| Component | File | Description |
+|-----------|------|-------------|
+| EdgeVeda | `EdgeVeda.ts` | Main SDK entry point |
+| NativeEdgeVeda | `NativeEdgeVeda.ts` | TurboModule native bridge |
+| Types | `types.ts` | Core type definitions |
+| ChatSession | `ChatSession.ts` | Multi-turn conversation manager |
+| ChatTemplate | `ChatTemplate.ts` | Prompt template formatting |
+| ChatTypes | `ChatTypes.ts` | Chat type definitions |
+| VisionWorker | `VisionWorker.ts` | Vision inference pipeline |
+| FrameQueue | `FrameQueue.ts` | Frame buffer for vision |
+| Budget | `Budget.ts` | Token/time budget enforcement |
+| LatencyTracker | `LatencyTracker.ts` | Latency percentile tracking |
+| ResourceMonitor | `ResourceMonitor.ts` | Memory/resource monitoring |
+| ThermalMonitor | `ThermalMonitor.ts` | Thermal state tracking |
+| BatteryDrainTracker | `BatteryDrainTracker.ts` | Battery drain monitoring |
+| Scheduler | `Scheduler.ts` | Task scheduling and prioritization |
+| RuntimePolicy | `RuntimePolicy.ts` | Adaptive runtime policies |
+| Telemetry | `Telemetry.ts` | Usage metrics collection |
+| ModelManager | `ModelManager.ts` | Model download and caching |
+| ModelRegistry | `ModelRegistry.ts` | Model discovery and metadata |
+| CameraUtils | `CameraUtils.ts` | Camera capture and preprocessing |
+| PerfTrace | `PerfTrace.ts` | Performance tracing |
+| NativeErrorCode | `NativeErrorCode.ts` | Structured native error codes |
 
-This package supports both React Native architectures with automatic detection:
-
-- **Old Architecture (Bridge)**: Default for React Native 0.68-0.72
-- **New Architecture (TurboModules)**: Default for React Native 0.73+
-
-No code changes needed - the package automatically uses the appropriate implementation based on your app's architecture setting.
-
-### Enabling New Architecture
-
-The New Architecture provides better performance through synchronous native calls (TurboModules) and improved rendering (Fabric).
-
-#### React Native (Bare Workflow)
-
-**iOS** - In your `Podfile`:
-```ruby
-use_frameworks!
-ENV['RCT_NEW_ARCH_ENABLED'] = '1'
-```
-
-Then run:
-```bash
-cd ios && pod install
-```
-
-**Android** - In `android/gradle.properties`:
-```properties
-newArchEnabled=true
-```
-
-#### Expo with Development Builds
-
-Add to your `app.json` or `app.config.js`:
-```json
-{
-  "expo": {
-    "plugins": [
-      [
-        "@edgeveda/react-native"
-      ]
-    ]
-  },
-  "android": {
-    "newArchEnabled": true
-  },
-  "ios": {
-    "newArchEnabled": true
-  }
-}
-```
-
-Then create a development build:
-```bash
-npx expo prebuild
-eas build --profile development
-```
-
-### Verifying Architecture
-
-You can verify which architecture is being used:
-
-**iOS**: Check Xcode build logs for "Building for New Architecture" or presence of `RCT_NEW_ARCH_ENABLED` flag
-
-**Android**: Check `android/gradle.properties` for `newArchEnabled=true`
-
-### Architecture Differences
+## Architecture Support
 
 | Feature | Old Architecture | New Architecture |
 |---------|-----------------|------------------|
@@ -276,44 +360,20 @@ You can verify which architecture is being used:
 | JSI Support | No | Yes |
 | React Native | 0.68-0.72 | 0.73+ |
 
+Architecture detection is automatic — no configuration needed.
+
 ## Performance Tips
 
-1. **Use GPU acceleration** when available by setting `useGpu: true`
-2. **Adjust thread count** based on device capabilities
-3. **Use streaming** for long-form generation to improve perceived latency
-4. **Monitor memory usage** and unload models when not in use
-5. **Choose appropriate quantization** - smaller models (Q4) are faster but less accurate
+1. **Use GPU acceleration** — set `useGpu: true` (Metal on iOS, Vulkan on Android)
+2. **Use streaming** for long-form generation to improve perceived latency
+3. **Monitor memory** with ResourceMonitor and unload models when not in use
+4. **Use RuntimePolicy** to automatically throttle under thermal/memory pressure
+5. **Choose appropriate quantization** — Q4 models are fastest, F16 most accurate
 
 ## Model Support
 
-Edge Veda supports GGUF format models with various quantization levels:
-- Q4_0, Q4_1 - 4-bit quantization (smallest, fastest)
-- Q5_0, Q5_1 - 5-bit quantization (balanced)
-- Q8_0 - 8-bit quantization (larger, more accurate)
-- F16 - 16-bit floating point (largest, most accurate)
-
-## Example App
-
-See the [example](./example) directory for a complete React Native app demonstrating all features.
-
-## Roadmap
-
-- [ ] Web support via WebGPU
-- [ ] Model download and caching utilities
-- [ ] Chat conversation management
-- [ ] Function calling support
-- [ ] LoRA adapter support
+GGUF format with quantization levels: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, F16.
 
 ## License
 
 Apache-2.0
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](../../CONTRIBUTING.md) for details.
-
-## Support
-
-- GitHub Issues: https://github.com/edgeveda/edgeveda-sdk/issues
-- Documentation: https://docs.edgeveda.com
-- Email: support@edgeveda.com
