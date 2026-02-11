@@ -3,7 +3,8 @@
  * High-level JavaScript API wrapping the native TurboModule
  */
 
-import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import { AppState, NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import type { NativeEventSubscription } from 'react-native';
 import NativeEdgeVeda from './NativeEdgeVeda';
 import type {
   EdgeVedaConfig,
@@ -208,11 +209,25 @@ const EVENTS = {
  * Edge Veda SDK Main Class
  * Provides high-level API for on-device LLM inference
  */
+/**
+ * Memory pressure handler callback type.
+ * Called when the OS signals memory pressure (iOS only).
+ */
+type MemoryPressureHandler = () => void | Promise<void>;
+
 class EdgeVedaSDK {
   private eventEmitter: NativeEventEmitter;
   private requestIdCounter = 0;
   private activeGenerations = new Map<string, TokenCallback>();
   private progressCallback?: ProgressCallback;
+
+  // Memory warning / lifecycle management
+  private memoryWarningSubscription: NativeEventSubscription | null = null;
+  private appStateSubscription: NativeEventSubscription | null = null;
+  private customMemoryPressureHandler: MemoryPressureHandler | null = null;
+  private autoUnloadedDueToMemory = false;
+  private lastModelPath: string | null = null;
+  private lastConfig: EdgeVedaConfig | undefined = undefined;
 
   constructor() {
     // Initialize compatibility layer
@@ -225,6 +240,9 @@ class EdgeVedaSDK {
 
     // Set up event listeners
     this.setupEventListeners();
+
+    // Register memory warning listener (iOS emits 'memoryWarning' via AppState)
+    this.setupMemoryWarningListener();
   }
 
   /**
@@ -282,6 +300,135 @@ class EdgeVedaSDK {
   }
 
   /**
+   * Set up memory warning and app state listeners.
+   * On iOS, AppState emits a 'memoryWarning' event when the OS signals pressure.
+   */
+  private setupMemoryWarningListener(): void {
+    // iOS memory warning via AppState
+    this.memoryWarningSubscription = AppState.addEventListener(
+      'memoryWarning',
+      () => {
+        this.handleMemoryWarning();
+      }
+    );
+
+    // Track app state changes for background/foreground awareness
+    this.appStateSubscription = AppState.addEventListener(
+      'change',
+      (nextAppState: string) => {
+        if (nextAppState === 'background') {
+          this.handleAppBackground();
+        }
+      }
+    );
+  }
+
+  /**
+   * Handle OS memory warning.
+   * If a custom handler is set, delegates to it. Otherwise, auto-unloads the model.
+   */
+  private handleMemoryWarning(): void {
+    console.warn('[EdgeVeda] Memory warning received from OS');
+
+    if (this.customMemoryPressureHandler) {
+      try {
+        this.customMemoryPressureHandler();
+      } catch (e) {
+        console.error('[EdgeVeda] Error in custom memory pressure handler:', e);
+      }
+      return;
+    }
+
+    // Default behavior: auto-unload model to free memory
+    if (this.isModelLoaded()) {
+      console.warn('[EdgeVeda] Auto-unloading model due to memory pressure');
+      this.cancelGeneration()
+        .then(() => this.unloadModel())
+        .then(() => {
+          this.autoUnloadedDueToMemory = true;
+        })
+        .catch((err) => {
+          console.error('[EdgeVeda] Error during memory pressure unload:', err);
+        });
+    }
+  }
+
+  /**
+   * Handle app going to background.
+   * Currently a no-op hook — can be customized by subclasses or future logic.
+   */
+  private handleAppBackground(): void {
+    // Optional: could cancel active generations or reduce resource usage
+  }
+
+  /**
+   * Set a custom memory pressure handler.
+   * By default, EdgeVeda auto-unloads the model on memory warnings.
+   * Use this to override with custom logic (e.g., clear caches, downsize context).
+   *
+   * @param handler - Custom handler, or null to restore default behavior
+   *
+   * @example
+   * ```typescript
+   * EdgeVeda.setMemoryPressureHandler(() => {
+   *   console.log('Custom memory handling');
+   *   // Clear application caches instead of unloading model
+   * });
+   * ```
+   */
+  setMemoryPressureHandler(handler: MemoryPressureHandler | null): void {
+    this.customMemoryPressureHandler = handler;
+  }
+
+  /**
+   * Check if the model was auto-unloaded due to memory pressure.
+   * Use this to decide whether to reload the model when the app returns to foreground.
+   *
+   * @returns true if model was auto-unloaded due to memory warning
+   *
+   * @example
+   * ```typescript
+   * if (EdgeVeda.wasAutoUnloaded()) {
+   *   await EdgeVeda.reloadModel();
+   * }
+   * ```
+   */
+  wasAutoUnloaded(): boolean {
+    return this.autoUnloadedDueToMemory;
+  }
+
+  /**
+   * Reload a previously loaded model after it was unloaded (e.g., due to memory pressure).
+   * Uses the same model path and config from the last init() call.
+   *
+   * @throws EdgeVedaError if no previous model path is available
+   *
+   * @example
+   * ```typescript
+   * // After memory pressure auto-unload
+   * if (EdgeVeda.wasAutoUnloaded()) {
+   *   await EdgeVeda.reloadModel();
+   *   console.log('Model reloaded successfully');
+   * }
+   * ```
+   */
+  async reloadModel(): Promise<void> {
+    if (this.isModelLoaded()) {
+      return; // Already loaded
+    }
+
+    if (!this.lastModelPath) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.MODEL_NOT_LOADED,
+        'No model path available for reload. Call init() first.'
+      );
+    }
+
+    await this.init(this.lastModelPath, this.lastConfig);
+    this.autoUnloadedDueToMemory = false;
+  }
+
+  /**
    * Initialize the model
    * @param modelPath - Absolute path to the GGUF model file
    * @param config - Optional configuration options
@@ -302,9 +449,14 @@ class EdgeVedaSDK {
 
       this.progressCallback = onProgress;
 
+      // Store for potential reload
+      this.lastModelPath = modelPath;
+      this.lastConfig = config;
+
       const configJson = JSON.stringify(config || {});
       await NativeEdgeVeda.initialize(modelPath, configJson);
 
+      this.autoUnloadedDueToMemory = false;
       this.progressCallback = undefined;
     } catch (error) {
       this.progressCallback = undefined;
@@ -569,11 +721,18 @@ class EdgeVedaSDK {
    * Clean up resources
    */
   destroy(): void {
+    // Remove native event listeners
     this.eventEmitter.removeAllListeners(EVENTS.TOKEN_GENERATED);
     this.eventEmitter.removeAllListeners(EVENTS.GENERATION_COMPLETE);
     this.eventEmitter.removeAllListeners(EVENTS.GENERATION_ERROR);
     this.eventEmitter.removeAllListeners(EVENTS.MODEL_LOAD_PROGRESS);
     this.activeGenerations.clear();
+
+    // Remove memory / lifecycle subscriptions
+    this.memoryWarningSubscription?.remove();
+    this.memoryWarningSubscription = null;
+    this.appStateSubscription?.remove();
+    this.appStateSubscription = null;
   }
 
   /**

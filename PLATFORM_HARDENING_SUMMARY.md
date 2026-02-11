@@ -93,8 +93,50 @@ if (edgeVeda.wasAutoUnloaded()) {
 
 ---
 
-### ✅ Web - Browser Compatibility Checks
+### ✅ Web - Browser Compatibility & Worker Error Recovery
 **Location:** `web/src/index.ts`
+
+#### Worker Error Recovery (New)
+
+**Features:**
+- Automatic Web Worker restart on crash/error
+- Exponential backoff between restart attempts (2s base × 2^attempt)
+- Maximum 3 restart attempts before giving up
+- 30-second cooldown reset (successful recovery resets counter)
+- Pending request rejection on worker crash
+- Recovery state tracking for monitoring/telemetry
+
+**Key Methods:**
+```typescript
+private createAndAttachWorker(): void
+private handleWorkerCrash(errorMessage: string): void
+public getWorkerRestartCount(): number
+```
+
+**Recovery Behavior:**
+```
+Worker crash #1 → wait 2s → restart
+Worker crash #2 → wait 4s → restart  
+Worker crash #3 → wait 8s → restart
+Worker crash #4 → max retries exceeded, SDK enters error state
+
+If 30s pass without a crash → restart count resets to 0
+```
+
+**Usage Example:**
+```typescript
+const sdk = new EdgeVedaWeb();
+await sdk.init(modelPath);
+
+// Monitor worker health
+console.log(`Worker restarts: ${sdk.getWorkerRestartCount()}`);
+
+// Worker crashes are handled automatically
+// Pending requests are rejected with WorkerCrashError
+// SDK attempts transparent recovery
+```
+
+#### Browser Compatibility Checks
 
 **Features:**
 - Comprehensive browser compatibility detection
@@ -144,8 +186,50 @@ if (isFirefox && version < 113) {
 
 ---
 
-### ✅ React Native - Hermes/JSC Compatibility Layer
+### ✅ React Native - Memory Warning Handlers & Engine Compatibility
 **Location:** `react-native/src/EdgeVeda.ts`
+
+#### Memory Warning Handlers (New)
+
+**Features:**
+- iOS/Android memory warning integration via `AppState.addEventListener('memoryWarning')`
+- App background state detection via `AppState.addEventListener('change')`
+- Automatic model unloading on memory pressure
+- Custom memory pressure handler support
+- Model reload capability after memory pressure recovery
+- State tracking for auto-unloaded models
+- Proper cleanup of event subscriptions in `destroy()`
+
+**Key Methods:**
+```typescript
+private setupMemoryWarningListener(): void
+private handleMemoryWarning(): void
+public setMemoryPressureHandler(handler: (sdk: EdgeVedaSDK) => void): void
+public wasAutoUnloaded(): boolean
+public async reloadModel(): Promise<boolean>
+```
+
+**Usage Example:**
+```typescript
+const sdk = new EdgeVedaSDK();
+await sdk.init(modelPath, config);
+
+// Set custom memory handler (optional)
+sdk.setMemoryPressureHandler((sdk) => {
+  console.log('Memory warning received!');
+  // Custom cleanup logic
+});
+
+// Check and reload after memory pressure
+if (sdk.wasAutoUnloaded()) {
+  await sdk.reloadModel();
+}
+
+// Cleanup removes all subscriptions
+sdk.destroy();
+```
+
+#### Engine Compatibility Layer
 
 **Features:**
 - JavaScript engine detection (Hermes, JSC, V8)
@@ -318,7 +402,7 @@ Platform hardening is now complete across all SDKs:
 |----------|--------|--------------|
 | Swift/iOS | ✅ Complete | Memory warnings, auto-unload, reload |
 | Kotlin/Android | ✅ Complete | Lifecycle callbacks, TRIM_MEMORY, reload |
-| Web | ✅ Complete | Browser checks, WebGPU/WASM detection |
-| React Native | ✅ Complete | Engine detection, compatibility warnings |
+| Web | ✅ Complete | Browser checks, WebGPU/WASM detection, worker error recovery |
+| React Native | ✅ Complete | Memory warnings, auto-unload, reload, engine detection |
 
 All platforms now have production-ready hardening that gracefully handles resource constraints, platform limitations, and compatibility issues.
