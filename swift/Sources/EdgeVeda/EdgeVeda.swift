@@ -1,5 +1,11 @@
 import Foundation
 import CEdgeVeda
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// Memory warning handler callback
+public typealias MemoryWarningHandler = @Sendable () async -> Void
 
 /// Main EdgeVeda inference engine with async/await support
 @available(iOS 15.0, macOS 12.0, *)
@@ -15,6 +21,15 @@ public actor EdgeVeda {
     /// Track the current generation task for cancellation support
     private var currentGenerationTask: Task<String, Error>?
     private var currentStreamTask: Task<Void, Never>?
+    
+    /// Memory warning observer
+    private var memoryWarningObserver: Any?
+    
+    /// Custom memory warning handler
+    private var memoryWarningHandler: MemoryWarningHandler?
+    
+    /// Flag to track if model was auto-unloaded due to memory pressure
+    private var autoUnloadedDueToMemory: Bool = false
 
     // MARK: - Initialization
 
@@ -34,6 +49,11 @@ public actor EdgeVeda {
 
         // Load model via FFI
         try await loadModel()
+        
+        // Set up memory warning observer on iOS
+        #if canImport(UIKit)
+        setupMemoryWarningObserver()
+        #endif
     }
 
     private func loadModel() async throws {
@@ -200,6 +220,18 @@ public actor EdgeVeda {
 
         context = nil
     }
+    
+    /// Reload the model after it was unloaded
+    /// Useful for recovering from memory pressure situations
+    /// - Throws: EdgeVedaError if reload fails
+    public func reloadModel() async throws {
+        guard context == nil else {
+            return // Already loaded
+        }
+        
+        try await loadModel()
+        autoUnloadedDueToMemory = false
+    }
 
     /// Check if a model is currently loaded and ready for inference
     /// - Returns: true if model is loaded, false otherwise
@@ -283,6 +315,82 @@ public actor EdgeVeda {
         )
     }
 
+    // MARK: - Memory Management (iOS)
+    
+    #if canImport(UIKit)
+    /// Set up memory warning observer for iOS
+    private nonisolated func setupMemoryWarningObserver() {
+        let observer = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { [weak self] in
+                await self?.handleMemoryWarning()
+            }
+        }
+        
+        Task { [weak self] in
+            await self?.storeMemoryObserver(observer)
+        }
+    }
+    
+    /// Store the memory observer (must be called in actor context)
+    private func storeMemoryObserver(_ observer: Any) {
+        self.memoryWarningObserver = observer
+    }
+    
+    /// Handle memory warning
+    private func handleMemoryWarning() async {
+        // Call custom handler if set
+        if let handler = memoryWarningHandler {
+            await handler()
+        } else {
+            // Default behavior: unload model to free memory
+            await handleMemoryWarningDefault()
+        }
+    }
+    
+    /// Default memory warning handler: unload the model
+    private func handleMemoryWarningDefault() async {
+        guard context != nil else {
+            return
+        }
+        
+        // Cancel any ongoing generation
+        currentGenerationTask?.cancel()
+        currentGenerationTask = nil
+        currentStreamTask?.cancel()
+        currentStreamTask = nil
+        
+        // Unload model to free memory
+        await unloadModel()
+        autoUnloadedDueToMemory = true
+    }
+    #endif
+    
+    /// Set a custom memory warning handler
+    /// By default, EdgeVeda will unload the model when memory warnings occur.
+    /// Use this to customize the behavior (e.g., reduce cache size, free other resources)
+    ///
+    /// - Parameter handler: Custom handler to call on memory warnings
+    /// - Example:
+    /// ```swift
+    /// await edgeVeda.setMemoryWarningHandler {
+    ///     // Custom cleanup logic
+    ///     print("Memory warning received, performing custom cleanup")
+    /// }
+    /// ```
+    public func setMemoryWarningHandler(_ handler: MemoryWarningHandler?) {
+        self.memoryWarningHandler = handler
+    }
+    
+    /// Check if model was auto-unloaded due to memory pressure
+    /// - Returns: true if model was unloaded due to memory warning
+    public func wasAutoUnloaded() -> Bool {
+        return autoUnloadedDueToMemory
+    }
+
     // MARK: - Static Methods
 
     /// Get SDK version
@@ -304,5 +412,12 @@ public actor EdgeVeda {
         if let ctx = ctx {
             FFIBridge.freeContext(ctx)
         }
+        
+        // Remove memory warning observer
+        #if canImport(UIKit)
+        if let observer = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        #endif
     }
 }

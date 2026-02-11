@@ -12,6 +12,7 @@ import type {
   WorkerMessageType,
 } from './types';
 import { version } from '../package.json';
+import { detectWebGPU, supportsWasmThreads } from './wasm-loader';
 
 export * from './types';
 export { detectWebGPU, supportsWasmThreads, getOptimalThreadCount } from './wasm-loader';
@@ -76,6 +77,9 @@ export class EdgeVeda {
     if (this.initialized) {
       throw new Error('EdgeVeda already initialized');
     }
+
+    // Perform browser compatibility checks
+    await this.checkBrowserCompatibility();
 
     // Create worker
     try {
@@ -304,6 +308,190 @@ export class EdgeVeda {
    */
   static getVersion(): string {
     return version;
+  }
+
+  /**
+   * Checks browser compatibility and warns about potential issues
+   */
+  private async checkBrowserCompatibility(): Promise<void> {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // Detect browser and version
+    const browserInfo = this.detectBrowser();
+
+    // Check WebGPU support
+    if (this.config.device === 'webgpu' || this.config.device === 'auto') {
+      const webgpuResult = await detectWebGPU();
+      
+      if (!webgpuResult.supported) {
+        if (this.config.device === 'webgpu') {
+          errors.push(
+            `WebGPU is not supported in this browser: ${webgpuResult.error}. ` +
+            'Consider using device: "wasm" or "auto" for fallback.'
+          );
+        } else {
+          warnings.push(
+            `WebGPU is not available (${webgpuResult.error}). ` +
+            'Falling back to WASM-only mode. Performance may be reduced.'
+          );
+        }
+      } else {
+        console.log('WebGPU detected:', webgpuResult.adapter);
+      }
+    }
+
+    // Check WASM threads support
+    const hasWasmThreads = supportsWasmThreads();
+    if (!hasWasmThreads) {
+      warnings.push(
+        'SharedArrayBuffer not available. WASM threading disabled. ' +
+        'For better performance, ensure cross-origin isolation is enabled ' +
+        '(COOP and COEP headers).'
+      );
+    }
+
+    // Safari-specific warnings
+    if (browserInfo.isSafari) {
+      warnings.push(
+        'Safari detected. Note: WebGPU support in Safari is experimental. ' +
+        'If you encounter issues, try switching to device: "wasm".'
+      );
+
+      if (browserInfo.version && browserInfo.version < 17) {
+        warnings.push(
+          `Safari ${browserInfo.version} may have limited WebGPU support. ` +
+          'Please update to Safari 17+ for best compatibility.'
+        );
+      }
+
+      // Safari has strict SharedArrayBuffer requirements
+      if (!hasWasmThreads) {
+        warnings.push(
+          'Safari requires specific cross-origin headers for SharedArrayBuffer. ' +
+          'Ensure your server sends: Cross-Origin-Opener-Policy: same-origin ' +
+          'and Cross-Origin-Embedder-Policy: require-corp'
+        );
+      }
+    }
+
+    // Firefox-specific warnings
+    if (browserInfo.isFirefox) {
+      if (browserInfo.version && browserInfo.version < 113) {
+        warnings.push(
+          `Firefox ${browserInfo.version} detected. WebGPU requires Firefox 113+. ` +
+          'Please update your browser or use device: "wasm".'
+        );
+      }
+    }
+
+    // Check Web Workers support
+    if (typeof Worker === 'undefined') {
+      errors.push(
+        'Web Workers are not supported in this environment. ' +
+        'EdgeVeda requires Web Workers for background inference.'
+      );
+    }
+
+    // Check for mobile browsers
+    if (browserInfo.isMobile) {
+      warnings.push(
+        'Mobile browser detected. Large models may cause memory issues. ' +
+        'Consider using smaller quantized models (Q4, Q5) for better performance.'
+      );
+    }
+
+    // Check available memory (if Performance API is available)
+    if ('memory' in performance && (performance as any).memory) {
+      const memoryInfo = (performance as any).memory;
+      const availableMB = memoryInfo.jsHeapSizeLimit / (1024 * 1024);
+      
+      if (availableMB < 512) {
+        warnings.push(
+          `Limited memory detected (${Math.round(availableMB)}MB available). ` +
+          'Large models may fail to load. Consider using smaller models.'
+        );
+      }
+    }
+
+    // Log all warnings
+    if (warnings.length > 0) {
+      console.warn('EdgeVeda compatibility warnings:');
+      warnings.forEach((warning, i) => {
+        console.warn(`  ${i + 1}. ${warning}`);
+      });
+    }
+
+    // Throw errors if critical features are missing
+    if (errors.length > 0) {
+      const errorMessage = 'EdgeVeda initialization failed due to compatibility issues:\n' +
+        errors.map((err, i) => `  ${i + 1}. ${err}`).join('\n');
+      throw new Error(errorMessage);
+    }
+
+    // Log successful compatibility check
+    if (warnings.length === 0 && errors.length === 0) {
+      console.log('EdgeVeda compatibility check passed. Browser fully supported.');
+    }
+  }
+
+  /**
+   * Detects the current browser and version
+   */
+  private detectBrowser(): {
+    name: string;
+    version: number | null;
+    isSafari: boolean;
+    isChrome: boolean;
+    isFirefox: boolean;
+    isEdge: boolean;
+    isMobile: boolean;
+  } {
+    const ua = navigator.userAgent;
+    const isMobile = /Mobile|Android|iPhone|iPad|iPod/i.test(ua);
+
+    // Safari detection
+    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+    const safariMatch = ua.match(/Version\/(\d+)/);
+    
+    // Chrome detection
+    const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor);
+    const chromeMatch = ua.match(/Chrome\/(\d+)/);
+    
+    // Firefox detection
+    const isFirefox = /Firefox/.test(ua);
+    const firefoxMatch = ua.match(/Firefox\/(\d+)/);
+    
+    // Edge detection
+    const isEdge = /Edg/.test(ua);
+    const edgeMatch = ua.match(/Edg\/(\d+)/);
+
+    let name = 'Unknown';
+    let version: number | null = null;
+
+    if (isEdge && edgeMatch) {
+      name = 'Edge';
+      version = parseInt(edgeMatch[1], 10);
+    } else if (isChrome && chromeMatch) {
+      name = 'Chrome';
+      version = parseInt(chromeMatch[1], 10);
+    } else if (isFirefox && firefoxMatch) {
+      name = 'Firefox';
+      version = parseInt(firefoxMatch[1], 10);
+    } else if (isSafari && safariMatch) {
+      name = 'Safari';
+      version = parseInt(safariMatch[1], 10);
+    }
+
+    return {
+      name,
+      version,
+      isSafari,
+      isChrome,
+      isFirefox,
+      isEdge,
+      isMobile,
+    };
   }
 
   /**

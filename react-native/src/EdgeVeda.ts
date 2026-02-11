@@ -3,7 +3,7 @@
  * High-level JavaScript API wrapping the native TurboModule
  */
 
-import { NativeEventEmitter, NativeModules } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import NativeEdgeVeda from './NativeEdgeVeda';
 import type {
   EdgeVedaConfig,
@@ -15,6 +15,184 @@ import type {
 } from './types';
 import { EdgeVedaError, EdgeVedaErrorCode } from './types';
 import { version } from '../package.json';
+
+/**
+ * Type declarations for React Native globals
+ */
+declare const global: {
+  HermesInternal?: any;
+  nativeFabricUIManager?: any;
+  v8?: any;
+  WeakRef?: any;
+  performance?: {
+    now?: () => number;
+  };
+} & typeof globalThis;
+
+/**
+ * JavaScript engine detection and compatibility
+ */
+interface EngineInfo {
+  name: 'hermes' | 'jsc' | 'v8' | 'unknown';
+  version?: string;
+  supportsProxy: boolean;
+  supportsWeakRef: boolean;
+  supportsBigInt: boolean;
+  supportsSharedArrayBuffer: boolean;
+}
+
+/**
+ * Detect JavaScript engine
+ */
+function detectEngine(): EngineInfo {
+  const supportsProxy = typeof Proxy !== 'undefined';
+  const supportsWeakRef = typeof (global as any).WeakRef !== 'undefined';
+  const supportsBigInt = typeof BigInt !== 'undefined';
+  const supportsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
+
+  // Check for Hermes
+  if (typeof (global as any).HermesInternal !== 'undefined') {
+    return {
+      name: 'hermes',
+      version: (global as any).HermesInternal?.getRuntimeProperties?.()?.['OSS Release Version'],
+      supportsProxy,
+      supportsWeakRef,
+      supportsBigInt,
+      supportsSharedArrayBuffer,
+    };
+  }
+
+  // Check for JSC (Fabric UIManager is JSC-specific on iOS)
+  if (typeof (global as any).nativeFabricUIManager !== 'undefined' || Platform.OS === 'ios') {
+    return {
+      name: 'jsc',
+      supportsProxy,
+      supportsWeakRef,
+      supportsBigInt,
+      supportsSharedArrayBuffer,
+    };
+  }
+
+  // Check for V8 (Android default in older RN versions)
+  if (typeof (global as any).v8 !== 'undefined') {
+    return {
+      name: 'v8',
+      supportsProxy,
+      supportsWeakRef,
+      supportsBigInt,
+      supportsSharedArrayBuffer,
+    };
+  }
+
+  return {
+    name: 'unknown',
+    supportsProxy,
+    supportsWeakRef,
+    supportsBigInt,
+    supportsSharedArrayBuffer,
+  };
+}
+
+/**
+ * Polyfill Performance.now() if not available
+ */
+function ensurePerformanceNow(): void {
+  const perf = (global as any).performance;
+  if (typeof perf === 'undefined' || typeof perf?.now !== 'function') {
+    const startTime = Date.now();
+    (global as any).performance = {
+      now: () => Date.now() - startTime,
+    };
+  }
+}
+
+/**
+ * Check engine compatibility and emit warnings
+ */
+function checkEngineCompatibility(engine: EngineInfo): void {
+  const warnings: string[] = [];
+
+  // Hermes-specific checks
+  if (engine.name === 'hermes') {
+    console.log(`[EdgeVeda] Running on Hermes ${engine.version || 'unknown version'}`);
+    
+    if (!engine.supportsProxy) {
+      warnings.push(
+        'Proxy is not supported in this Hermes version. Some advanced features may be limited.'
+      );
+    }
+
+    if (!engine.supportsBigInt) {
+      warnings.push(
+        'BigInt is not supported. Large token IDs may have precision issues.'
+      );
+    }
+  }
+
+  // JSC-specific checks
+  if (engine.name === 'jsc') {
+    console.log('[EdgeVeda] Running on JavaScriptCore');
+    
+    if (Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) < 14) {
+      warnings.push(
+        'iOS 13 or earlier detected. Some JavaScript features may be limited. ' +
+        'Consider updating to iOS 14+ for best compatibility.'
+      );
+    }
+  }
+
+  // General checks
+  if (!engine.supportsWeakRef) {
+    warnings.push(
+      'WeakRef is not supported. Memory management may be less efficient.'
+    );
+  }
+
+  if (!engine.supportsSharedArrayBuffer) {
+    warnings.push(
+      'SharedArrayBuffer is not supported. Multi-threaded WASM operations are disabled.'
+    );
+  }
+
+  // Emit warnings
+  if (warnings.length > 0) {
+    console.warn('[EdgeVeda] Engine compatibility warnings:');
+    warnings.forEach((warning, i) => {
+      console.warn(`  ${i + 1}. ${warning}`);
+    });
+  }
+
+  // Check for critical missing features
+  if (typeof Promise === 'undefined') {
+    throw new Error(
+      '[EdgeVeda] Promise is not available. This is a critical requirement. ' +
+      'Please ensure your React Native version is up to date.'
+    );
+  }
+
+  if (typeof Uint8Array === 'undefined') {
+    throw new Error(
+      '[EdgeVeda] Uint8Array is not available. This is a critical requirement. ' +
+      'Please ensure your React Native version is up to date.'
+    );
+  }
+}
+
+/**
+ * Initialize compatibility layer
+ */
+function initCompatibilityLayer(): EngineInfo {
+  // Detect engine
+  const engine = detectEngine();
+
+  // Ensure Performance.now()
+  ensurePerformanceNow();
+
+  // Check compatibility
+  checkEngineCompatibility(engine);
+
+  return engine;
+}
 
 /**
  * Native event types
@@ -37,6 +215,9 @@ class EdgeVedaSDK {
   private progressCallback?: ProgressCallback;
 
   constructor() {
+    // Initialize compatibility layer
+    initCompatibilityLayer();
+
     // Create event emitter for native events
     this.eventEmitter = new NativeEventEmitter(
       NativeModules.EdgeVeda || NativeEdgeVeda
