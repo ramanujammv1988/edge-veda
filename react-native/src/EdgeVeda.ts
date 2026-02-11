@@ -14,6 +14,7 @@ import type {
   ProgressCallback,
 } from './types';
 import { EdgeVedaError, EdgeVedaErrorCode } from './types';
+import { version } from '../package.json';
 
 /**
  * Native event types
@@ -365,6 +366,19 @@ class EdgeVedaSDK {
     this.eventEmitter.removeAllListeners(EVENTS.GENERATION_ERROR);
     this.eventEmitter.removeAllListeners(EVENTS.MODEL_LOAD_PROGRESS);
     this.activeGenerations.clear();
+  }
+
+  /**
+   * Get SDK version
+   * @returns Version string
+   * @example
+   * ```typescript
+   * const version = EdgeVeda.getVersion();
+   * console.log('EdgeVeda SDK version:', version); // "0.1.0"
+   * ```
+   */
+  static getVersion(): string {
+    return version;
   }
 }
 

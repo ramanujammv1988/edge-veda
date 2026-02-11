@@ -177,6 +177,29 @@ public actor EdgeVeda {
         }.value
     }
 
+    /// Cancel an ongoing generation
+    /// Note: This is a placeholder for future implementation with proper cancellation support
+    public func cancelGeneration() async throws {
+        guard context != nil else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+        // TODO: Implement native cancellation when FFI supports it
+        throw EdgeVedaError.unknown(message: "Cancellation not yet implemented in native layer")
+    }
+
+    // MARK: - Static Methods
+
+    /// Get SDK version
+    /// - Returns: Version string
+    /// - Example:
+    /// ```swift
+    /// let version = EdgeVeda.getVersion()
+    /// print("EdgeVeda SDK version: \(version)") // "1.0.0"
+    /// ```
+    public static func getVersion() -> String {
+        return EdgeVedaVersion.version
+    }
+
     // MARK: - Cleanup
 
     deinit {

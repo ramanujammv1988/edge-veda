@@ -140,6 +140,51 @@ class EdgeVeda private constructor(
         }
 
     /**
+     * Get model information including architecture, parameters, and metadata.
+     *
+     * @return Map of model information
+     * @throws EdgeVedaException.GenerationError if retrieval fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun getModelInfo(): Map<String, String> {
+        checkInitialized()
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.getModelInfo()
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to get model info: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Cancel an ongoing generation.
+     *
+     * Note: This is a placeholder for future implementation with proper cancellation support.
+     *
+     * @throws EdgeVedaException.GenerationError if cancellation fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun cancelGeneration() {
+        checkInitialized()
+
+        withContext(Dispatchers.Default) {
+            try {
+                // TODO: Implement native cancellation when native layer supports it
+                throw EdgeVedaException.GenerationError(
+                    "Cancellation not yet implemented in native layer",
+                    null
+                )
+            } catch (e: EdgeVedaException) {
+                throw e
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to cancel generation: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
      * Unload the model from memory while keeping the SDK instance alive.
      *
      * After calling this, you must call init() again before generating.
@@ -209,7 +254,7 @@ class EdgeVeda private constructor(
          *
          * @return Version string (e.g., "1.0.0")
          */
-        fun getVersion(): String = "1.0.0"
+        fun getVersion(): String = BuildConfig.VERSION_NAME
 
         /**
          * Check if the native library is available.
