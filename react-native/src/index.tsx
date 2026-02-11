@@ -22,6 +22,12 @@ export type {
 
 export { EdgeVedaError, EdgeVedaErrorCode } from './types';
 
+// Export ChatSession and related types
+export { ChatSession } from './ChatSession';
+export type { ChatMessage } from './ChatTypes';
+export { ChatRole, SystemPromptPreset } from './ChatTypes';
+export { ChatTemplate } from './ChatTemplate';
+
 // Export native module spec (for advanced users)
 export { default as NativeEdgeVeda } from './NativeEdgeVeda';
 export type { Spec as NativeEdgeVedaSpec } from './NativeEdgeVeda';

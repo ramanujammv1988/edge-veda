@@ -63,6 +63,12 @@ export interface Spec extends TurboModule {
   isModelLoaded(): boolean;
 
   /**
+   * Reset the conversation context
+   * @returns Promise that resolves when context is reset
+   */
+  resetContext(): Promise<void>;
+
+  /**
    * Unload the model from memory
    * @returns Promise that resolves when model is unloaded
    */

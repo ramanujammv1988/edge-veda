@@ -170,6 +170,12 @@ public actor EdgeVeda {
         context = nil
     }
 
+    /// Check if a model is currently loaded and ready for inference
+    /// - Returns: true if model is loaded, false otherwise
+    public func isModelLoaded() -> Bool {
+        return context != nil
+    }
+
     /// Reset conversation context
     public func resetContext() async throws {
         guard let ctx = context else {
