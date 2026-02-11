@@ -872,8 +872,10 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
  * Model Information
  * ========================================================================= */
 
+#ifdef EDGE_VEDA_LLAMA_ENABLED
 // Static buffer for model description (used by ev_get_model_info)
 static char g_model_desc[256] = {0};
+#endif
 
 ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
     if (!ctx || !info) {

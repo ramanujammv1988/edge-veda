@@ -4,7 +4,11 @@ import CEdgeVeda
 /// Main EdgeVeda inference engine with async/await support
 @available(iOS 15.0, macOS 12.0, *)
 public actor EdgeVeda {
-    private var context: ev_context?
+    /// The C context pointer. Marked nonisolated(unsafe) because:
+    /// - It's an opaque C pointer managed by the underlying C library
+    /// - The C library handles thread safety internally
+    /// - We need to access it from nonisolated deinit for cleanup
+    private nonisolated(unsafe) var context: ev_context?
     private let config: EdgeVedaConfig
     private let modelPath: String
 
@@ -114,7 +118,7 @@ public actor EdgeVeda {
                         frequencyPenalty: 0.0,
                         presencePenalty: 0.0,
                         stopSequences: options.stopSequences
-                    ) { token in
+                    ) { @Sendable token in
                         continuation.yield(token)
                     }
                     continuation.finish()
@@ -202,8 +206,10 @@ public actor EdgeVeda {
 
     // MARK: - Cleanup
 
-    deinit {
-        if let ctx = context {
+    nonisolated deinit {
+        // Capture context locally to avoid actor isolation issues
+        let ctx = context
+        if let ctx = ctx {
             FFIBridge.freeContext(ctx)
         }
     }

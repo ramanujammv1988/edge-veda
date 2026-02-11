@@ -9,7 +9,6 @@ import type {
   WorkerInitMessage,
   WorkerGenerateMessage,
   EdgeVedaConfig,
-  GenerateOptions,
   GenerateResult,
   StreamChunk,
   LoadProgress,

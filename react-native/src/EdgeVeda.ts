@@ -3,7 +3,7 @@
  * High-level JavaScript API wrapping the native TurboModule
  */
 
-import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import { NativeEventEmitter, NativeModules } from 'react-native';
 import NativeEdgeVeda from './NativeEdgeVeda';
 import type {
   EdgeVedaConfig,

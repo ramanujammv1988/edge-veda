@@ -10,7 +10,6 @@ import type {
   StreamChunk,
   WorkerMessage,
   WorkerMessageType,
-  LoadProgress,
 } from './types';
 import { version } from '../package.json';
 

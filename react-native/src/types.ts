@@ -3,6 +3,13 @@
  * Type definitions for React Native SDK
  */
 
+// Extend ErrorConstructor to include V8's captureStackTrace method
+declare global {
+  interface ErrorConstructor {
+    captureStackTrace?(targetObject: object, constructorOpt?: Function): void;
+  }
+}
+
 /**
  * Model configuration options
  */
