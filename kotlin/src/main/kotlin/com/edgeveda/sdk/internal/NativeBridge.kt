@@ -162,6 +162,37 @@ internal class NativeBridge {
     }
 
     /**
+     * Reset the conversation context while keeping the model loaded.
+     *
+     * @return true if successful, false otherwise
+     */
+    fun resetContext(): Boolean {
+        checkNotDisposed()
+        return nativeReset(nativeHandle)
+    }
+
+    /**
+     * Get model information including architecture, parameters, and metadata.
+     *
+     * @return Map of model information
+     * @throws EdgeVedaException.GenerationError if retrieval fails
+     */
+    fun getModelInfo(): Map<String, String> {
+        checkNotDisposed()
+        val infoArray = nativeGetModelInfo(nativeHandle)
+            ?: throw EdgeVedaException.GenerationError("Failed to retrieve model information")
+
+        // Convert array to map (assumes array contains key-value pairs)
+        val infoMap = mutableMapOf<String, String>()
+        var i = 0
+        while (i < infoArray.size - 1) {
+            infoMap[infoArray[i]] = infoArray[i + 1]
+            i += 2
+        }
+        return infoMap
+    }
+
+    /**
      * Dispose of native resources.
      */
     fun dispose() {

@@ -257,6 +257,33 @@ class EdgeVedaSDK {
   }
 
   /**
+   * Reset the conversation context while keeping the model loaded
+   * This clears the KV cache and conversation history for a fresh start
+   */
+  async resetContext(): Promise<void> {
+    try {
+      if (!this.isModelLoaded()) {
+        throw new EdgeVedaError(
+          EdgeVedaErrorCode.MODEL_NOT_LOADED,
+          'Model is not loaded. Call init() first.'
+        );
+      }
+
+      await NativeEdgeVeda.resetContext();
+    } catch (error) {
+      if (error instanceof EdgeVedaError) {
+        throw error;
+      }
+
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.UNKNOWN_ERROR,
+        'Failed to reset context',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
    * Get memory usage statistics
    * @returns Memory usage information
    */

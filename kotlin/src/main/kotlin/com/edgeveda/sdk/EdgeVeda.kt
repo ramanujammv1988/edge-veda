@@ -159,6 +159,41 @@ class EdgeVeda private constructor(
     }
 
     /**
+     * Check if a model is currently loaded and ready for inference.
+     *
+     * @return true if model is loaded and initialized, false otherwise
+     */
+    fun isModelLoaded(): Boolean {
+        return initialized.get() && !closed.get()
+    }
+
+    /**
+     * Reset the conversation context while keeping the model loaded.
+     *
+     * This clears the KV cache and resets the conversation history,
+     * allowing you to start a fresh conversation with the same model.
+     *
+     * @throws EdgeVedaException.GenerationError if reset fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun resetContext() {
+        checkInitialized()
+
+        withContext(Dispatchers.Default) {
+            try {
+                val success = nativeBridge.resetContext()
+                if (!success) {
+                    throw EdgeVedaException.GenerationError("Failed to reset context", null)
+                }
+            } catch (e: EdgeVedaException) {
+                throw e
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to reset context: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
      * Cancel an ongoing generation.
      *
      * Note: This is a placeholder for future implementation with proper cancellation support.

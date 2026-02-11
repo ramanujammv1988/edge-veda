@@ -282,6 +282,8 @@ export enum WorkerMessageType {
   MODEL_INFO_RESPONSE = 'model_info_response',
   UNLOAD_MODEL = 'unload_model',
   UNLOAD_SUCCESS = 'unload_success',
+  RESET_CONTEXT = 'reset_context',
+  RESET_SUCCESS = 'reset_success',
   PROGRESS = 'progress',
   TERMINATE = 'terminate',
 }
@@ -417,6 +419,20 @@ export interface WorkerUnloadSuccessMessage extends WorkerMessageBase {
 }
 
 /**
+ * Reset context message
+ */
+export interface WorkerResetContextMessage extends WorkerMessageBase {
+  type: WorkerMessageType.RESET_CONTEXT;
+}
+
+/**
+ * Reset success response
+ */
+export interface WorkerResetSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.RESET_SUCCESS;
+}
+
+/**
  * Terminate message
  */
 export interface WorkerTerminateMessage extends WorkerMessageBase {
@@ -442,6 +458,8 @@ export type WorkerMessage =
   | WorkerModelInfoResponseMessage
   | WorkerUnloadModelMessage
   | WorkerUnloadSuccessMessage
+  | WorkerResetContextMessage
+  | WorkerResetSuccessMessage
   | WorkerProgressMessage
   | WorkerTerminateMessage;
 

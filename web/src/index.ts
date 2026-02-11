@@ -24,6 +24,12 @@ export {
   estimateStorageQuota,
 } from './model-cache';
 
+// Export ChatSession and related types
+export { ChatSession } from './ChatSession';
+export type { ChatMessage } from './ChatTypes';
+export { ChatRole, SystemPromptPreset } from './ChatTypes';
+export { ChatTemplate } from './ChatTemplate';
+
 /**
  * Main EdgeVeda class for browser-based inference
  */
@@ -270,6 +276,19 @@ export class EdgeVeda {
   }
 
   /**
+   * Resets the conversation context
+   */
+  async resetContext(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'reset_context' as WorkerMessageType.RESET_CONTEXT,
+    });
+  }
+
+  /**
    * Gets the SDK version
    */
   static getVersion(): string {
@@ -370,6 +389,11 @@ export class EdgeVeda {
         break;
 
       case 'unload_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'reset_success':
         request.resolve({});
         this.pendingRequests.delete(message.id);
         break;
