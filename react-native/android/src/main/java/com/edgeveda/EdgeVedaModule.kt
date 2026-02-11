@@ -1,10 +1,17 @@
 package com.edgeveda
 
+import com.edgeveda.sdk.EdgeVeda
+import com.edgeveda.sdk.EdgeVedaConfig
+import com.edgeveda.sdk.GenerateOptions
+import com.edgeveda.sdk.Backend
+import com.edgeveda.sdk.EdgeVedaException
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.turbomodule.core.CallInvokerHolderImpl
 import com.facebook.react.turbomodule.core.interfaces.TurboModule
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onCompletion
 import org.json.JSONObject
 import org.json.JSONArray
 import java.io.File
@@ -26,12 +33,9 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
         const val EVENT_MODEL_LOAD_PROGRESS = "EdgeVeda_ModelLoadProgress"
     }
 
-    private var modelLoaded = false
+    private var edgeVeda: EdgeVeda? = null
     private val activeGenerations = mutableMapOf<String, Job>()
     private val coroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    // TODO: Integrate with Edge Veda Core Android SDK
-    // private var edgeVedaCore: EdgeVedaCore? = null
 
     override fun getName(): String = NAME
 
@@ -73,22 +77,22 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
                     return@launch
                 }
 
-                // TODO: Initialize Edge Veda Core
-                // Example:
-                // edgeVedaCore = EdgeVedaCore(modelPath, configJson)
-                // modelLoaded = true
-                // promise.resolve(null)
+                // Send progress event
+                sendProgressEvent(0.3, "Initializing model...")
 
-                // Temporary implementation
-                sendProgressEvent(0.5, "Loading model...")
+                // Parse EdgeVedaConfig from JSON
+                val edgeVedaConfig = parseConfig(configJson)
 
-                // Simulate loading
-                delay(1000)
+                // Create and initialize EdgeVeda
+                val instance = EdgeVeda.create()
+                instance.init(modelPath, edgeVedaConfig)
 
-                modelLoaded = true
-                sendProgressEvent(1.0, "Model loaded")
+                edgeVeda = instance
+                sendProgressEvent(1.0, "Model loaded successfully")
                 promise.resolve(null)
 
+            } catch (e: EdgeVedaException) {
+                promise.reject("MODEL_LOAD_FAILED", e.message ?: "Failed to load model", e)
             } catch (e: Exception) {
                 promise.reject("MODEL_LOAD_FAILED", "Failed to load model: ${e.message}", e)
             }
@@ -104,7 +108,8 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
         options: String,
         promise: Promise
     ) {
-        if (!modelLoaded) {
+        val edgeVedaInstance = edgeVeda
+        if (edgeVedaInstance == null) {
             promise.reject("MODEL_NOT_LOADED", "Model is not loaded")
             return
         }
@@ -119,15 +124,12 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
                     return@launch
                 }
 
-                // TODO: Integrate with Edge Veda Core
-                // Example:
-                // val result = edgeVedaCore?.generate(prompt, optionsJson)
-                // promise.resolve(result)
-
-                // Temporary implementation
-                val result = "Generated response for: $prompt"
+                val generateOptions = parseGenerateOptions(optionsJson)
+                val result = edgeVedaInstance.generate(prompt, generateOptions)
                 promise.resolve(result)
 
+            } catch (e: EdgeVedaException) {
+                promise.reject("GENERATION_FAILED", e.message ?: "Generation failed", e)
             } catch (e: Exception) {
                 promise.reject("GENERATION_FAILED", "Generation failed: ${e.message}", e)
             }
@@ -144,48 +146,49 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
         requestId: String,
         promise: Promise
     ) {
-        if (!modelLoaded) {
+        val edgeVedaInstance = edgeVeda
+        if (edgeVedaInstance == null) {
             promise.reject("MODEL_NOT_LOADED", "Model is not loaded")
+            return
+        }
+
+        // Parse options
+        val optionsJson = try {
+            JSONObject(options)
+        } catch (e: Exception) {
+            promise.reject("INVALID_OPTIONS", "Failed to parse options", e)
             return
         }
 
         val job = coroutineScope.launch {
             try {
-                // Parse options
-                val optionsJson = try {
-                    JSONObject(options)
-                } catch (e: Exception) {
-                    promise.reject("INVALID_OPTIONS", "Failed to parse options", e)
-                    return@launch
-                }
+                val generateOptions = parseGenerateOptions(optionsJson)
 
-                activeGenerations[requestId] = coroutineContext[Job]!!
-
-                // TODO: Integrate with Edge Veda Core streaming
-                // Example:
-                // edgeVedaCore?.generateStream(prompt, optionsJson) { token ->
-                //     if (activeGenerations.containsKey(requestId)) {
-                //         sendTokenEvent(requestId, token)
-                //     }
-                // }
-                // sendCompleteEvent(requestId)
-                // activeGenerations.remove(requestId)
-                // promise.resolve(null)
-
-                // Temporary implementation - simulate streaming
-                val tokens = listOf("This ", "is ", "a ", "streamed ", "response.")
-                for (token in tokens) {
-                    if (!activeGenerations.containsKey(requestId)) {
-                        break
+                edgeVedaInstance.generateStream(prompt, generateOptions)
+                    .catch { e ->
+                        val errorMessage = when (e) {
+                            is EdgeVedaException -> e.message ?: "Unknown error"
+                            else -> e.message ?: "Unknown error"
+                        }
+                        sendErrorEvent(requestId, errorMessage)
+                        activeGenerations.remove(requestId)
+                        promise.reject("GENERATION_FAILED", "Streaming failed: $errorMessage", e)
                     }
-                    sendTokenEvent(requestId, token)
-                    delay(100)
-                }
+                    .onCompletion {
+                        if (it == null) {
+                            sendCompleteEvent(requestId)
+                            activeGenerations.remove(requestId)
+                            promise.resolve(null)
+                        }
+                    }
+                    .collect { token ->
+                        sendTokenEvent(requestId, token)
+                    }
 
-                sendCompleteEvent(requestId)
+            } catch (e: EdgeVedaException) {
+                sendErrorEvent(requestId, e.message ?: "Unknown error")
                 activeGenerations.remove(requestId)
-                promise.resolve(null)
-
+                promise.reject("GENERATION_FAILED", e.message ?: "Streaming failed", e)
             } catch (e: Exception) {
                 sendErrorEvent(requestId, e.message ?: "Unknown error")
                 activeGenerations.remove(requestId)
@@ -206,10 +209,6 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
     ) {
         activeGenerations[requestId]?.cancel()
         activeGenerations.remove(requestId)
-
-        // TODO: Cancel in Core SDK
-        // edgeVedaCore?.cancelGeneration(requestId)
-
         promise.resolve(null)
     }
 
@@ -218,12 +217,25 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getMemoryUsage(): String {
-        // TODO: Get actual memory usage from Core SDK
+        val edgeVedaInstance = edgeVeda
+        if (edgeVedaInstance == null) {
+            return JSONObject().apply {
+                put("totalBytes", 0)
+                put("modelBytes", 0)
+                put("kvCacheBytes", 0)
+                put("availableBytes", 0)
+            }.toString()
+        }
+
+        val memoryBytes = edgeVedaInstance.memoryUsage
+        val runtime = Runtime.getRuntime()
+        val availableBytes = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory())
+
         val usage = JSONObject().apply {
-            put("totalBytes", 0)
-            put("modelBytes", 0)
-            put("kvCacheBytes", 0)
-            put("availableBytes", 0)
+            put("totalBytes", if (memoryBytes >= 0) memoryBytes else 0)
+            put("modelBytes", if (memoryBytes >= 0) memoryBytes else 0)
+            put("kvCacheBytes", 0) // Not separately tracked in Kotlin SDK
+            put("availableBytes", availableBytes)
         }
 
         return usage.toString()
@@ -234,11 +246,12 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getModelInfo(): String {
-        if (!modelLoaded) {
+        if (edgeVeda == null) {
             throw IllegalStateException("Model is not loaded")
         }
 
-        // TODO: Get actual model info from Core SDK
+        // Note: Kotlin SDK doesn't expose model info directly yet
+        // Return basic info for now
         val info = JSONObject().apply {
             put("name", "unknown")
             put("architecture", "unknown")
@@ -256,7 +269,7 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun isModelLoaded(): Boolean {
-        return modelLoaded
+        return edgeVeda != null
     }
 
     /**
@@ -266,17 +279,24 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
     fun unloadModel(promise: Promise) {
         coroutineScope.launch {
             try {
+                val edgeVedaInstance = edgeVeda
+                if (edgeVedaInstance == null) {
+                    promise.resolve(null)
+                    return@launch
+                }
+
                 // Cancel all active generations
                 activeGenerations.values.forEach { it.cancel() }
                 activeGenerations.clear()
 
-                // TODO: Unload from Core SDK
-                // edgeVedaCore?.unload()
-                // edgeVedaCore = null
+                // Unload model
+                edgeVedaInstance.unloadModel()
+                edgeVeda = null
 
-                modelLoaded = false
                 promise.resolve(null)
 
+            } catch (e: EdgeVedaException) {
+                promise.reject("UNLOAD_FAILED", e.message ?: "Failed to unload model", e)
             } catch (e: Exception) {
                 promise.reject("UNLOAD_FAILED", "Failed to unload model: ${e.message}", e)
             }
@@ -300,11 +320,7 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
                     return@launch
                 }
 
-                // TODO: Validate with Core SDK
-                // val isValid = EdgeVedaCore.validateModel(modelPath)
-                // promise.resolve(isValid)
-
-                // Temporary: just check file extension
+                // Check file extension
                 val isValid = modelPath.endsWith(".gguf")
                 promise.resolve(isValid)
 
@@ -319,9 +335,12 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getAvailableGpuDevices(): String {
-        // TODO: Get from Core SDK
         val devices = JSONArray().apply {
-            put("Vulkan GPU")
+            put("CPU")
+            // TODO: Detect actual GPU capabilities
+            // For now, list potential backends
+            put("Vulkan")
+            put("NNAPI")
         }
 
         return devices.toString()
@@ -343,7 +362,57 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
         // Required for TurboModule event support
     }
 
-    // Helper methods for sending events
+    // Helper methods
+
+    private fun parseConfig(json: JSONObject): EdgeVedaConfig {
+        val backend = when (json.optString("backend", "auto").lowercase()) {
+            "cpu" -> Backend.CPU
+            "vulkan" -> Backend.VULKAN
+            "nnapi" -> Backend.NNAPI
+            "auto" -> Backend.AUTO
+            else -> Backend.AUTO
+        }
+
+        return EdgeVedaConfig(
+            backend = backend,
+            numThreads = json.optInt("threads", 0),
+            contextSize = json.optInt("contextSize", 2048),
+            batchSize = json.optInt("batchSize", 512),
+            useGpu = json.optBoolean("useGpu", true),
+            useMmap = json.optBoolean("useMemoryMapping", true),
+            useMlock = json.optBoolean("lockMemory", false),
+            temperature = json.optDouble("temperature", 0.7).toFloat(),
+            topP = json.optDouble("topP", 0.9).toFloat(),
+            topK = json.optInt("topK", 40),
+            repeatPenalty = json.optDouble("repeatPenalty", 1.1).toFloat(),
+            seed = json.optLong("seed", -1L)
+        )
+    }
+
+    private fun parseGenerateOptions(json: JSONObject): GenerateOptions {
+        val maxTokens = if (json.has("maxTokens")) json.getInt("maxTokens") else null
+        val temperature = if (json.has("temperature")) json.getDouble("temperature").toFloat() else null
+        val topP = if (json.has("topP")) json.getDouble("topP").toFloat() else null
+        val topK = if (json.has("topK")) json.getInt("topK") else null
+        val repeatPenalty = if (json.has("repeatPenalty")) json.getDouble("repeatPenalty").toFloat() else null
+
+        val stopSequences = mutableListOf<String>()
+        if (json.has("stopSequences")) {
+            val array = json.getJSONArray("stopSequences")
+            for (i in 0 until array.length()) {
+                stopSequences.add(array.getString(i))
+            }
+        }
+
+        return GenerateOptions(
+            maxTokens = maxTokens,
+            temperature = temperature,
+            topP = topP,
+            topK = topK,
+            repeatPenalty = repeatPenalty,
+            stopSequences = stopSequences
+        )
+    }
 
     private fun sendTokenEvent(requestId: String, token: String) {
         val params = Arguments.createMap().apply {
@@ -383,5 +452,7 @@ class EdgeVedaModule(reactContext: ReactApplicationContext) :
         super.onCatalystInstanceDestroy()
         coroutineScope.cancel()
         activeGenerations.clear()
+        edgeVeda?.close()
+        edgeVeda = null
     }
 }

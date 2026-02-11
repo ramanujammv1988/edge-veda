@@ -1,5 +1,6 @@
 import Foundation
 import React
+import EdgeVeda
 
 /**
  * Edge Veda iOS Native Module Implementation
@@ -11,11 +12,9 @@ class EdgeVeda: RCTEventEmitter {
 
     // MARK: - Properties
 
-    private var modelLoaded = false
-    private var activeGenerations: [String: Bool] = [:]
-
-    // TODO: Integrate with Edge Veda Core iOS SDK
-    // private var edgeVedaCore: EdgeVedaCore?
+    private var edgeVedaEngine: EdgeVeda.EdgeVeda?
+    private var activeGenerations: [String: Task<Void, Never>] = [:]
+    private let actorQueue = DispatchQueue(label: "com.edgeveda.react-native", qos: .userInitiated)
 
     // MARK: - Lifecycle
 
@@ -49,9 +48,7 @@ class EdgeVeda: RCTEventEmitter {
                    resolve: @escaping RCTPromiseResolveBlock,
                    reject: @escaping RCTPromiseRejectBlock) {
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-
+        Task {
             // Validate model path
             guard FileManager.default.fileExists(atPath: modelPath) else {
                 reject("INVALID_MODEL_PATH", "Model file not found at path: \(modelPath)", nil)
@@ -65,24 +62,25 @@ class EdgeVeda: RCTEventEmitter {
                 return
             }
 
-            // TODO: Initialize Edge Veda Core
-            // Example:
-            // do {
-            //     self.edgeVedaCore = try EdgeVedaCore(modelPath: modelPath, config: configDict)
-            //     self.modelLoaded = true
-            //     resolve(nil)
-            // } catch {
-            //     reject("MODEL_LOAD_FAILED", "Failed to load model: \(error.localizedDescription)", error)
-            // }
+            do {
+                // Send progress event
+                self.sendEvent(withName: "EdgeVeda_ModelLoadProgress", 
+                             body: ["progress": 0.3, "message": "Initializing model..."])
 
-            // Temporary implementation
-            self.sendEvent(withName: "EdgeVeda_ModelLoadProgress", body: ["progress": 0.5, "message": "Loading model..."])
+                // Parse EdgeVedaConfig from JSON
+                let edgeVedaConfig = try self.parseConfig(from: configDict)
 
-            // Simulate loading
-            DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
-                self.modelLoaded = true
-                self.sendEvent(withName: "EdgeVeda_ModelLoadProgress", body: ["progress": 1.0, "message": "Model loaded"])
+                // Initialize EdgeVeda
+                self.edgeVedaEngine = try await EdgeVeda.EdgeVeda(modelPath: modelPath, config: edgeVedaConfig)
+
+                self.sendEvent(withName: "EdgeVeda_ModelLoadProgress",
+                             body: ["progress": 1.0, "message": "Model loaded successfully"])
+
                 resolve(nil)
+            } catch let error as EdgeVeda.EdgeVedaError {
+                reject("MODEL_LOAD_FAILED", error.errorDescription ?? "Failed to load model", error)
+            } catch {
+                reject("MODEL_LOAD_FAILED", "Failed to load model: \(error.localizedDescription)", error)
             }
         }
     }
@@ -96,12 +94,12 @@ class EdgeVeda: RCTEventEmitter {
                  resolve: @escaping RCTPromiseResolveBlock,
                  reject: @escaping RCTPromiseRejectBlock) {
 
-        guard modelLoaded else {
-            reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
-            return
-        }
+        Task {
+            guard let edgeVedaEngine = self.edgeVedaEngine else {
+                reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
+                return
+            }
 
-        DispatchQueue.global(qos: .userInitiated).async {
             // Parse options
             guard let optionsData = options.data(using: .utf8),
                   let optionsDict = try? JSONSerialization.jsonObject(with: optionsData) as? [String: Any] else {
@@ -109,18 +107,15 @@ class EdgeVeda: RCTEventEmitter {
                 return
             }
 
-            // TODO: Integrate with Edge Veda Core
-            // Example:
-            // do {
-            //     let result = try self.edgeVedaCore?.generate(prompt: prompt, options: optionsDict)
-            //     resolve(result)
-            // } catch {
-            //     reject("GENERATION_FAILED", "Generation failed: \(error.localizedDescription)", error)
-            // }
-
-            // Temporary implementation
-            let result = "Generated response for: \(prompt)"
-            resolve(result)
+            do {
+                let generateOptions = try self.parseGenerateOptions(from: optionsDict)
+                let result = try await edgeVedaEngine.generate(prompt, options: generateOptions)
+                resolve(result)
+            } catch let error as EdgeVeda.EdgeVedaError {
+                reject("GENERATION_FAILED", error.errorDescription ?? "Generation failed", error)
+            } catch {
+                reject("GENERATION_FAILED", "Generation failed: \(error.localizedDescription)", error)
+            }
         }
     }
 
@@ -134,58 +129,52 @@ class EdgeVeda: RCTEventEmitter {
                        resolve: @escaping RCTPromiseResolveBlock,
                        reject: @escaping RCTPromiseRejectBlock) {
 
-        guard modelLoaded else {
+        guard let edgeVedaEngine = self.edgeVedaEngine else {
             reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
             return
         }
 
-        activeGenerations[requestId] = true
+        // Parse options
+        guard let optionsData = options.data(using: .utf8),
+              let optionsDict = try? JSONSerialization.jsonObject(with: optionsData) as? [String: Any] else {
+            reject("INVALID_OPTIONS", "Failed to parse options", nil)
+            return
+        }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
+        let task = Task {
+            do {
+                let generateOptions = try self.parseGenerateOptions(from: optionsDict)
+                let stream = edgeVedaEngine.generateStream(prompt, options: generateOptions)
 
-            // Parse options
-            guard let optionsData = options.data(using: .utf8),
-                  let optionsDict = try? JSONSerialization.jsonObject(with: optionsData) as? [String: Any] else {
-                reject("INVALID_OPTIONS", "Failed to parse options", nil)
-                return
-            }
+                for try await token in stream {
+                    // Check if generation was cancelled
+                    if Task.isCancelled {
+                        break
+                    }
 
-            // TODO: Integrate with Edge Veda Core streaming
-            // Example:
-            // do {
-            //     try self.edgeVedaCore?.generateStream(prompt: prompt, options: optionsDict) { token in
-            //         if self.activeGenerations[requestId] == true {
-            //             self.sendEvent(withName: "EdgeVeda_TokenGenerated",
-            //                          body: ["requestId": requestId, "token": token])
-            //         }
-            //     }
-            //     self.sendEvent(withName: "EdgeVeda_GenerationComplete", body: ["requestId": requestId])
-            //     self.activeGenerations.removeValue(forKey: requestId)
-            //     resolve(nil)
-            // } catch {
-            //     self.sendEvent(withName: "EdgeVeda_GenerationError",
-            //                  body: ["requestId": requestId, "error": error.localizedDescription])
-            //     self.activeGenerations.removeValue(forKey: requestId)
-            //     reject("GENERATION_FAILED", "Streaming failed: \(error.localizedDescription)", error)
-            // }
-
-            // Temporary implementation - simulate streaming
-            let tokens = ["This ", "is ", "a ", "streamed ", "response."]
-            for token in tokens {
-                if self.activeGenerations[requestId] == true {
                     self.sendEvent(withName: "EdgeVeda_TokenGenerated",
                                  body: ["requestId": requestId, "token": token])
-                    Thread.sleep(forTimeInterval: 0.1)
-                } else {
-                    break
                 }
-            }
 
-            self.sendEvent(withName: "EdgeVeda_GenerationComplete", body: ["requestId": requestId])
-            self.activeGenerations.removeValue(forKey: requestId)
-            resolve(nil)
+                self.sendEvent(withName: "EdgeVeda_GenerationComplete", 
+                             body: ["requestId": requestId])
+                self.activeGenerations.removeValue(forKey: requestId)
+                resolve(nil)
+
+            } catch let error as EdgeVeda.EdgeVedaError {
+                self.sendEvent(withName: "EdgeVeda_GenerationError",
+                             body: ["requestId": requestId, "error": error.errorDescription ?? "Unknown error"])
+                self.activeGenerations.removeValue(forKey: requestId)
+                reject("GENERATION_FAILED", error.errorDescription ?? "Streaming failed", error)
+            } catch {
+                self.sendEvent(withName: "EdgeVeda_GenerationError",
+                             body: ["requestId": requestId, "error": error.localizedDescription])
+                self.activeGenerations.removeValue(forKey: requestId)
+                reject("GENERATION_FAILED", "Streaming failed: \(error.localizedDescription)", error)
+            }
         }
+
+        activeGenerations[requestId] = task
     }
 
     /**
@@ -196,10 +185,10 @@ class EdgeVeda: RCTEventEmitter {
                          resolve: @escaping RCTPromiseResolveBlock,
                          reject: @escaping RCTPromiseRejectBlock) {
 
-        activeGenerations.removeValue(forKey: requestId)
-
-        // TODO: Cancel in Core SDK
-        // self.edgeVedaCore?.cancelGeneration(requestId: requestId)
+        if let task = activeGenerations[requestId] {
+            task.cancel()
+            activeGenerations.removeValue(forKey: requestId)
+        }
 
         resolve(nil)
     }
@@ -208,22 +197,30 @@ class EdgeVeda: RCTEventEmitter {
      * Get memory usage
      */
     @objc
-    func getMemoryUsage(_ resolve: RCTPromiseResolveBlock,
-                       reject: RCTPromiseRejectBlock) {
+    func getMemoryUsage(_ resolve: @escaping RCTPromiseResolveBlock,
+                       reject: @escaping RCTPromiseRejectBlock) {
 
-        // TODO: Get actual memory usage from Core SDK
-        let usage: [String: Any] = [
-            "totalBytes": 0,
-            "modelBytes": 0,
-            "kvCacheBytes": 0,
-            "availableBytes": 0
-        ]
+        Task {
+            guard let edgeVedaEngine = self.edgeVedaEngine else {
+                reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
+                return
+            }
 
-        if let jsonData = try? JSONSerialization.data(withJSONObject: usage),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            resolve(jsonString)
-        } else {
-            reject("SERIALIZATION_ERROR", "Failed to serialize memory usage", nil)
+            let memoryBytes = await edgeVedaEngine.memoryUsage
+
+            let usage: [String: Any] = [
+                "totalBytes": memoryBytes,
+                "modelBytes": memoryBytes, // Swift SDK returns total, not broken down
+                "kvCacheBytes": 0, // Not separately tracked in Swift SDK
+                "availableBytes": ProcessInfo.processInfo.physicalMemory - memoryBytes
+            ]
+
+            if let jsonData = try? JSONSerialization.data(withJSONObject: usage),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                resolve(jsonString)
+            } else {
+                reject("SERIALIZATION_ERROR", "Failed to serialize memory usage", nil)
+            }
         }
     }
 
@@ -231,29 +228,29 @@ class EdgeVeda: RCTEventEmitter {
      * Get model info
      */
     @objc
-    func getModelInfo(_ resolve: RCTPromiseResolveBlock,
-                     reject: RCTPromiseRejectBlock) {
+    func getModelInfo(_ resolve: @escaping RCTPromiseResolveBlock,
+                     reject: @escaping RCTPromiseRejectBlock) {
 
-        guard modelLoaded else {
-            reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
-            return
-        }
+        Task {
+            guard let edgeVedaEngine = self.edgeVedaEngine else {
+                reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
+                return
+            }
 
-        // TODO: Get actual model info from Core SDK
-        let info: [String: Any] = [
-            "name": "unknown",
-            "architecture": "unknown",
-            "parameters": 0,
-            "contextLength": 2048,
-            "vocabSize": 32000,
-            "quantization": "q4_0"
-        ]
+            do {
+                let modelInfo = try await edgeVedaEngine.getModelInfo()
 
-        if let jsonData = try? JSONSerialization.data(withJSONObject: info),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            resolve(jsonString)
-        } else {
-            reject("SERIALIZATION_ERROR", "Failed to serialize model info", nil)
+                if let jsonData = try? JSONSerialization.data(withJSONObject: modelInfo),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    resolve(jsonString)
+                } else {
+                    reject("SERIALIZATION_ERROR", "Failed to serialize model info", nil)
+                }
+            } catch let error as EdgeVeda.EdgeVedaError {
+                reject("GET_MODEL_INFO_FAILED", error.errorDescription ?? "Failed to get model info", error)
+            } catch {
+                reject("GET_MODEL_INFO_FAILED", "Failed to get model info: \(error.localizedDescription)", error)
+            }
         }
     }
 
@@ -262,7 +259,7 @@ class EdgeVeda: RCTEventEmitter {
      */
     @objc
     func isModelLoaded() -> Bool {
-        return modelLoaded
+        return edgeVedaEngine != nil
     }
 
     /**
@@ -272,15 +269,22 @@ class EdgeVeda: RCTEventEmitter {
     func unloadModel(_ resolve: @escaping RCTPromiseResolveBlock,
                     reject: @escaping RCTPromiseRejectBlock) {
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
+        Task {
+            guard let edgeVedaEngine = self.edgeVedaEngine else {
+                resolve(nil)
+                return
+            }
 
-            // TODO: Unload from Core SDK
-            // self.edgeVedaCore?.unload()
-            // self.edgeVedaCore = nil
+            // Cancel all active generations
+            for (_, task) in activeGenerations {
+                task.cancel()
+            }
+            activeGenerations.removeAll()
 
-            self.modelLoaded = false
-            self.activeGenerations.removeAll()
+            // Unload model
+            await edgeVedaEngine.unloadModel()
+            self.edgeVedaEngine = nil
+
             resolve(nil)
         }
     }
@@ -300,11 +304,7 @@ class EdgeVeda: RCTEventEmitter {
                 return
             }
 
-            // TODO: Validate with Core SDK
-            // let isValid = EdgeVedaCore.validateModel(at: modelPath)
-            // resolve(isValid)
-
-            // Temporary: just check file extension
+            // Check file extension
             let isValid = modelPath.hasSuffix(".gguf")
             resolve(isValid)
         }
@@ -315,8 +315,8 @@ class EdgeVeda: RCTEventEmitter {
      */
     @objc
     func getAvailableGpuDevices() -> String {
-        // TODO: Get from Core SDK
-        let devices: [String] = ["Metal GPU"]
+        let deviceInfo = EdgeVeda.DeviceInfo.current()
+        let devices: [String] = deviceInfo.availableBackends.map { $0.rawValue }
 
         if let jsonData = try? JSONSerialization.data(withJSONObject: devices),
            let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -324,5 +324,56 @@ class EdgeVeda: RCTEventEmitter {
         }
 
         return "[]"
+    }
+
+    // MARK: - Helper Methods
+
+    private func parseConfig(from dict: [String: Any]) throws -> EdgeVeda.EdgeVedaConfig {
+        var backend: EdgeVeda.Backend = .auto
+        if let backendStr = dict["backend"] as? String {
+            switch backendStr.lowercased() {
+            case "cpu": backend = .cpu
+            case "metal": backend = .metal
+            case "auto": backend = .auto
+            default: backend = .auto
+            }
+        }
+
+        let threads = dict["threads"] as? Int ?? 0
+        let contextSize = dict["contextSize"] as? Int ?? 2048
+        let gpuLayers = dict["gpuLayers"] as? Int ?? -1
+        let batchSize = dict["batchSize"] as? Int ?? 512
+        let useMemoryMapping = dict["useMemoryMapping"] as? Bool ?? true
+        let lockMemory = dict["lockMemory"] as? Bool ?? false
+        let verbose = dict["verbose"] as? Bool ?? false
+
+        return EdgeVeda.EdgeVedaConfig(
+            backend: backend,
+            threads: threads,
+            contextSize: contextSize,
+            gpuLayers: gpuLayers,
+            batchSize: batchSize,
+            useMemoryMapping: useMemoryMapping,
+            lockMemory: lockMemory,
+            verbose: verbose
+        )
+    }
+
+    private func parseGenerateOptions(from dict: [String: Any]) throws -> EdgeVeda.GenerateOptions {
+        let maxTokens = dict["maxTokens"] as? Int ?? 512
+        let temperature = dict["temperature"] as? Float ?? 0.7
+        let topP = dict["topP"] as? Float ?? 0.9
+        let topK = dict["topK"] as? Int ?? 40
+        let repeatPenalty = dict["repeatPenalty"] as? Float ?? 1.1
+        let stopSequences = dict["stopSequences"] as? [String] ?? []
+
+        return EdgeVeda.GenerateOptions(
+            maxTokens: maxTokens,
+            temperature: temperature,
+            topP: topP,
+            topK: topK,
+            repeatPenalty: repeatPenalty,
+            stopSequences: stopSequences
+        )
     }
 }
