@@ -1,15 +1,31 @@
 package com.edgeveda.sdk
 
+import android.app.Application
+import android.content.ComponentCallbacks2
+import android.content.Context
+import android.content.res.Configuration
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.edgeveda.sdk.internal.NativeBridge
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Memory pressure handler callback.
+ * Called when the system requests memory to be freed.
+ */
+typealias MemoryPressureHandler = suspend (level: Int) -> Unit
 
 /**
  * EdgeVeda SDK - Main API for on-device LLM inference.
@@ -40,13 +56,23 @@ import java.util.concurrent.atomic.AtomicReference
  * ```
  */
 class EdgeVeda private constructor(
-    private val nativeBridge: NativeBridge
+    private val nativeBridge: NativeBridge,
+    private val applicationContext: Context?
 ) : Closeable {
 
     private val initialized = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
     private val currentGenerationJob = AtomicReference<Job?>(null)
     private val currentStreamJob = AtomicReference<Job?>(null)
+    
+    // Lifecycle management
+    private val lifecycleScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var componentCallbacks: ComponentCallbacks2? = null
+    private var lifecycleObserver: DefaultLifecycleObserver? = null
+    private var customMemoryPressureHandler: MemoryPressureHandler? = null
+    private val autoUnloadedDueToMemory = AtomicBoolean(false)
+    private var lastModelPath: String? = null
+    private var lastConfig: EdgeVedaConfig? = null
 
     /**
      * Initialize the model with the given path and configuration.
@@ -63,11 +89,23 @@ class EdgeVeda private constructor(
             throw IllegalStateException("EdgeVeda is already initialized")
         }
 
+        // Store for potential reload
+        lastModelPath = modelPath
+        lastConfig = config
+
         withContext(Dispatchers.IO) {
             try {
                 nativeBridge.initModel(modelPath, config)
+                autoUnloadedDueToMemory.set(false)
+                
+                // Register lifecycle callbacks after successful init
+                applicationContext?.let { ctx ->
+                    registerLifecycleCallbacks(ctx)
+                }
             } catch (e: Exception) {
                 initialized.set(false)
+                lastModelPath = null
+                lastConfig = null
                 throw EdgeVedaException.ModelLoadError("Failed to load model: ${e.message}", e)
             }
         }
@@ -245,6 +283,35 @@ class EdgeVeda private constructor(
             }
         }
     }
+    
+    /**
+     * Reload the model after it was unloaded.
+     * Useful for recovering from memory pressure situations.
+     *
+     * @throws EdgeVedaException.ModelLoadError if reload fails
+     * @throws IllegalStateException if model path is not available or already loaded
+     */
+    suspend fun reloadModel() {
+        checkNotClosed()
+        if (initialized.get()) {
+            return // Already loaded
+        }
+        
+        val modelPath = lastModelPath
+            ?: throw IllegalStateException("No model path available for reload. Call init() first.")
+        val config = lastConfig ?: EdgeVedaConfig()
+        
+        init(modelPath, config)
+    }
+    
+    /**
+     * Check if model was auto-unloaded due to memory pressure.
+     *
+     * @return true if model was unloaded due to memory warning
+     */
+    fun wasAutoUnloaded(): Boolean {
+        return autoUnloadedDueToMemory.get()
+    }
 
     /**
      * Close the SDK and release all resources.
@@ -254,6 +321,9 @@ class EdgeVeda private constructor(
     override fun close() {
         if (closed.compareAndSet(false, true)) {
             try {
+                // Unregister lifecycle callbacks
+                unregisterLifecycleCallbacks()
+                
                 if (initialized.get()) {
                     nativeBridge.unloadModel()
                     initialized.set(false)
@@ -278,16 +348,170 @@ class EdgeVeda private constructor(
             throw IllegalStateException("EdgeVeda is closed and cannot be used.")
         }
     }
+    
+    // MARK: - Lifecycle Management
+    
+    /**
+     * Register Android lifecycle callbacks for memory management.
+     */
+    private fun registerLifecycleCallbacks(context: Context) {
+        // ComponentCallbacks2 for memory pressure
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                lifecycleScope.launch {
+                    handleMemoryPressure(level)
+                }
+            }
+            
+            override fun onConfigurationChanged(newConfig: Configuration) {
+                // No action needed
+            }
+            
+            override fun onLowMemory() {
+                lifecycleScope.launch {
+                    handleMemoryPressure(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+                }
+            }
+        }
+        
+        context.registerComponentCallbacks(callbacks)
+        componentCallbacks = callbacks
+        
+        // Lifecycle observer for app backgrounding
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                // App is going to background - consider unloading if needed
+                lifecycleScope.launch {
+                    handleAppBackground()
+                }
+            }
+        }
+        
+        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+        lifecycleObserver = observer
+    }
+    
+    /**
+     * Unregister lifecycle callbacks.
+     */
+    private fun unregisterLifecycleCallbacks() {
+        componentCallbacks?.let { callbacks ->
+            applicationContext?.unregisterComponentCallbacks(callbacks)
+            componentCallbacks = null
+        }
+        
+        lifecycleObserver?.let { observer ->
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+            lifecycleObserver = null
+        }
+    }
+    
+    /**
+     * Handle memory pressure events.
+     */
+    private suspend fun handleMemoryPressure(level: Int) {
+        if (!initialized.get() || closed.get()) {
+            return
+        }
+        
+        // Call custom handler if set
+        customMemoryPressureHandler?.let { handler ->
+            handler(level)
+            return
+        }
+        
+        // Default behavior based on trim level
+        when (level) {
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                // Critical memory pressure - unload model
+                handleMemoryPressureDefault()
+            }
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW,
+            ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                // Moderate pressure - cancel ongoing operations
+                cancelGeneration()
+            }
+        }
+    }
+    
+    /**
+     * Default memory pressure handler: unload the model.
+     */
+    private suspend fun handleMemoryPressureDefault() {
+        if (!initialized.get()) {
+            return
+        }
+        
+        // Cancel any ongoing generation
+        currentGenerationJob.getAndSet(null)?.cancel()
+        currentStreamJob.getAndSet(null)?.cancel()
+        
+        // Unload model to free memory
+        withContext(Dispatchers.IO) {
+            try {
+                nativeBridge.unloadModel()
+                initialized.set(false)
+                autoUnloadedDueToMemory.set(true)
+            } catch (e: Exception) {
+                System.err.println("Error unloading model during memory pressure: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Handle app going to background.
+     */
+    private suspend fun handleAppBackground() {
+        // Optional: Consider unloading on background if memory is tight
+        // Currently no action, but can be customized
+    }
+    
+    /**
+     * Set a custom memory pressure handler.
+     * By default, EdgeVeda will unload the model when critical memory pressure occurs.
+     * Use this to customize the behavior (e.g., reduce cache size, free other resources).
+     *
+     * @param handler Custom handler to call on memory pressure, receives trim level
+     *
+     * Example:
+     * ```
+     * edgeVeda.setMemoryPressureHandler { level ->
+     *     when (level) {
+     *         ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> {
+     *             // Custom cleanup logic
+     *             println("Critical memory pressure, performing custom cleanup")
+     *         }
+     *     }
+     * }
+     * ```
+     */
+    fun setMemoryPressureHandler(handler: MemoryPressureHandler?) {
+        customMemoryPressureHandler = handler
+    }
 
     companion object {
         /**
-         * Create a new EdgeVeda instance.
+         * Create a new EdgeVeda instance with Android lifecycle integration.
+         *
+         * @param context Application context for lifecycle management
+         * @return A new EdgeVeda instance ready to be initialized
+         */
+        fun create(context: Context): EdgeVeda {
+            val nativeBridge = NativeBridge()
+            val appContext = context.applicationContext
+            return EdgeVeda(nativeBridge, appContext)
+        }
+        
+        /**
+         * Create a new EdgeVeda instance without lifecycle integration.
+         * Use this if you want to manage lifecycle manually.
          *
          * @return A new EdgeVeda instance ready to be initialized
          */
-        fun create(): EdgeVeda {
+        fun createWithoutLifecycle(): EdgeVeda {
             val nativeBridge = NativeBridge()
-            return EdgeVeda(nativeBridge)
+            return EdgeVeda(nativeBridge, null)
         }
 
         /**
