@@ -30,6 +30,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'ffi/bindings.dart';
 import 'isolate/worker_isolate.dart';
@@ -892,5 +893,20 @@ class EdgeVeda {
     final stats = await getMemoryStats();
     if (stats.limitBytes == 0) return false; // No limit set
     return stats.usagePercent > threshold;
+  }
+
+  /// Get the SDK version
+  ///
+  /// Returns the current version of the EdgeVeda Flutter SDK by reading
+  /// from the pubspec.yaml file.
+  ///
+  /// Example:
+  /// ```dart
+  /// final version = await EdgeVeda.getVersion();
+  /// print('EdgeVeda SDK v$version');
+  /// ```
+  static Future<String> getVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    return packageInfo.version;
   }
 }

@@ -12,6 +12,7 @@ import type {
   WorkerMessageType,
   LoadProgress,
 } from './types';
+import { version } from '../package.json';
 
 export * from './types';
 export { detectWebGPU, supportsWasmThreads, getOptimalThreadCount } from './wasm-loader';
@@ -273,7 +274,7 @@ export class EdgeVeda {
    * Gets the SDK version
    */
   static getVersion(): string {
-    return '1.0.0';
+    return version;
   }
 
   /**
