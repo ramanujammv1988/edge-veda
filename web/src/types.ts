@@ -274,6 +274,14 @@ export enum WorkerMessageType {
   GENERATE_CHUNK = 'generate_chunk',
   GENERATE_COMPLETE = 'generate_complete',
   GENERATE_ERROR = 'generate_error',
+  CANCEL_GENERATION = 'cancel_generation',
+  CANCEL_SUCCESS = 'cancel_success',
+  GET_MEMORY_USAGE = 'get_memory_usage',
+  MEMORY_USAGE_RESPONSE = 'memory_usage_response',
+  GET_MODEL_INFO = 'get_model_info',
+  MODEL_INFO_RESPONSE = 'model_info_response',
+  UNLOAD_MODEL = 'unload_model',
+  UNLOAD_SUCCESS = 'unload_success',
   PROGRESS = 'progress',
   TERMINATE = 'terminate',
 }
@@ -351,6 +359,64 @@ export interface WorkerProgressMessage extends WorkerMessageBase {
 }
 
 /**
+ * Cancel generation message
+ */
+export interface WorkerCancelGenerationMessage extends WorkerMessageBase {
+  type: WorkerMessageType.CANCEL_GENERATION;
+}
+
+/**
+ * Cancel success response
+ */
+export interface WorkerCancelSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.CANCEL_SUCCESS;
+}
+
+/**
+ * Get memory usage message
+ */
+export interface WorkerGetMemoryUsageMessage extends WorkerMessageBase {
+  type: WorkerMessageType.GET_MEMORY_USAGE;
+}
+
+/**
+ * Memory usage response
+ */
+export interface WorkerMemoryUsageResponseMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MEMORY_USAGE_RESPONSE;
+  memoryStats: MemoryStats;
+}
+
+/**
+ * Get model info message
+ */
+export interface WorkerGetModelInfoMessage extends WorkerMessageBase {
+  type: WorkerMessageType.GET_MODEL_INFO;
+}
+
+/**
+ * Model info response
+ */
+export interface WorkerModelInfoResponseMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MODEL_INFO_RESPONSE;
+  modelInfo: ModelInfo;
+}
+
+/**
+ * Unload model message
+ */
+export interface WorkerUnloadModelMessage extends WorkerMessageBase {
+  type: WorkerMessageType.UNLOAD_MODEL;
+}
+
+/**
+ * Unload success response
+ */
+export interface WorkerUnloadSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.UNLOAD_SUCCESS;
+}
+
+/**
  * Terminate message
  */
 export interface WorkerTerminateMessage extends WorkerMessageBase {
@@ -368,6 +434,14 @@ export type WorkerMessage =
   | WorkerGenerateChunkMessage
   | WorkerGenerateCompleteMessage
   | WorkerGenerateErrorMessage
+  | WorkerCancelGenerationMessage
+  | WorkerCancelSuccessMessage
+  | WorkerGetMemoryUsageMessage
+  | WorkerMemoryUsageResponseMessage
+  | WorkerGetModelInfoMessage
+  | WorkerModelInfoResponseMessage
+  | WorkerUnloadModelMessage
+  | WorkerUnloadSuccessMessage
   | WorkerProgressMessage
   | WorkerTerminateMessage;
 
@@ -389,4 +463,147 @@ export interface CachedModelMetadata {
 export interface CachedModel {
   metadata: CachedModelMetadata;
   data: ArrayBuffer;
+}
+
+/**
+ * Memory usage statistics
+ */
+export interface MemoryStats {
+  /**
+   * Bytes currently used by the model and context
+   */
+  used: number;
+
+  /**
+   * Total memory available (estimated)
+   */
+  total: number;
+
+  /**
+   * Usage percentage (0-1)
+   */
+  percentage: number;
+
+  /**
+   * WASM heap size if using WASM backend
+   */
+  wasmHeapSize?: number;
+
+  /**
+   * GPU memory usage if using WebGPU
+   */
+  gpuMemoryUsage?: number;
+}
+
+/**
+ * Model information and metadata
+ */
+export interface ModelInfo {
+  /**
+   * Model name/identifier
+   */
+  name: string;
+
+  /**
+   * Model file size in bytes
+   */
+  size: number;
+
+  /**
+   * Quantization/precision type
+   */
+  quantization: PrecisionType;
+
+  /**
+   * Maximum context length
+   */
+  contextLength: number;
+
+  /**
+   * Vocabulary size
+   */
+  vocabSize?: number;
+
+  /**
+   * Model architecture (e.g., 'llama', 'mistral')
+   */
+  architecture?: string;
+
+  /**
+   * Number of parameters
+   */
+  parameters?: string;
+
+  /**
+   * Model version
+   */
+  version?: string;
+}
+
+/**
+ * Cancellation token for aborting generation
+ */
+export class CancelToken {
+  private _cancelled = false;
+  private _callbacks: Array<() => void> = [];
+  private _abortController: AbortController;
+
+  constructor() {
+    this._abortController = new AbortController();
+  }
+
+  /**
+   * Whether cancellation has been requested
+   */
+  get cancelled(): boolean {
+    return this._cancelled;
+  }
+
+  /**
+   * AbortSignal for fetch/async operations
+   */
+  get signal(): AbortSignal {
+    return this._abortController.signal;
+  }
+
+  /**
+   * Request cancellation
+   */
+  cancel(): void {
+    if (this._cancelled) return;
+    
+    this._cancelled = true;
+    this._abortController.abort();
+    
+    // Notify all callbacks
+    for (const callback of this._callbacks) {
+      try {
+        callback();
+      } catch (error) {
+        console.error('Error in cancel callback:', error);
+      }
+    }
+    
+    this._callbacks = [];
+  }
+
+  /**
+   * Register a callback for when cancellation is requested
+   */
+  onCancel(callback: () => void): void {
+    if (this._cancelled) {
+      callback();
+    } else {
+      this._callbacks.push(callback);
+    }
+  }
+
+  /**
+   * Throw if cancelled
+   */
+  throwIfCancelled(): void {
+    if (this._cancelled) {
+      throw new Error('Operation was cancelled');
+    }
+  }
 }
