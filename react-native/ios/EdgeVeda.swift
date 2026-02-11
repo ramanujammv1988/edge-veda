@@ -2,9 +2,13 @@ import Foundation
 import React
 import EdgeVeda
 
+#if RCT_NEW_ARCH_ENABLED
+import EdgeVedaSpec
+#endif
+
 /**
  * Edge Veda iOS Native Module Implementation
- * Swift implementation of the TurboModule for on-device LLM inference
+ * Dual architecture support - Bridge and TurboModule
  */
 
 @objc(EdgeVeda)

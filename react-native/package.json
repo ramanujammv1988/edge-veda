@@ -13,6 +13,7 @@
     "android",
     "ios",
     "edge-veda.podspec",
+    "app.plugin.js",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__"
@@ -40,9 +41,12 @@
     "url": "https://github.com/edgeveda/edgeveda-sdk/issues"
   },
   "homepage": "https://github.com/edgeveda/edgeveda-sdk#readme",
+  "expo": {
+    "plugins": ["./app.plugin.js"]
+  },
   "peerDependencies": {
     "react": "*",
-    "react-native": ">=0.73.0"
+    "react-native": ">=0.68.0"
   },
   "devDependencies": {
     "@react-native-community/eslint-config": "^3.2.0",
@@ -76,6 +80,9 @@
     "jsSrcsDir": "src",
     "android": {
       "javaPackageName": "com.edgeveda"
+    },
+    "ios": {
+      "classPrefix": ""
     }
   }
 }

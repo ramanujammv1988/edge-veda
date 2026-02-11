@@ -32,9 +32,36 @@ No additional setup required. The package automatically links with autolinking.
 
 ## Requirements
 
-- React Native >= 0.73.0
+- React Native >= 0.68.0
 - iOS >= 13.0
 - Android minSdkVersion >= 21
+- Expo SDK >= 49 (with development builds only)
+
+### Architecture Support
+
+This package supports both React Native architectures:
+
+- **Old Architecture (Bridge)**: React Native 0.68 - 0.72
+- **New Architecture (TurboModules)**: React Native 0.73+
+
+Architecture detection is automatic at build time - no configuration needed. The appropriate native module implementation is selected based on your app's architecture settings.
+
+### Expo Support
+
+Edge Veda works with Expo using **development builds** (not Expo Go):
+
+```bash
+# Install in Expo project
+npx expo install @edgeveda/react-native
+
+# Create development build
+eas build --profile development --platform ios
+eas build --profile development --platform android
+```
+
+**Important**: Edge Veda **does NOT work with Expo Go** because it requires native C++ code (llama.cpp) that cannot be bundled in Expo Go. You must create a development build or bare workflow project.
+
+The package includes an Expo config plugin that automatically configures your project during `expo prebuild`.
 
 ## Usage
 
@@ -171,24 +198,83 @@ try {
 }
 ```
 
-## New Architecture
+## Architecture Configuration
 
-This package is built with React Native's New Architecture (TurboModules). It automatically works with both the old and new architecture.
+### Dual Architecture Support
 
-To enable the New Architecture in your app:
+This package supports both React Native architectures with automatic detection:
 
-### iOS
-In your `Podfile`:
+- **Old Architecture (Bridge)**: Default for React Native 0.68-0.72
+- **New Architecture (TurboModules)**: Default for React Native 0.73+
+
+No code changes needed - the package automatically uses the appropriate implementation based on your app's architecture setting.
+
+### Enabling New Architecture
+
+The New Architecture provides better performance through synchronous native calls (TurboModules) and improved rendering (Fabric).
+
+#### React Native (Bare Workflow)
+
+**iOS** - In your `Podfile`:
 ```ruby
 use_frameworks!
 ENV['RCT_NEW_ARCH_ENABLED'] = '1'
 ```
 
-### Android
-In your `gradle.properties`:
+Then run:
+```bash
+cd ios && pod install
+```
+
+**Android** - In `android/gradle.properties`:
 ```properties
 newArchEnabled=true
 ```
+
+#### Expo with Development Builds
+
+Add to your `app.json` or `app.config.js`:
+```json
+{
+  "expo": {
+    "plugins": [
+      [
+        "@edgeveda/react-native"
+      ]
+    ]
+  },
+  "android": {
+    "newArchEnabled": true
+  },
+  "ios": {
+    "newArchEnabled": true
+  }
+}
+```
+
+Then create a development build:
+```bash
+npx expo prebuild
+eas build --profile development
+```
+
+### Verifying Architecture
+
+You can verify which architecture is being used:
+
+**iOS**: Check Xcode build logs for "Building for New Architecture" or presence of `RCT_NEW_ARCH_ENABLED` flag
+
+**Android**: Check `android/gradle.properties` for `newArchEnabled=true`
+
+### Architecture Differences
+
+| Feature | Old Architecture | New Architecture |
+|---------|-----------------|------------------|
+| Module Type | ReactContextBaseJavaModule | TurboModule |
+| Method Calls | Asynchronous | Synchronous |
+| Performance | Good | Excellent |
+| JSI Support | No | Yes |
+| React Native | 0.68-0.72 | 0.73+ |
 
 ## Performance Tips
 
