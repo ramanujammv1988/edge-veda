@@ -98,6 +98,44 @@ export interface Spec extends TurboModule {
    * Required for TurboModule event support
    */
   removeListeners(count: number): void;
+
+  // Vision Inference Methods
+
+  /**
+   * Initialize vision inference context
+   * @param config - JSON string of vision configuration
+   * @returns Promise resolving to backend name
+   */
+  initVision(config: string): Promise<string>;
+
+  /**
+   * Describe an image using vision inference
+   * @param rgbBytes - Base64-encoded RGB888 pixel data
+   * @param width - Image width in pixels
+   * @param height - Image height in pixels
+   * @param prompt - Text prompt for the model
+   * @param params - JSON string of generation parameters
+   * @returns Promise resolving to JSON string containing description and timings
+   */
+  describeImage(
+    rgbBytes: string,
+    width: number,
+    height: number,
+    prompt: string,
+    params: string
+  ): Promise<string>;
+
+  /**
+   * Free vision inference context
+   * @returns Promise that resolves when context is freed
+   */
+  freeVision(): Promise<void>;
+
+  /**
+   * Check if vision context is initialized
+   * @returns true if vision context is loaded
+   */
+  isVisionLoaded(): boolean;
 }
 
 /**

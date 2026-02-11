@@ -303,5 +303,99 @@ class EdgeVeda private constructor(
                 false
             }
         }
+
+        // MARK: - Vision Inference
+
+        /**
+         * Create and initialize a VisionWorker for image description.
+         *
+         * VisionWorker maintains a persistent vision context (~600MB VLM + mmproj)
+         * for efficient frame processing. Use for camera-based vision tasks.
+         *
+         * @param config Vision configuration including model and mmproj paths
+         * @return Initialized VisionWorker ready for frame processing
+         * @throws EdgeVedaException if initialization fails
+         *
+         * Example:
+         * ```
+         * val worker = EdgeVeda.createVisionWorker(
+         *     VisionConfig(
+         *         modelPath = "/path/to/smolvlm2.gguf",
+         *         mmprojPath = "/path/to/smolvlm2-mmproj.gguf"
+         *     )
+         * )
+         *
+         * // Enqueue frames from camera
+         * worker.enqueueFrame(rgbData, width, height)
+         * val result = worker.processNextFrame("What do you see?")
+         *
+         * worker.cleanup()
+         * ```
+         */
+        suspend fun createVisionWorker(config: VisionConfig): VisionWorker {
+            val worker = VisionWorker()
+            worker.initialize(config)
+            return worker
+        }
+
+        /**
+         * Describe an image directly without creating a VisionWorker.
+         *
+         * Convenience method for one-off vision inference. For continuous
+         * camera feeds, prefer createVisionWorker() for better performance.
+         *
+         * @param config Vision configuration including model and mmproj paths
+         * @param rgb RGB888 pixel data (width * height * 3 bytes)
+         * @param width Frame width in pixels
+         * @param height Frame height in pixels
+         * @param prompt Text prompt for the model (default: "Describe what you see.")
+         * @param params Optional generation parameters
+         * @return VisionResult with description and timing information
+         * @throws EdgeVedaException if inference fails
+         *
+         * Example:
+         * ```
+         * val result = EdgeVeda.describeImage(
+         *     config = VisionConfig(
+         *         modelPath = "/path/to/smolvlm2.gguf",
+         *         mmprojPath = "/path/to/smolvlm2-mmproj.gguf"
+         *     ),
+         *     rgb = rgbData,
+         *     width = 640,
+         *     height = 480,
+         *     prompt = "What objects do you see?"
+         * )
+         * println(result.description)
+         * ```
+         */
+        suspend fun describeImage(
+            config: VisionConfig,
+            rgb: ByteArray,
+            width: Int,
+            height: Int,
+            prompt: String = "Describe what you see.",
+            params: VisionGenerationParams = VisionGenerationParams()
+        ): VisionResult {
+            val worker = VisionWorker()
+            return try {
+                worker.initialize(config)
+                worker.describeFrame(rgb, width, height, prompt, params)
+            } finally {
+                worker.cleanup()
+            }
+        }
+
+        /**
+         * Check if vision context is loaded.
+         *
+         * @return true if vision is loaded and ready for inference
+         */
+        fun isVisionLoaded(): Boolean {
+            return try {
+                NativeBridge.isVisionInitialized()
+            } catch (e: Exception) {
+                false
+            }
+        }
     }
 }

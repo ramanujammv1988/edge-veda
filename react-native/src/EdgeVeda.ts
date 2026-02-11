@@ -396,6 +396,93 @@ class EdgeVedaSDK {
   }
 
   /**
+   * Create a VisionWorker instance for vision inference
+   * 
+   * VisionWorker maintains a persistent vision context (~600MB VLM + mmproj)
+   * for efficient frame processing. Use for camera-based vision tasks.
+   * 
+   * @returns New VisionWorker instance
+   * @example
+   * ```typescript
+   * const worker = EdgeVeda.createVisionWorker();
+   * await worker.initialize({
+   *   modelPath: '/path/to/smolvlm2.gguf',
+   *   mmprojPath: '/path/to/smolvlm2-mmproj.gguf'
+   * });
+   * 
+   * // Enqueue frames from camera
+   * worker.enqueueFrame(rgbData, width, height);
+   * const result = await worker.processNextFrame();
+   * 
+   * await worker.cleanup();
+   * ```
+   */
+  createVisionWorker() {
+    // Dynamically import VisionWorker to avoid circular dependencies
+    const { VisionWorker } = require('./VisionWorker');
+    return new VisionWorker();
+  }
+
+  /**
+   * Describe an image directly without creating a VisionWorker
+   * 
+   * Convenience method for one-off vision inference. For continuous
+   * camera feeds, prefer createVisionWorker() for better performance.
+   * 
+   * @param config - Vision configuration
+   * @param rgb - RGB888 pixel data (width * height * 3 bytes)
+   * @param width - Frame width in pixels
+   * @param height - Frame height in pixels
+   * @param prompt - Text prompt for the model
+   * @param params - Optional generation parameters
+   * @returns Vision result with description and timings
+   * @example
+   * ```typescript
+   * const result = await EdgeVeda.describeImage(
+   *   {
+   *     modelPath: '/path/to/smolvlm2.gguf',
+   *     mmprojPath: '/path/to/smolvlm2-mmproj.gguf'
+   *   },
+   *   rgbData,
+   *   640,
+   *   480,
+   *   'What objects do you see?'
+   * );
+   * console.log(result.description);
+   * ```
+   */
+  async describeImage(
+    config: any,
+    rgb: Uint8Array,
+    width: number,
+    height: number,
+    prompt: string = 'Describe what you see.',
+    params?: any
+  ): Promise<any> {
+    const { VisionWorker } = require('./VisionWorker');
+    const worker = new VisionWorker();
+    
+    try {
+      await worker.initialize(config);
+      return await worker.describeFrame(rgb, width, height, prompt, params);
+    } finally {
+      await worker.cleanup();
+    }
+  }
+
+  /**
+   * Check if vision context is loaded
+   * @returns true if vision is loaded
+   */
+  isVisionLoaded(): boolean {
+    try {
+      return NativeEdgeVeda.isVisionLoaded();
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Get SDK version
    * @returns Version string
    * @example
