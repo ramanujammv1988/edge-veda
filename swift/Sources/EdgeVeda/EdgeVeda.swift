@@ -1,9 +1,10 @@
 import Foundation
+import CEdgeVeda
 
 /// Main EdgeVeda inference engine with async/await support
 @available(iOS 15.0, macOS 12.0, *)
 public actor EdgeVeda {
-    private var modelHandle: OpaquePointer?
+    private var context: ev_context?
     private let config: EdgeVedaConfig
     private let modelPath: String
 
@@ -29,13 +30,18 @@ public actor EdgeVeda {
 
     private func loadModel() async throws {
         try await Task {
-            let handle = try FFIBridge.loadModel(
-                path: modelPath,
+            let ctx = try FFIBridge.initContext(
+                modelPath: modelPath,
                 backend: config.backend,
                 threads: config.threads,
-                contextSize: config.contextSize
+                contextSize: config.contextSize,
+                gpuLayers: config.gpuLayers,
+                batchSize: config.batchSize,
+                useMmap: true,
+                useMlock: false,
+                seed: -1
             )
-            self.modelHandle = handle
+            self.context = ctx
         }.value
     }
 
@@ -56,19 +62,21 @@ public actor EdgeVeda {
     /// - Returns: Generated text completion
     /// - Throws: EdgeVedaError if generation fails
     public func generate(_ prompt: String, options: GenerateOptions) async throws -> String {
-        guard let handle = modelHandle else {
+        guard let ctx = context else {
             throw EdgeVedaError.modelNotLoaded
         }
 
         return try await Task {
             try FFIBridge.generate(
-                handle: handle,
+                ctx: ctx,
                 prompt: prompt,
                 maxTokens: options.maxTokens,
                 temperature: options.temperature,
                 topP: options.topP,
                 topK: options.topK,
                 repeatPenalty: options.repeatPenalty,
+                frequencyPenalty: 0.0,
+                presencePenalty: 0.0,
                 stopSequences: options.stopSequences
             )
         }.value
@@ -89,20 +97,22 @@ public actor EdgeVeda {
     public func generateStream(_ prompt: String, options: GenerateOptions) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                guard let handle = modelHandle else {
+                guard let ctx = context else {
                     continuation.finish(throwing: EdgeVedaError.modelNotLoaded)
                     return
                 }
 
                 do {
                     try await FFIBridge.generateStream(
-                        handle: handle,
+                        ctx: ctx,
                         prompt: prompt,
                         maxTokens: options.maxTokens,
                         temperature: options.temperature,
                         topP: options.topP,
                         topK: options.topK,
                         repeatPenalty: options.repeatPenalty,
+                        frequencyPenalty: 0.0,
+                        presencePenalty: 0.0,
                         stopSequences: options.stopSequences
                     ) { token in
                         continuation.yield(token)
@@ -120,53 +130,58 @@ public actor EdgeVeda {
     /// Current memory usage in bytes
     public var memoryUsage: UInt64 {
         get async {
-            guard let handle = modelHandle else {
+            guard let ctx = context else {
                 return 0
             }
-            return FFIBridge.getMemoryUsage(handle: handle)
+            do {
+                let stats = try FFIBridge.getMemoryUsage(ctx: ctx)
+                return stats.current
+            } catch {
+                return 0
+            }
         }
     }
 
     /// Get model metadata information
     /// - Returns: Dictionary of model metadata
     public func getModelInfo() async throws -> [String: String] {
-        guard let handle = modelHandle else {
+        guard let ctx = context else {
             throw EdgeVedaError.modelNotLoaded
         }
-        return FFIBridge.getModelMetadata(handle: handle)
+        return try FFIBridge.getModelInfo(ctx: ctx)
     }
 
     // MARK: - Model Management
 
     /// Unload the model and free resources
     public func unloadModel() async {
-        guard let handle = modelHandle else {
+        guard let ctx = context else {
             return
         }
 
         await Task {
-            FFIBridge.unloadModel(handle: handle)
+            FFIBridge.freeContext(ctx)
         }.value
 
-        modelHandle = nil
+        context = nil
     }
 
     /// Reset conversation context
     public func resetContext() async throws {
-        guard let handle = modelHandle else {
+        guard let ctx = context else {
             throw EdgeVedaError.modelNotLoaded
         }
 
-        await Task {
-            FFIBridge.resetContext(handle: handle)
+        try await Task {
+            try FFIBridge.resetContext(ctx: ctx)
         }.value
     }
 
     // MARK: - Cleanup
 
     deinit {
-        if let handle = modelHandle {
-            FFIBridge.unloadModel(handle: handle)
+        if let ctx = context {
+            FFIBridge.freeContext(ctx)
         }
     }
 }
