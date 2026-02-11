@@ -108,6 +108,13 @@ export class EdgeVeda {
     }
   >();
 
+  // Worker recovery state
+  private workerRestartCount = 0;
+  private readonly maxWorkerRestarts = 3;
+  private workerRestartCooldownMs = 2000;
+  private lastWorkerCrashTime = 0;
+  private workerRecoveryInProgress = false;
+
   constructor(config: EdgeVedaConfig) {
     this.config = {
       device: 'auto',
@@ -134,17 +141,10 @@ export class EdgeVeda {
     try {
       // In a real implementation, the worker URL would be bundled/imported
       // For now, we use a blob URL with the worker code
-      const workerUrl = this.createWorkerUrl();
-      this.worker = new Worker(workerUrl, { type: 'module' });
+      await this.createAndAttachWorker();
 
-      // Set up message handler
-      this.worker.onmessage = this.handleWorkerMessage.bind(this);
-      this.worker.onerror = (error) => {
-        console.error('Worker error:', error);
-        if (this.config.onError) {
-          this.config.onError(new Error(error.message));
-        }
-      };
+      // Reset restart counter on successful init
+      this.workerRestartCount = 0;
 
       // Send init message
       await this.sendWorkerMessage(
@@ -167,6 +167,112 @@ export class EdgeVeda {
         }`
       );
     }
+  }
+
+  /**
+   * Creates and attaches a Web Worker with error recovery handlers.
+   */
+  private async createAndAttachWorker(): Promise<void> {
+    const workerUrl = this.createWorkerUrl();
+    this.worker = new Worker(workerUrl, { type: 'module' });
+
+    // Set up message handler
+    this.worker.onmessage = this.handleWorkerMessage.bind(this);
+
+    // Error handler with auto-recovery
+    this.worker.onerror = (error) => {
+      console.error('[EdgeVeda] Worker error:', error);
+      if (this.config.onError) {
+        this.config.onError(new Error(error.message));
+      }
+      this.handleWorkerCrash(error.message);
+    };
+  }
+
+  /**
+   * Handles a worker crash by attempting auto-restart.
+   * Implements exponential backoff and a maximum restart limit.
+   */
+  private async handleWorkerCrash(errorMessage: string): Promise<void> {
+    if (this.workerRecoveryInProgress) {
+      return;
+    }
+
+    const now = Date.now();
+
+    // Reset restart counter if enough time has passed since last crash
+    if (now - this.lastWorkerCrashTime > 30_000) {
+      this.workerRestartCount = 0;
+    }
+    this.lastWorkerCrashTime = now;
+
+    // Reject all pending requests
+    for (const [id, request] of this.pendingRequests) {
+      request.reject(new Error(`Worker crashed: ${errorMessage}`));
+      this.pendingRequests.delete(id);
+    }
+
+    // Check if we've exceeded restart limit
+    if (this.workerRestartCount >= this.maxWorkerRestarts) {
+      console.error(
+        `[EdgeVeda] Worker crashed ${this.workerRestartCount} times. ` +
+        'Giving up on auto-restart. Call init() to manually reinitialize.'
+      );
+      this.initialized = false;
+      this.worker = null;
+      return;
+    }
+
+    // Attempt restart with exponential backoff
+    this.workerRecoveryInProgress = true;
+    this.workerRestartCount++;
+    const backoffMs = this.workerRestartCooldownMs * Math.pow(2, this.workerRestartCount - 1);
+
+    console.warn(
+      `[EdgeVeda] Worker crashed. Attempting restart ${this.workerRestartCount}/${this.maxWorkerRestarts} ` +
+      `in ${backoffMs}ms...`
+    );
+
+    try {
+      // Terminate old worker
+      this.worker?.terminate();
+      this.worker = null;
+
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+
+      // Create new worker
+      await this.createAndAttachWorker();
+
+      // Re-initialize
+      await this.sendWorkerMessage(
+        {
+          type: 'init' as WorkerMessageType.INIT,
+          config: this.config,
+        },
+        (message) => {
+          if (message.type === 'progress' && this.config.onProgress) {
+            this.config.onProgress(message.progress);
+          }
+        }
+      );
+
+      console.log('[EdgeVeda] Worker successfully restarted.');
+      this.initialized = true;
+    } catch (restartError) {
+      console.error('[EdgeVeda] Worker restart failed:', restartError);
+      this.initialized = false;
+      this.worker = null;
+    } finally {
+      this.workerRecoveryInProgress = false;
+    }
+  }
+
+  /**
+   * Gets the number of times the worker has been restarted.
+   * Useful for monitoring/telemetry.
+   */
+  getWorkerRestartCount(): number {
+    return this.workerRestartCount;
   }
 
   /**
