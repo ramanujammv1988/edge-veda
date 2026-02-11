@@ -9,12 +9,12 @@ import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
 /**
  * Edge Veda React Package
- * Registers the TurboModule with React Native
+ * Dual architecture support - automatically registers the correct module variant
  */
 class EdgeVedaPackage : TurboReactPackage() {
 
     override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-        return if (name == EdgeVedaModule.NAME) {
+        return if (name == "EdgeVeda") {
             EdgeVedaModule(reactContext)
         } else {
             null
@@ -23,15 +23,17 @@ class EdgeVedaPackage : TurboReactPackage() {
 
     override fun getReactModuleInfoProvider(): ReactModuleInfoProvider {
         return ReactModuleInfoProvider {
+            val isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+            
             mapOf(
-                EdgeVedaModule.NAME to ReactModuleInfo(
-                    EdgeVedaModule.NAME,
-                    EdgeVedaModule::class.java.name,
+                "EdgeVeda" to ReactModuleInfo(
+                    "EdgeVeda",
+                    "com.edgeveda.EdgeVedaModule",
                     false, // canOverrideExistingModule
                     false, // needsEagerInit
                     true,  // hasConstants
                     false, // isCxxModule
-                    true   // isTurboModule
+                    isTurboModule // isTurboModule - set based on architecture
                 )
             )
         }
