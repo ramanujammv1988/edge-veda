@@ -25,7 +25,6 @@ import {
   type EdgeVedaBudget,
   type MeasuredBaseline,
   type BudgetViolation,
-  BudgetProfile,
   BudgetConstraint,
   WorkloadPriority,
   WorkloadId,
@@ -234,7 +233,7 @@ export class Scheduler {
    */
   async scheduleTask<T>(
     priority: TaskPriority,
-    workload: WorkloadId,
+    _workload: WorkloadId,
     task: () => Promise<T> | T
   ): Promise<T> {
     const taskId = generateTaskId();

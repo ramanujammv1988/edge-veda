@@ -41,7 +41,7 @@ public enum CameraUtils {
     ) throws -> Data {
         let expectedSize = width * height * 4
         guard bgra.count >= expectedSize else {
-            throw EdgeVedaError.invalidInput(
+            throw EdgeVedaError.invalidConfig(reason:
                 "BGRA buffer too small: expected \(expectedSize) bytes, got \(bgra.count)"
             )
         }
@@ -100,17 +100,17 @@ public enum CameraUtils {
         let expectedUV = (width / 2) * (height / 2)
 
         guard yPlane.count >= expectedY else {
-            throw EdgeVedaError.invalidInput(
+            throw EdgeVedaError.invalidConfig(reason:
                 "Y plane too small: expected \(expectedY), got \(yPlane.count)"
             )
         }
         guard uPlane.count >= expectedUV else {
-            throw EdgeVedaError.invalidInput(
+            throw EdgeVedaError.invalidConfig(reason:
                 "U plane too small: expected \(expectedUV), got \(uPlane.count)"
             )
         }
         guard vPlane.count >= expectedUV else {
-            throw EdgeVedaError.invalidInput(
+            throw EdgeVedaError.invalidConfig(reason:
                 "V plane too small: expected \(expectedUV), got \(vPlane.count)"
             )
         }
@@ -180,13 +180,13 @@ public enum CameraUtils {
     ) throws -> Data {
         let expectedSize = srcWidth * srcHeight * 3
         guard rgb.count >= expectedSize else {
-            throw EdgeVedaError.invalidInput(
+            throw EdgeVedaError.invalidConfig(reason:
                 "RGB buffer too small: expected \(expectedSize) bytes, got \(rgb.count)"
             )
         }
 
         guard dstWidth > 0, dstHeight > 0 else {
-            throw EdgeVedaError.invalidInput(
+            throw EdgeVedaError.invalidConfig(reason:
                 "Destination dimensions must be positive: \(dstWidth)×\(dstHeight)"
             )
         }

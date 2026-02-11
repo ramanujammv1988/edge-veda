@@ -1,4 +1,4 @@
-e plugins {
+plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android") version "1.9.22"
     id("maven-publish")
