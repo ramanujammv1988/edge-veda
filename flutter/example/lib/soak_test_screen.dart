@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
 
-/// 15-minute sustained vision inference benchmark with live metrics.
+/// 20-minute sustained vision inference benchmark with live metrics.
 ///
 /// Integrates all Phase 11 infrastructure:
 /// - [VisionWorker]: persistent isolate (model loaded once)
@@ -77,7 +77,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
   bool _isManaged = true;
 
   // Test configuration
-  static const _testDuration = Duration(minutes: 15);
+  static const _testDuration = Duration(minutes: 20);
   static const _telemetryInterval = Duration(seconds: 2);
 
   @override
