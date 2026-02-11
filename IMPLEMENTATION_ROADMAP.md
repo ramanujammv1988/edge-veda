@@ -21,6 +21,9 @@ This document outlines the concrete implementation plan for achieving SDK featur
 - ✅ **React Native SDK:** 100% complete (Phases 1-4 done, all Core APIs working)
 - ✅ **Web SDK:** 100% complete (Phases 1-4 done, all Core APIs working)
 - ✅ **All Platforms:** Phase 4 (Runtime Supervision) implemented across all platforms
+- ✅ **All Platforms:** Phase 5 (Model Management) — ModelManager + ModelRegistry on all platforms
+- ✅ **All Platforms:** Phase 6 (Camera & Vision Utilities) — CameraUtils on all platforms
+- ✅ **All Platforms:** Phase 7 (Observability) — PerfTrace, typed exceptions, NativeErrorCode on all platforms
 
 See [SDK_FEATURE_PARITY_ANALYSIS.md](SDK_FEATURE_PARITY_ANALYSIS.md) for detailed gap analysis.
 
@@ -1154,3 +1157,231 @@ Phase 4 brings production-grade runtime management to all platforms, matching Fl
 - [x] ResourceMonitor tracks memory with configurable thresholds
 - [ ] Example apps demonstrate supervision features (Swift done, others pending)
 - [ ] Phase 4 tests for React Native & Web (pending)
+
+---
+
+## Phase 5: Model Management ✅ COMPLETED
+
+**Timeline:** November 2026  
+**Priority:** 🔴 **HIGH (P0)**  
+**Completion Date:** November 2, 2026  
+**Status:** ✅ 100% Complete on all platforms
+
+### Overview
+
+Bring Flutter's full model download/cache/verify system (ModelManager + ModelRegistry) to all non-Flutter platforms. Flutter's `model_manager.dart` provides SHA-256 checksum verification, atomic temp-file downloads, retry with exponential backoff (3 retries), CancelToken support, cache-first strategy, and a ModelRegistry with pre-configured models.
+
+### 5.1 Components to Implement
+
+1. **ModelManager** — Download, cache, verify, and manage GGUF model files
+   - `downloadModel(modelId, onProgress)` with retry/backoff
+   - `isModelDownloaded(modelId)` — cache-first check
+   - `getModelPath(modelId)` — return local path
+   - `deleteModel(modelId)` — remove from cache
+   - `getDownloadedModels()` — list cached models
+   - `clearAllModels()` — purge entire cache
+   - `verifyModelChecksum(modelId)` — SHA-256 verification
+   - `getModelMetadata(modelId)` — size, date, checksum
+
+2. **ModelRegistry** — Pre-configured model catalog
+   - `llama32_1b`, `phi35_mini`, `gemma2_2b`, `tinyLlama`, `smolvlm2_500m` + mmproj
+   - Each entry: `{id, displayName, url, fileName, expectedChecksum, fileSize, description}`
+
+3. **DownloadProgress** / **ModelInfo** types — Shared progress and metadata types
+4. **CancelToken** — Cooperative cancellation for long-running downloads
+
+### 5.2 Platform Implementation Plan
+
+**Swift:**
+- `ModelManager.swift` — actor-based, URLSession download with delegate for progress
+- `ModelRegistry.swift` — static catalog
+- SHA-256 via CryptoKit, FileManager for cache directory
+- Atomic download: write to `.tmp`, rename on completion
+
+**Kotlin:**
+- `ModelManager.kt` — coroutine-based, OkHttp/HttpURLConnection download
+- `ModelRegistry.kt` — object catalog
+- SHA-256 via `java.security.MessageDigest`, app internal storage
+- Atomic download: temp file + `renameTo()`
+
+**React Native:**
+- `ModelManager.ts` — delegates to native modules for file I/O
+- `ModelRegistry.ts` — TypeScript catalog
+- Progress via native event bridge
+- CancelToken via AbortController pattern
+
+**Web (Enhance existing `model-cache.ts`):**
+- Add `ModelRegistry` with pre-configured models
+- Add retry with exponential backoff (3 retries) to `downloadAndCacheModel`
+- Add `CancelToken` / `AbortSignal` support
+- Add atomic download pattern (temp key → rename in IndexedDB)
+
+### 5.3 Files to Create/Modify
+
+**Swift:** `ModelManager.swift`, `ModelRegistry.swift`  
+**Kotlin:** `ModelManager.kt`, `ModelRegistry.kt`  
+**React Native:** `ModelManager.ts`, `ModelRegistry.ts`  
+**Web:** Enhance `model-cache.ts`, add `ModelRegistry.ts`
+
+### 5.4 Files Created/Modified
+
+**Swift:** `ModelManager.swift`, `ModelRegistry.swift`  
+**Kotlin:** `ModelManager.kt`, `ModelRegistry.kt`  
+**React Native:** `ModelManager.ts`, `ModelRegistry.ts`  
+**Web:** Enhanced `model-cache.ts` (retry/backoff, CancelToken, atomic download), `ModelRegistry.ts`
+
+### Phase 5 Success Criteria
+
+- [x] ModelManager implemented on Swift, Kotlin, React Native
+- [x] Web model-cache.ts enhanced with retry/backoff, CancelToken, ModelRegistry
+- [x] ModelRegistry with 5+ pre-configured models on all platforms
+- [x] SHA-256 checksum verification on all platforms
+- [x] DownloadProgress callback on all platforms
+- [x] CancelToken support for download cancellation
+- [x] Atomic download (temp file → rename) on all platforms
+
+---
+
+## Phase 6: Camera & Vision Utilities ✅ COMPLETED
+
+**Timeline:** November 2026  
+**Priority:** 🟡 **MEDIUM (P1)**  
+**Completion Date:** November 2, 2026  
+**Status:** ✅ 100% Complete on all platforms
+
+### Overview
+
+Port Flutter's `CameraUtils` pixel-format converters and add CancelToken to platforms that lack it. Flutter provides BGRA→RGB (iOS), YUV420→RGB (Android, BT.601 coefficients), and nearest-neighbor resize.
+
+### 6.1 Components to Implement
+
+1. **CameraUtils** — Pixel format conversion utilities
+   - `convertBgraToRgb(data, width, height)` — iOS camera format
+   - `convertYuv420ToRgb(yPlane, uPlane, vPlane, width, height)` — Android camera format
+   - `resizeRgb(data, srcW, srcH, dstW, dstH)` — nearest-neighbor downscale
+
+2. **CancelToken** (Swift, Kotlin, React Native) — Missing from these platforms
+   - Cooperative cancellation token for long-running operations
+   - `cancel()`, `isCancelled`, `onCancel(callback)`
+
+### 6.2 Platform Implementation Plan
+
+**Swift:**
+- `CameraUtils.swift` — CVPixelBuffer → RGB via Accelerate.framework (vImage)
+- BGRA→RGB via vImageConvert, YUV→RGB via vImageConvert_420Yp8_CbCr8ToARGB8888
+- Resize via vImageScale_ARGB8888
+
+**Kotlin:**
+- `CameraUtils.kt` — android.media.Image (YUV_420_888) → RGB
+- BGRA→RGB for any non-standard sources
+- Resize via Bitmap.createScaledBitmap or manual nearest-neighbor
+
+**React Native:**
+- `CameraUtils.ts` — bridge to native CameraUtils on each platform
+- JavaScript fallback for resize
+
+**Web:**
+- `CameraUtils.ts` — Canvas API for format conversion
+- MediaStream / getUserMedia for camera access
+- OffscreenCanvas for resize
+
+### 6.3 Files to Create
+
+**Swift:** `CameraUtils.swift`, `CancelToken.swift`  
+**Kotlin:** `CameraUtils.kt`, `CancelToken.kt`  
+**React Native:** `CameraUtils.ts`, `CancelToken.ts`  
+**Web:** `CameraUtils.ts`, `CancelToken.ts`
+
+### 6.3 Files Created
+
+**Swift:** `CameraUtils.swift`  
+**Kotlin:** `CameraUtils.kt`  
+**React Native:** `CameraUtils.ts`  
+**Web:** `CameraUtils.ts`
+
+### Phase 6 Success Criteria
+
+- [x] CameraUtils with BGRA→RGB, YUV420→RGB, resize on all platforms
+- [x] CancelToken implemented on Swift, Kotlin, React Native (via types/ModelManager)
+- [x] Platform-optimized implementations (Accelerate on iOS, manual on Android)
+- [x] Web uses Canvas/OffscreenCanvas for conversions
+
+---
+
+## Phase 7: Observability ✅ COMPLETED
+
+**Timeline:** November 2026  
+**Priority:** 🟢 **MEDIUM (P2)**  
+**Completion Date:** November 2, 2026  
+**Status:** ✅ 100% Complete on all platforms
+
+### Overview
+
+Add Flutter's `PerfTrace` JSONL logger, align typed exception hierarchies across all platforms, and implement `NativeErrorCode` mapping from C core error codes to platform-specific exceptions.
+
+### 7.1 Components to Implement
+
+1. **PerfTrace** — JSONL frame-based trace logger
+   - `record(stage, value, extra)` — record a trace event
+   - `nextFrame()` — advance frame counter
+   - `close()` — flush and close trace file
+   - Output format: `{"frame_id": N, "ts_ms": T, "stage": "...", "value": V, ...}`
+
+2. **Typed Exception Hierarchy** — Align all platforms with Flutter's 9 exception types:
+   - `ModelNotFoundError`, `ModelLoadError`, `GenerationError`, `OutOfMemoryError`
+   - `ContextOverflowError`, `InvalidConfigError`, `CancellationError`
+   - `VisionError`, `UnloadError`
+
+3. **NativeErrorCode** — Map C core `ev_error_*` codes to platform exceptions
+   - Enum with: `ok`, `modelNotFound`, `modelLoadFailed`, `outOfMemory`, `contextOverflow`
+   - `invalidParameter`, `generationFailed`, `cancelled`, `unknown`
+
+### 7.2 Platform Implementation Plan
+
+**Swift:**
+- `PerfTrace.swift` — actor-based, FileHandle JSONL writer
+- Extend existing `EdgeVedaError` enum with missing cases
+- `NativeErrorCode.swift` — map from `ev_error_t` C codes
+
+**Kotlin:**
+- `PerfTrace.kt` — BufferedWriter JSONL output
+- Extend existing `EdgeVedaException` sealed class with missing subclasses
+- `NativeErrorCode.kt` — map from JNI error codes
+
+**React Native:**
+- `PerfTrace.ts` — array-based trace collector, JSON export
+- Extend `EdgeVedaError` / `EdgeVedaErrorCode` enum
+- `NativeErrorCode.ts` — error code mapping
+
+**Web:**
+- `PerfTrace.ts` — in-memory trace array, Blob export
+- Extend error types in `types.ts`
+- `NativeErrorCode.ts` — WASM error code mapping
+
+### 7.3 Files to Create/Modify
+
+**Swift:** `PerfTrace.swift`, `NativeErrorCode.swift`, update `EdgeVedaError`  
+**Kotlin:** `PerfTrace.kt`, `NativeErrorCode.kt`, update `EdgeVedaException`  
+**React Native:** `PerfTrace.ts`, `NativeErrorCode.ts`, update `types.ts`  
+**Web:** `PerfTrace.ts`, `NativeErrorCode.ts`, update `types.ts`
+
+### 7.4 Files Created/Modified
+
+**Swift:** `PerfTrace.swift`, `NativeErrorCode.swift`, updated `Types.swift` (typed exceptions)  
+**Kotlin:** `PerfTrace.kt`, `NativeErrorCode.kt`, updated `Types.kt` (typed exceptions)  
+**React Native:** `PerfTrace.ts`, `NativeErrorCode.ts`, updated `types.ts` (typed exceptions)  
+**Web:** `PerfTrace.ts`, `NativeErrorCode.ts`, updated `types.ts` (typed exceptions)
+
+### Implementation Highlights
+
+- **PerfTrace**: JSONL frame-based trace logger on all platforms. Swift uses actor + FileHandle, Kotlin uses BufferedWriter, React Native uses in-memory array with JSON export, Web uses in-memory array with Blob export.
+- **Typed Exceptions**: All 9 exception types (ModelNotFoundError, ModelLoadError, GenerationError, OutOfMemoryError, ContextOverflowError, InvalidConfigError, CancellationError, VisionError, UnloadError) aligned across all platforms.
+- **NativeErrorCode**: Maps C core `ev_error_*` integer codes (0–7, -1) to platform-specific exceptions. Swift uses `Int32` enum, Kotlin uses `entries.associateBy` for O(1) lookup, TypeScript uses `Map<number, NativeErrorCode>` for O(1) lookup.
+
+### Phase 7 Success Criteria
+
+- [x] PerfTrace with JSONL output on all 4 platforms
+- [x] All 9 typed exceptions aligned across platforms
+- [x] NativeErrorCode mapping from C core on all platforms
+- [x] PerfTrace supports frame-based recording with stage/value/extra
+- [x] Trace export (file on mobile, Blob on web)
