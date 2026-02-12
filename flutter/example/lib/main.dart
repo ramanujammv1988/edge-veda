@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -113,6 +114,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isGenerating = false; // Track active generation for lifecycle cancellation
   bool _isDownloading = false;
   bool _runningBenchmark = false;
+  bool _toolsEnabled = false;
 
   // Streaming state
   bool _isStreaming = false;
@@ -127,6 +129,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ChatSession? _session;
   SystemPromptPreset _selectedPreset = SystemPromptPreset.assistant;
   bool _showSummarizationIndicator = false;
+
+  // Demo tool definitions for function calling
+  List<ToolDefinition> get _demoTools => [
+    ToolDefinition(
+      name: 'get_time',
+      description: 'Get the current date and time',
+      parameters: {
+        'type': 'object',
+        'properties': {
+          'timezone': {
+            'type': 'string',
+            'description': 'Timezone name (e.g., UTC, EST, PST)',
+            'enum': ['UTC', 'EST', 'PST', 'JST'],
+          },
+        },
+        'required': ['timezone'],
+      },
+    ),
+    ToolDefinition(
+      name: 'calculate',
+      description: 'Perform a math calculation',
+      parameters: {
+        'type': 'object',
+        'properties': {
+          'expression': {
+            'type': 'string',
+            'description':
+                'Math expression to evaluate (e.g., "2+2", "sqrt(16)")',
+          },
+        },
+        'required': ['expression'],
+      },
+    ),
+  ];
 
   // Benchmark test prompts - varying complexity for realistic testing
   final List<String> _benchmarkPrompts = [
@@ -307,6 +343,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _session = ChatSession(
         edgeVeda: _edgeVeda,
         preset: _selectedPreset,
+        templateFormat: _toolsEnabled
+            ? ChatTemplateFormat.qwen3
+            : ChatTemplateFormat.llama3Instruct,
+        tools: _toolsEnabled ? ToolRegistry(_demoTools) : null,
       );
 
       setState(() {
@@ -323,7 +363,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Send a message via ChatSession streaming
+  /// Send a message via ChatSession (streaming or tool-calling)
   Future<void> _sendMessage() async {
     if (!_isInitialized || _session == null) {
       _showError('Please initialize Veda first');
@@ -340,6 +380,66 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     _promptController.clear();
 
+    if (_toolsEnabled) {
+      await _sendWithToolCalling(prompt);
+    } else {
+      await _sendStreaming(prompt);
+    }
+  }
+
+  /// Send with tool calling (non-streaming, uses sendWithTools)
+  Future<void> _sendWithToolCalling(String prompt) async {
+    setState(() {
+      _isStreaming = true;
+      _isLoading = true;
+      _isGenerating = true;
+      _statusMessage = 'Sending with tools...';
+    });
+
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      final reply = await _session!.sendWithTools(
+        prompt,
+        onToolCall: _handleToolCall,
+        options: const GenerateOptions(
+          maxTokens: 256,
+          temperature: 0.7,
+          topP: 0.9,
+        ),
+      );
+
+      stopwatch.stop();
+      final latencyMs = stopwatch.elapsedMilliseconds;
+
+      // Get memory stats
+      final memStats = await _edgeVeda.getMemoryStats();
+      _memoryMb = memStats.currentBytes / (1024 * 1024);
+
+      setState(() {
+        _statusMessage = 'Complete (${latencyMs}ms)';
+      });
+      _scrollToBottom();
+
+      print('EdgeVeda: Tool calling complete - ${latencyMs}ms, reply: ${reply.content.length} chars');
+    } catch (e) {
+      stopwatch.stop();
+      setState(() {
+        _statusMessage = 'Tool calling error';
+      });
+      _showError('Tool calling failed: ${e.toString()}');
+      print('EdgeVeda: Tool calling error: $e');
+    } finally {
+      _isGenerating = false;
+      setState(() {
+        _isStreaming = false;
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Send with streaming (existing behavior)
+  Future<void> _sendStreaming(String prompt) async {
     // Check if summarization might trigger
     final usageBefore = _session!.contextUsage;
     if (usageBefore > 0.7) {
@@ -526,6 +626,58 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _streamingText = '';
         _statusMessage = 'Ready to chat!';
       });
+    }
+  }
+
+  /// Toggle tool calling mode on/off
+  void _toggleTools() {
+    setState(() {
+      _toolsEnabled = !_toolsEnabled;
+    });
+    if (_isInitialized) {
+      _session = ChatSession(
+        edgeVeda: _edgeVeda,
+        preset: _selectedPreset,
+        templateFormat: _toolsEnabled
+            ? ChatTemplateFormat.qwen3
+            : ChatTemplateFormat.llama3Instruct,
+        tools: _toolsEnabled ? ToolRegistry(_demoTools) : null,
+      );
+      setState(() {
+        _streamingText = '';
+        _statusMessage = _toolsEnabled
+            ? 'Tools enabled (get_time, calculate)'
+            : 'Ready to chat!';
+      });
+    }
+  }
+
+  /// Handle a tool call from the model during sendWithTools
+  Future<ToolResult> _handleToolCall(ToolCall call) async {
+    switch (call.name) {
+      case 'get_time':
+        final tz = call.arguments['timezone'] as String? ?? 'UTC';
+        return ToolResult.success(
+          toolCallId: call.id,
+          data: {
+            'time': DateTime.now().toUtc().toIso8601String(),
+            'timezone': tz,
+          },
+        );
+      case 'calculate':
+        final expr = call.arguments['expression'] as String? ?? '';
+        return ToolResult.success(
+          toolCallId: call.id,
+          data: {
+            'result': 'Calculation not implemented -- demo only',
+            'expression': expr,
+          },
+        );
+      default:
+        return ToolResult.failure(
+          toolCallId: call.id,
+          error: 'Unknown tool: ${call.name}',
+        );
     }
   }
 
@@ -794,6 +946,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
+          if (_toolsEnabled) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.build_outlined, size: 10, color: AppTheme.accent),
+                  SizedBox(width: 3),
+                  Text(
+                    'Tools',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppTheme.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Spacer(),
           Text(
             '$usagePercent%',
@@ -1000,6 +1177,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               icon: const Icon(Icons.add_comment_outlined, color: AppTheme.textSecondary),
               tooltip: 'New Chat',
               onPressed: (!_isStreaming && !_isLoading) ? _resetChat : null,
+            ),
+          // Tools toggle
+          if (_isInitialized)
+            IconButton(
+              icon: Icon(
+                Icons.build_outlined,
+                color: _toolsEnabled ? AppTheme.accent : AppTheme.textSecondary,
+              ),
+              tooltip: _toolsEnabled ? 'Disable Tools' : 'Enable Tools',
+              onPressed: (!_isStreaming && !_isLoading) ? _toggleTools : null,
             ),
           IconButton(
             icon: const Icon(Icons.layers_outlined, color: AppTheme.textSecondary),
@@ -1306,6 +1493,26 @@ class MessageBubble extends StatelessWidget {
       );
     }
 
+    // Tool call messages
+    if (message.role == ChatRole.toolCall) {
+      return _buildToolMessage(
+        icon: Icons.build_outlined,
+        iconColor: AppTheme.accent,
+        label: 'Tool Call',
+        content: message.content,
+      );
+    }
+
+    // Tool result messages
+    if (message.role == ChatRole.toolResult) {
+      return _buildToolMessage(
+        icon: Icons.check_circle_outline,
+        iconColor: AppTheme.success,
+        label: 'Tool Result',
+        content: message.content,
+      );
+    }
+
     final isUser = message.role == ChatRole.user;
 
     return Padding(
@@ -1357,6 +1564,74 @@ class MessageBubble extends StatelessWidget {
               child: Icon(Icons.person, color: AppTheme.accent, size: 18),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Build a compact tool call or tool result message chip
+  Widget _buildToolMessage({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String content,
+  }) {
+    // Try to format the JSON content for readability
+    String displayContent;
+    try {
+      final parsed = jsonDecode(content);
+      displayContent = const JsonEncoder.withIndent('  ').convert(parsed);
+    } catch (_) {
+      displayContent = content;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: iconColor.withValues(alpha: 0.15),
+            child: Icon(icon, color: iconColor, size: 14),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: iconColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: iconColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    displayContent,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                      fontFamily: 'monospace',
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
