@@ -33,6 +33,7 @@ option(EDGE_VEDA_BUILD_STATIC "Build static library" OFF)
 option(EDGE_VEDA_BUILD_TESTS "Build tests" OFF)
 
 # Enable LTO for release builds (reduces binary size ~10-20%)
+# CMAKE_INTERPROCEDURAL_OPTIMIZATION uses -flto=thin on Android (Clang)
 # Note: LTO disabled for iOS to allow XCFramework creation
 # LTO produces LLVM bitcode object files that can't be archived directly
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT IOS)
@@ -257,6 +258,12 @@ function(configure_edge_veda_target target_name)
 
         # Link Android logging and system libraries
         target_link_libraries(${target_name} PRIVATE log android)
+
+        # 16KB page alignment for Android 15+ (Google Play requirement Nov 2025)
+        target_link_options(${target_name} PRIVATE
+            -Wl,-z,max-page-size=16384
+            -Wl,-z,common-page-size=16384
+        )
     elseif(UNIX)
         # Linux needs pthread for threading
         find_package(Threads REQUIRED)
