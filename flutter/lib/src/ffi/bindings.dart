@@ -938,51 +938,21 @@ class EdgeVedaNativeBindings {
   late final EvWhisperIsValidDart evWhisperIsValid;
 
   // ---------------------------------------------------------------------------
-  // Embeddings Functions (lazy - XCFramework not rebuilt yet)
+  // Embeddings Functions
   // ---------------------------------------------------------------------------
 
-  /// Compute text embeddings (lazy binding - symbol may not exist yet)
-  EvEmbedDart? _evEmbed;
-  EvEmbedDart? get evEmbed {
-    if (_evEmbed == null) {
-      try {
-        _evEmbed = _dylib.lookupFunction<EvEmbedNative, EvEmbedDart>('ev_embed');
-      } catch (_) {
-        return null;
-      }
-    }
-    return _evEmbed;
-  }
+  /// Compute text embeddings
+  late final EvEmbedDart evEmbed;
 
-  /// Free embedding result (lazy binding - symbol may not exist yet)
-  EvFreeEmbeddingsDart? _evFreeEmbeddings;
-  EvFreeEmbeddingsDart? get evFreeEmbeddings {
-    if (_evFreeEmbeddings == null) {
-      try {
-        _evFreeEmbeddings = _dylib.lookupFunction<EvFreeEmbeddingsNative, EvFreeEmbeddingsDart>('ev_free_embeddings');
-      } catch (_) {
-        return null;
-      }
-    }
-    return _evFreeEmbeddings;
-  }
+  /// Free embedding result
+  late final EvFreeEmbeddingsDart evFreeEmbeddings;
 
   // ---------------------------------------------------------------------------
-  // Streaming Token Info Functions (lazy - XCFramework not rebuilt yet)
+  // Streaming Token Info Functions
   // ---------------------------------------------------------------------------
 
-  /// Get extended token information (lazy binding - symbol may not exist yet)
-  EvStreamGetTokenInfoDart? _evStreamGetTokenInfo;
-  EvStreamGetTokenInfoDart? get evStreamGetTokenInfo {
-    if (_evStreamGetTokenInfo == null) {
-      try {
-        _evStreamGetTokenInfo = _dylib.lookupFunction<EvStreamGetTokenInfoNative, EvStreamGetTokenInfoDart>('ev_stream_get_token_info');
-      } catch (_) {
-        return null;
-      }
-    }
-    return _evStreamGetTokenInfo;
-  }
+  /// Get extended token information (confidence) from stream
+  late final EvStreamGetTokenInfoDart evStreamGetTokenInfo;
 
   // ---------------------------------------------------------------------------
   // Binding Initialization
@@ -1119,5 +1089,17 @@ class EdgeVedaNativeBindings {
     evWhisperIsValid = _dylib.lookupFunction<EvWhisperIsValidNative, EvWhisperIsValidDart>(
       'ev_whisper_is_valid',
     );
+
+    // Embedding functions
+    evEmbed = _dylib.lookupFunction<EvEmbedNative, EvEmbedDart>('ev_embed');
+    evFreeEmbeddings = _dylib.lookupFunction<EvFreeEmbeddingsNative, EvFreeEmbeddingsDart>(
+      'ev_free_embeddings',
+    );
+
+    // Streaming confidence
+    evStreamGetTokenInfo = _dylib.lookupFunction<
+      EvStreamGetTokenInfoNative,
+      EvStreamGetTokenInfoDart
+    >('ev_stream_get_token_info');
   }
 }
