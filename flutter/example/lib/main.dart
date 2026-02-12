@@ -423,8 +423,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _pickAndIndexDocument() async {
     // Step 1: Pick file
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['txt', 'md'],
+      type: FileType.any,
     );
     if (result == null || result.files.single.path == null) return;
 
@@ -439,8 +438,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
 
     try {
-      // Step 2: Read file
-      final text = await File(filePath).readAsString();
+      // Step 2: Read file as text
+      String text;
+      try {
+        text = await File(filePath).readAsString();
+      } catch (_) {
+        _showError('Cannot read file — only text-based files are supported');
+        setState(() => _isIndexingDocument = false);
+        return;
+      }
       if (text.trim().isEmpty) {
         _showError('Document is empty');
         setState(() => _isIndexingDocument = false);
