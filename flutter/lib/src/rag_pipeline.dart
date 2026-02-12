@@ -48,15 +48,33 @@ class RagConfig {
 
 /// End-to-end RAG pipeline: embed query -> search index -> inject context -> generate
 class RagPipeline {
-  final EdgeVeda _edgeVeda;
+  final EdgeVeda _embedder;
+  final EdgeVeda _generator;
   final VectorIndex _index;
   final RagConfig config;
 
+  /// Create a RAG pipeline with a single EdgeVeda instance for both embedding
+  /// and generation. Suitable when one model handles both tasks.
   RagPipeline({
     required EdgeVeda edgeVeda,
     required VectorIndex index,
     this.config = const RagConfig(),
-  })  : _edgeVeda = edgeVeda,
+  })  : _embedder = edgeVeda,
+        _generator = edgeVeda,
+        _index = index;
+
+  /// Create a RAG pipeline with separate embedding and generation models.
+  ///
+  /// Use this when your embedding model (e.g., all-MiniLM-L6-v2) is different
+  /// from your generation model (e.g., Llama 3.2 1B). This is the recommended
+  /// configuration for production RAG.
+  RagPipeline.withModels({
+    required EdgeVeda embedder,
+    required EdgeVeda generator,
+    required VectorIndex index,
+    this.config = const RagConfig(),
+  })  : _embedder = embedder,
+        _generator = generator,
         _index = index;
 
   /// The underlying vector index
@@ -71,7 +89,7 @@ class RagPipeline {
     String text, {
     Map<String, dynamic>? metadata,
   }) async {
-    final result = await _edgeVeda.embed(text);
+    final result = await _embedder.embed(text);
     _index.add(
       id,
       result.embedding,
@@ -98,7 +116,7 @@ class RagPipeline {
     GenerateOptions? options,
   }) async {
     // Step 1: Embed the query
-    final queryEmbedding = await _edgeVeda.embed(queryText);
+    final queryEmbedding = await _embedder.embed(queryText);
 
     // Step 2: Search the vector index
     final results = _index.query(
@@ -128,7 +146,7 @@ class RagPipeline {
         .replaceAll('{query}', queryText);
 
     // Step 5: Generate response
-    final response = await _edgeVeda.generate(
+    final response = await _generator.generate(
       augmentedPrompt,
       options: options,
     );
@@ -143,7 +161,7 @@ class RagPipeline {
     CancelToken? cancelToken,
   }) async* {
     // Step 1: Embed the query
-    final queryEmbedding = await _edgeVeda.embed(queryText);
+    final queryEmbedding = await _embedder.embed(queryText);
 
     // Step 2: Search the vector index
     final results = _index.query(
@@ -169,7 +187,7 @@ class RagPipeline {
         .replaceAll('{query}', queryText);
 
     // Step 5: Stream response
-    yield* _edgeVeda.generateStream(
+    yield* _generator.generateStream(
       augmentedPrompt,
       options: options,
       cancelToken: cancelToken,
@@ -181,7 +199,7 @@ class RagPipeline {
     String queryText, {
     int? k,
   }) async {
-    final queryEmbedding = await _edgeVeda.embed(queryText);
+    final queryEmbedding = await _embedder.embed(queryText);
     return _index.query(
       queryEmbedding.embedding,
       k: k ?? config.topK,
