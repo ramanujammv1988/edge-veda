@@ -99,38 +99,68 @@ internal class NativeBridge {
         // Reset cancel flag before starting a new stream
         streamCancelFlag.set(false)
 
-        // Create a callback bridge that the native code can invoke
-        val callbackBridge = object : StreamCallbackBridge {
-            override fun onToken(token: String) {
-                // Check cancel flag before delivering token
-                if (streamCancelFlag.get()) {
-                    throw kotlinx.coroutines.CancellationException("Stream cancelled via cancelCurrentStream()")
-                }
-                // Note: We can't use suspend here directly with JNI
-                // In production, this would need a more sophisticated approach
-                // using coroutine contexts or channels
-                kotlinx.coroutines.runBlocking {
-                    callback(token)
+        // Use a blocking queue to bridge between the JNI callback thread and the
+        // suspend coroutine context.  The JNI onToken() callback simply enqueues
+        // tokens (pure Java, no coroutines).  A StreamItem.End sentinel signals
+        // end-of-stream (LinkedBlockingQueue does NOT allow null elements).
+        val tokenQueue = java.util.concurrent.LinkedBlockingQueue<StreamItem>()
+        var nativeError: Throwable? = null
+
+        // Run the blocking native generation on a dedicated thread so the
+        // current coroutine is free to consume tokens from the queue.
+        val nativeThread = Thread({
+            val bridge = object : StreamCallbackBridge {
+                override fun onToken(token: String) {
+                    if (streamCancelFlag.get()) {
+                        throw kotlinx.coroutines.CancellationException("Stream cancelled via cancelCurrentStream()")
+                    }
+                    tokenQueue.put(StreamItem.Token(token))
                 }
             }
+            try {
+                val success = nativeGenerateStream(
+                    nativeHandle,
+                    prompt,
+                    options.maxTokens ?: -1,
+                    options.temperature ?: -1f,
+                    options.topP ?: -1f,
+                    options.topK ?: -1,
+                    options.repeatPenalty ?: -1f,
+                    options.stopSequences.toTypedArray(),
+                    options.seed ?: -1L,
+                    bridge
+                )
+                if (!success) {
+                    nativeError = EdgeVedaException.GenerationError("Native stream generation failed")
+                }
+            } catch (e: Throwable) {
+                nativeError = e
+            } finally {
+                // Sentinel: signals the consumer loop below to stop
+                tokenQueue.put(StreamItem.End)
+            }
+        }, "ev-stream-native")
+        nativeThread.start()
+
+        // Consume tokens from the queue in the caller's coroutine context.
+        // This is suspend-safe – callback() (e.g. Flow emit()) runs in the
+        // correct coroutine scope.
+        try {
+            while (true) {
+                when (val item = tokenQueue.take()) {
+                    is StreamItem.Token -> callback(item.value)
+                    is StreamItem.End -> break
+                }
+            }
+        } finally {
+            // If the consumer is cancelled (e.g. job cancellation), signal native
+            // side to stop producing and wait for the thread to finish.
+            streamCancelFlag.set(true)
+            nativeThread.join(5_000)
         }
 
-        val success = nativeGenerateStream(
-            nativeHandle,
-            prompt,
-            options.maxTokens ?: -1,
-            options.temperature ?: -1f,
-            options.topP ?: -1f,
-            options.topK ?: -1,
-            options.repeatPenalty ?: -1f,
-            options.stopSequences.toTypedArray(),
-            options.seed ?: -1L,
-            callbackBridge
-        )
-
-        if (!success) {
-            throw EdgeVedaException.GenerationError("Native stream generation failed")
-        }
+        // Propagate any error from the native thread
+        nativeError?.let { throw it }
     }
 
     /**
@@ -615,6 +645,16 @@ private data class VisionParamsData(
     val topK: Int,
     val repeatPenalty: Float
 )
+
+/**
+ * Sealed class used as a type-safe sentinel for the streaming token queue.
+ * LinkedBlockingQueue does NOT allow null elements, so we use StreamItem.End
+ * instead of null to signal end-of-stream.
+ */
+private sealed class StreamItem {
+    data class Token(val value: String) : StreamItem()
+    object End : StreamItem()
+}
 
 /**
  * Internal callback interface for streaming generation.

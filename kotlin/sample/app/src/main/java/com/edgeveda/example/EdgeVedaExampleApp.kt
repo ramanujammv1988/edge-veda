@@ -15,7 +15,7 @@ class EdgeVedaExampleApp : Application() {
 
         // Load the Edge Veda native library (JNI)
         try {
-            System.loadLibrary("edge_veda")
+            System.loadLibrary("edgeveda_jni")
         } catch (e: UnsatisfiedLinkError) {
             // Native library not available — SDK will fall back to error state
             android.util.Log.w(TAG, "Native library not found: ${e.message}")

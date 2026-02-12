@@ -98,16 +98,19 @@ class EdgeVeda private constructor(
             try {
                 nativeBridge.initModel(modelPath, config)
                 autoUnloadedDueToMemory.set(false)
-                
-                // Register lifecycle callbacks after successful init
-                applicationContext?.let { ctx ->
-                    registerLifecycleCallbacks(ctx)
-                }
             } catch (e: Exception) {
                 initialized.set(false)
                 lastModelPath = null
                 lastConfig = null
                 throw EdgeVedaException.ModelLoadError("Failed to load model: ${e.message}", e)
+            }
+        }
+
+        // Register lifecycle callbacks on main thread (after IO completes)
+        // Must NOT run inside Dispatchers.IO — addObserver requires main thread
+        applicationContext?.let { ctx ->
+            withContext(Dispatchers.Main) {
+                registerLifecycleCallbacks(ctx)
             }
         }
     }

@@ -183,10 +183,13 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
         std::lock_guard<std::mutex> lock(instance->mutex);
 
         std::string path = jstring_to_string(env, model_path);
-        LOGI("Initializing model: %s", path.c_str());
-        LOGI("Backend: %d, Threads: %d, MaxTokens: %d", backend, num_threads, max_tokens);
-        LOGI("ContextSize: %d, BatchSize: %d", context_size, batch_size);
-        LOGI("UseGPU: %d, UseMmap: %d, UseMlock: %d", use_gpu, use_mmap, use_mlock);
+        LOGI("========== MODEL INITIALIZATION ==========");
+        LOGI("Model path: %s", path.c_str());
+        LOGI("Backend requested: %d (%s)", backend, ev_backend_name(static_cast<ev_backend_t>(backend)));
+        LOGI("Threads: %d (0=auto)", num_threads);
+        LOGI("Context: %d, Batch: %d, MaxTokens: %d", context_size, batch_size, max_tokens);
+        LOGI("GPU: useGpu=%d, layers=%d", use_gpu, use_gpu ? -1 : 0);
+        LOGI("Memory: mmap=%d, mlock=%d", use_mmap, use_mlock);
 
         // Configure Edge Veda context
         ev_config config;
@@ -212,6 +215,14 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
         (void)repeat_penalty;
         (void)seed;
 
+        // Detect actual backend that will be used
+        ev_backend_t detected_backend = ev_detect_backend();
+        LOGI("Detected best backend: %d (%s)", detected_backend, ev_backend_name(detected_backend));
+        
+        // Check if requested backend is available
+        bool backend_available = ev_is_backend_available(static_cast<ev_backend_t>(backend));
+        LOGI("Requested backend %d available: %d", backend, backend_available);
+
         // Initialize context
         ev_error_t error;
         instance->context = ev_init(&config, &error);
@@ -225,7 +236,10 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
         }
 
         instance->initialized = true;
-        LOGI("Model initialized successfully");
+        LOGI("========== MODEL INITIALIZATION SUCCESS ==========");
+        LOGI("Backend in use: %s", ev_backend_name(config.backend));
+        LOGI("GPU layers offloaded: %d", config.gpu_layers);
+        LOGI("Threads: %d", config.num_threads);
         return JNI_TRUE;
 
     } catch (const std::exception& e) {
@@ -420,7 +434,10 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerateStream(
             char* token = ev_stream_next(stream, &error);
             
             if (!token) {
-                if (error != EV_ERROR_STREAM_ENDED) {
+                // ev_stream_next() returns NULL token at end-of-stream.
+                // Some llama.cpp builds signal this with EV_ERROR_STREAM_ENDED,
+                // others with EV_SUCCESS (error code 0).  Both are clean exits.
+                if (error != EV_ERROR_STREAM_ENDED && error != EV_SUCCESS) {
                     const char* error_msg = ev_error_string(error);
                     instance->last_error = error_msg;
                     LOGE("Stream error: %s", error_msg);
@@ -438,7 +455,9 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerateStream(
             env->DeleteLocalRef(jtoken);
 
             if (env->ExceptionCheck()) {
-                LOGE("Exception during callback invocation");
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+                LOGE("Exception during callback invocation (see above for details)");
                 ev_stream_free(stream);
                 return JNI_FALSE;
             }

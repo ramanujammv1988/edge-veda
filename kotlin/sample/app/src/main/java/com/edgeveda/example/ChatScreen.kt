@@ -289,6 +289,8 @@ private fun PersonaPicker(vm: ChatViewModel) {
                         labelColor = AppTheme.textSecondary,
                     ),
                     border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = isSelected,
                         borderColor = if (isSelected) AppTheme.accent else AppTheme.border,
                     ),
                     shape = RoundedCornerShape(20.dp),
@@ -568,7 +570,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 statusMessage = "Ready to chat!"
             } catch (e: Exception) {
                 isLoading = false
-                statusMessage = "Initialization failed"
+                statusMessage = "Initialization failed: ${e.message}"
+                android.util.Log.e("ChatViewModel", "Initialization failed", e)
             }
         }
     }
