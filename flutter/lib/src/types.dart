@@ -84,6 +84,11 @@ class GenerateOptions {
   /// Only used when [grammarStr] is also set.
   final String? grammarRoot;
 
+  /// Confidence threshold for cloud handoff signal (0.0 = disabled)
+  /// When enabled, each token's confidence is tracked via softmax entropy.
+  /// If average confidence drops below this threshold, needsCloudHandoff is set.
+  final double confidenceThreshold;
+
   const GenerateOptions({
     this.systemPrompt,
     this.maxTokens = 512,
@@ -96,6 +101,7 @@ class GenerateOptions {
     this.stream = false,
     this.grammarStr,
     this.grammarRoot,
+    this.confidenceThreshold = 0.0,
   });
 
   GenerateOptions copyWith({
@@ -110,6 +116,7 @@ class GenerateOptions {
     bool? stream,
     String? grammarStr,
     String? grammarRoot,
+    double? confidenceThreshold,
   }) {
     return GenerateOptions(
       systemPrompt: systemPrompt ?? this.systemPrompt,
@@ -123,6 +130,7 @@ class GenerateOptions {
       stream: stream ?? this.stream,
       grammarStr: grammarStr ?? this.grammarStr,
       grammarRoot: grammarRoot ?? this.grammarRoot,
+      confidenceThreshold: confidenceThreshold ?? this.confidenceThreshold,
     );
   }
 
@@ -138,6 +146,7 @@ class GenerateOptions {
         'stream': stream,
         'grammarStr': grammarStr,
         'grammarRoot': grammarRoot,
+        'confidenceThreshold': confidenceThreshold,
       };
 
   @override
@@ -161,6 +170,12 @@ class GenerateResponse {
   /// Time taken for generation in milliseconds
   final int? latencyMs;
 
+  /// Average confidence across all generated tokens (null if not tracked)
+  final double? avgConfidence;
+
+  /// Whether cloud handoff was recommended during generation
+  final bool needsCloudHandoff;
+
   /// Tokens per second throughput
   double? get tokensPerSecond {
     if (latencyMs == null || latencyMs == 0) return null;
@@ -172,6 +187,8 @@ class GenerateResponse {
     required this.promptTokens,
     required this.completionTokens,
     this.latencyMs,
+    this.avgConfidence,
+    this.needsCloudHandoff = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -181,6 +198,8 @@ class GenerateResponse {
         'totalTokens': totalTokens,
         'latencyMs': latencyMs,
         'tokensPerSecond': tokensPerSecond,
+        'avgConfidence': avgConfidence,
+        'needsCloudHandoff': needsCloudHandoff,
       };
 
   @override
@@ -198,15 +217,25 @@ class TokenChunk {
   /// Whether this is the final token
   final bool isFinal;
 
+  /// Per-token confidence score (0.0-1.0), null if confidence tracking disabled
+  final double? confidence;
+
+  /// Whether cloud handoff is recommended at this point
+  final bool needsCloudHandoff;
+
   const TokenChunk({
     required this.token,
     required this.index,
     this.isFinal = false,
+    this.confidence,
+    this.needsCloudHandoff = false,
   });
 
   @override
-  String toString() =>
-      'TokenChunk(token: "$token", index: $index, isFinal: $isFinal)';
+  String toString() {
+    final confStr = confidence != null ? ', confidence: \${confidence!.toStringAsFixed(3)}' : '';
+    return 'TokenChunk(token: "\$token", index: \$index, isFinal: \$isFinal\$confStr)';
+  }
 }
 
 /// Model download progress information
@@ -671,4 +700,59 @@ class CancelToken {
     _isCancelled = false;
     _listeners.clear();
   }
+}
+
+
+/// Result of a text embedding operation
+class EmbeddingResult {
+  /// The embedding vector (L2-normalized)
+  final List<double> embedding;
+
+  /// Number of dimensions
+  int get dimensions => embedding.length;
+
+  /// Number of tokens in the input text
+  final int tokenCount;
+
+  const EmbeddingResult({
+    required this.embedding,
+    required this.tokenCount,
+  });
+
+  @override
+  String toString() => 'EmbeddingResult(dims: \$dimensions, tokens: \$tokenCount)';
+}
+
+/// Confidence information for a generated token or response
+class ConfidenceInfo {
+  /// Per-token confidence score (0.0-1.0), -1.0 if not computed
+  final double confidence;
+
+  /// Running average confidence across all generated tokens
+  final double avgConfidence;
+
+  /// Whether the model recommends cloud handoff (avg confidence below threshold)
+  final bool needsCloudHandoff;
+
+  /// Token position in generated sequence
+  final int tokenIndex;
+
+  const ConfidenceInfo({
+    required this.confidence,
+    required this.avgConfidence,
+    required this.needsCloudHandoff,
+    required this.tokenIndex,
+  });
+
+  /// Whether confidence was computed (threshold was > 0)
+  bool get isComputed => confidence >= 0.0;
+
+  @override
+  String toString() =>
+    'ConfidenceInfo(confidence: \${confidence.toStringAsFixed(3)}, avg: \${avgConfidence.toStringAsFixed(3)}, handoff: \$needsCloudHandoff)';
+}
+
+/// Exception thrown when embedding operation fails
+class EmbeddingException extends EdgeVedaException {
+  const EmbeddingException(super.message, {super.details, super.originalError});
 }

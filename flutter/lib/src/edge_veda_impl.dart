@@ -48,7 +48,9 @@ import 'types.dart' show
     TokenChunk,
     CancelToken,
     VisionConfig,
-    VisionException;
+    VisionException,
+    EmbeddingResult,
+    EmbeddingException;
 
 /// Main Edge Veda SDK class for on-device AI inference
 ///
@@ -318,6 +320,7 @@ class EdgeVeda {
         paramsPtr.ref.numStopSequences = 0;
         paramsPtr.ref.grammarStr = ffi.nullptr;
         paramsPtr.ref.grammarRoot = ffi.nullptr;
+        paramsPtr.ref.confidenceThreshold = 0.0;
         paramsPtr.ref.reserved = ffi.nullptr;
 
         // Allocate output pointer
@@ -530,6 +533,100 @@ class EdgeVeda {
         cancelToken.removeListener(cancelListener);
       }
     }
+  }
+
+  /// Compute text embeddings using the loaded model
+  ///
+  /// Returns an [EmbeddingResult] containing the L2-normalized embedding vector.
+  /// The model must be an embedding model (nomic-embed, bge, etc.) -- using a
+  /// generative model will produce meaningless embeddings.
+  ///
+  /// Runs in a background isolate via Isolate.run().
+  Future<EmbeddingResult> embed(String text) async {
+    _ensureInitialized();
+
+    if (text.isEmpty) {
+      throw EmbeddingException('Text cannot be empty');
+    }
+
+    // Capture config values as primitives for isolate transfer
+    final modelPath = _config!.modelPath;
+    final numThreads = _config!.numThreads;
+    final contextSize = _config!.contextLength;
+    final useGpu = _config!.useGpu;
+
+    return await Isolate.run(() {
+      final bindings = EdgeVedaNativeBindings.instance;
+
+      // Allocate config and init context (same pattern as generate)
+      final configPtr = calloc<EvConfig>();
+      final modelPathPtr = modelPath.toNativeUtf8();
+      final errorPtr = calloc<ffi.Int32>();
+
+      try {
+        configPtr.ref.modelPath = modelPathPtr;
+        configPtr.ref.backend = useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+        configPtr.ref.numThreads = numThreads;
+        configPtr.ref.contextSize = contextSize;
+        configPtr.ref.batchSize = 512;
+        configPtr.ref.memoryLimitBytes = 0;
+        configPtr.ref.autoUnloadOnMemoryPressure = true;
+        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+        configPtr.ref.useMmap = true;
+        configPtr.ref.useMlock = false;
+        configPtr.ref.seed = -1;
+        configPtr.ref.reserved = ffi.nullptr;
+
+        final ctx = bindings.evInit(configPtr, errorPtr);
+        if (ctx == ffi.nullptr) {
+          final errorCode = NativeErrorCode.fromCode(errorPtr.value);
+          final exception = errorCode.toException('Embedding init failed');
+          throw exception ?? ModelLoadException('Failed to load model for embedding');
+        }
+
+        try {
+          // Call ev_embed
+          final textPtr = text.toNativeUtf8();
+          final result = calloc<EvEmbedResult>();
+
+          try {
+            final err = bindings.evEmbed(ctx, textPtr, result);
+            if (err != 0) {
+              throw EmbeddingException('Embedding failed',
+                  details: 'Error code: \$err');
+            }
+
+            // Copy embedding to Dart list
+            final dims = result.ref.dimensions;
+            final tokenCount = result.ref.tokenCount;
+            final floatPtr = result.ref.embeddings;
+
+            // Create Dart-owned copy (safe to return from isolate)
+            final embedding = List<double>.generate(
+              dims,
+              (i) => floatPtr[i].toDouble(),
+            );
+
+            // Free native embedding
+            bindings.evFreeEmbeddings(result);
+
+            return EmbeddingResult(
+              embedding: embedding,
+              tokenCount: tokenCount,
+            );
+          } finally {
+            calloc.free(textPtr);
+            calloc.free(result);
+          }
+        } finally {
+          bindings.evFree(ctx);
+        }
+      } finally {
+        calloc.free(modelPathPtr);
+        calloc.free(configPtr);
+        calloc.free(errorPtr);
+      }
+    });
   }
 
   /// Ensure SDK is initialized before operations
@@ -746,6 +843,7 @@ class EdgeVeda {
         paramsPtr.ref.numStopSequences = 0;
         paramsPtr.ref.grammarStr = ffi.nullptr;
         paramsPtr.ref.grammarRoot = ffi.nullptr;
+        paramsPtr.ref.confidenceThreshold = 0.0;
         paramsPtr.ref.reserved = ffi.nullptr;
 
         final promptPtr = prompt.toNativeUtf8();
