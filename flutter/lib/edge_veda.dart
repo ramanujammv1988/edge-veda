@@ -143,3 +143,25 @@ export 'src/budget.dart' show
 export 'src/scheduler.dart' show Scheduler;
 
 export 'src/latency_tracker.dart' show LatencyTracker, BatteryDrainTracker;
+
+// Whisper STT (Speech-to-Text)
+export 'src/whisper_session.dart' show WhisperSession;
+export 'src/isolate/whisper_worker.dart' show WhisperWorker;
+export 'src/isolate/whisper_worker_messages.dart'
+    show WhisperSegment, WhisperTranscribeResponse;
+
+// Tool/function calling
+export 'src/tool_types.dart' show
+    ToolDefinition,
+    ToolCall,
+    ToolResult,
+    ToolPriority,
+    ToolCallParseException;
+
+export 'src/tool_registry.dart' show ToolRegistry;
+
+export 'src/tool_template.dart' show ToolTemplate;
+
+export 'src/schema_validator.dart' show SchemaValidator, SchemaValidationResult;
+
+export 'src/gbnf_builder.dart' show GbnfBuilder;

@@ -52,10 +52,15 @@ class ModelManager {
     return modelsDir;
   }
 
-  /// Get path for a specific model file
+  /// Get path for a specific model file.
+  ///
+  /// Whisper models use .bin extension, all other models use .gguf.
+  /// Using modelId prefix is safer than format field to avoid breaking
+  /// existing models if format metadata is ever inconsistent.
   Future<String> getModelPath(String modelId) async {
     final modelsDir = await getModelsDirectory();
-    return path.join(modelsDir.path, '$modelId.gguf');
+    final ext = modelId.startsWith('whisper-') ? 'bin' : 'gguf';
+    return path.join(modelsDir.path, '$modelId.$ext');
   }
 
   /// Check if a model is already downloaded
@@ -320,32 +325,42 @@ class ModelManager {
     await _deleteModelMetadata(modelId);
   }
 
-  /// Get list of all downloaded models
+  /// Get list of all downloaded models.
+  ///
+  /// Scans for both .gguf (LLM/VLM) and .bin (Whisper) model files.
   Future<List<String>> getDownloadedModels() async {
     final modelsDir = await getModelsDirectory();
     final entities = await modelsDir.list().toList();
 
     final modelIds = <String>[];
     for (final entity in entities) {
-      if (entity is File && entity.path.endsWith('.gguf')) {
+      if (entity is File) {
         final filename = path.basename(entity.path);
-        final modelId = filename.substring(0, filename.length - 5); // Remove .gguf
-        modelIds.add(modelId);
+        if (filename.endsWith('.gguf')) {
+          modelIds.add(filename.substring(0, filename.length - 5));
+        } else if (filename.endsWith('.bin')) {
+          modelIds.add(filename.substring(0, filename.length - 4));
+        }
       }
     }
 
     return modelIds;
   }
 
-  /// Get total size of all downloaded models
+  /// Get total size of all downloaded models.
+  ///
+  /// Includes both .gguf (LLM/VLM) and .bin (Whisper) model files.
   Future<int> getTotalModelsSize() async {
     final modelsDir = await getModelsDirectory();
     final entities = await modelsDir.list().toList();
 
     var totalSize = 0;
     for (final entity in entities) {
-      if (entity is File && entity.path.endsWith('.gguf')) {
-        totalSize += await entity.length();
+      if (entity is File) {
+        final filename = path.basename(entity.path);
+        if (filename.endsWith('.gguf') || filename.endsWith('.bin')) {
+          totalSize += await entity.length();
+        }
       }
     }
 
@@ -487,6 +502,32 @@ class ModelRegistry {
     quantization: 'F16',
   );
 
+  // === Whisper Speech-to-Text Models ===
+
+  /// Whisper Tiny English - Fast, low memory (~77MB)
+  static final ModelInfo whisperTinyEn = ModelInfo(
+    id: 'whisper-tiny-en',
+    name: 'Whisper Tiny (English)',
+    sizeBytes: 77 * 1024 * 1024, // ~77 MB download
+    description: 'Fast English speech recognition, low memory footprint',
+    downloadUrl:
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
+    format: 'GGML',
+    quantization: null,
+  );
+
+  /// Whisper Base English - Better accuracy (~148MB)
+  static final ModelInfo whisperBaseEn = ModelInfo(
+    id: 'whisper-base-en',
+    name: 'Whisper Base (English)',
+    sizeBytes: 148 * 1024 * 1024, // ~148 MB download
+    description: 'Higher accuracy English speech recognition',
+    downloadUrl:
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
+    format: 'GGML',
+    quantization: null,
+  );
+
   /// Get all available text models
   static List<ModelInfo> getAllModels() {
     return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama];
@@ -511,12 +552,18 @@ class ModelRegistry {
     }
   }
 
-  /// Get model by ID (searches both text and vision models)
+  /// Get all available whisper STT models
+  static List<ModelInfo> getWhisperModels() {
+    return [whisperTinyEn, whisperBaseEn];
+  }
+
+  /// Get model by ID (searches text, vision, and whisper models)
   static ModelInfo? getModelById(String id) {
     final allModels = [
       ...getAllModels(),
       ...getVisionModels(),
       smolvlm2_500m_mmproj,
+      ...getWhisperModels(),
     ];
     try {
       return allModels.firstWhere((model) => model.id == id);
