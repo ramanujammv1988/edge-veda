@@ -44,13 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   bool _showWelcome = true;
 
-  final List<Widget> _screens = const [
-    ChatScreen(),
-    VisionScreen(),
-    SttScreen(),
-    SettingsScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     if (_showWelcome) {
@@ -62,7 +55,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: [
+          const ChatScreen(),
+          VisionScreen(isActive: _currentIndex == 1),
+          const SttScreen(),
+          const SettingsScreen(),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
