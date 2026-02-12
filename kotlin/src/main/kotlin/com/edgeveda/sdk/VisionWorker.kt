@@ -73,11 +73,9 @@ class VisionWorker {
      * @return Backend name (e.g., "Vulkan", "CPU")
      * @throws EdgeVedaException if initialization fails
      */
-    @Synchronized
     suspend fun initialize(config: VisionConfig): String = withContext(Dispatchers.IO) {
         if (_isInitialized) {
-            throw EdgeVedaException(
-                EdgeVedaError.INVALID_PARAMETER,
+            throw EdgeVedaException.InvalidConfiguration(
                 "VisionWorker already initialized"
             )
         }
@@ -96,9 +94,10 @@ class VisionWorker {
             backend = NativeBridge.initVision(configJson)
             _isInitialized = true
             backend
+        } catch (e: EdgeVedaException) {
+            throw e
         } catch (e: Exception) {
-            throw EdgeVedaException(
-                EdgeVedaError.MODEL_LOAD_FAILED,
+            throw EdgeVedaException.ModelLoadError(
                 "Failed to initialize vision context: ${e.message}",
                 e
             )
@@ -119,8 +118,7 @@ class VisionWorker {
      */
     fun enqueueFrame(rgb: ByteArray, width: Int, height: Int): Boolean {
         if (!_isInitialized) {
-            throw EdgeVedaException(
-                EdgeVedaError.MODEL_NOT_LOADED,
+            throw EdgeVedaException.ModelLoadError(
                 "VisionWorker not initialized. Call initialize() first."
             )
         }
@@ -145,8 +143,7 @@ class VisionWorker {
         params: VisionGenerationParams = VisionGenerationParams()
     ): VisionResult? {
         if (!_isInitialized) {
-            throw EdgeVedaException(
-                EdgeVedaError.MODEL_NOT_LOADED,
+            throw EdgeVedaException.ModelLoadError(
                 "VisionWorker not initialized. Call initialize() first."
             )
         }
@@ -191,8 +188,7 @@ class VisionWorker {
         params: VisionGenerationParams = VisionGenerationParams()
     ): VisionResult {
         if (!_isInitialized) {
-            throw EdgeVedaException(
-                EdgeVedaError.MODEL_NOT_LOADED,
+            throw EdgeVedaException.ModelLoadError(
                 "VisionWorker not initialized. Call initialize() first."
             )
         }
@@ -261,9 +257,10 @@ class VisionWorker {
                 description = parsed.getString("description"),
                 timings = timings
             )
+        } catch (e: EdgeVedaException) {
+            throw e
         } catch (e: Exception) {
-            throw EdgeVedaException(
-                EdgeVedaError.GENERATION_FAILED,
+            throw EdgeVedaException.GenerationError(
                 "Vision inference failed: ${e.message}",
                 e
             )
@@ -292,7 +289,6 @@ class VisionWorker {
      *
      * @throws EdgeVedaException if cleanup fails
      */
-    @Synchronized
     suspend fun cleanup() = withContext(Dispatchers.IO) {
         if (!_isInitialized) {
             return@withContext
@@ -304,8 +300,7 @@ class VisionWorker {
             frameQueue.reset()
             backend = ""
         } catch (e: Exception) {
-            throw EdgeVedaException(
-                EdgeVedaError.UNKNOWN_ERROR,
+            throw EdgeVedaException.NativeError(
                 "Failed to cleanup vision context: ${e.message}",
                 e
             )

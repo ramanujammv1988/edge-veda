@@ -1,5 +1,6 @@
 package com.edgeveda.sdk
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter

@@ -1,0 +1,738 @@
+Error 1
+> Task :sdk:compileDebugKotlin FAILED
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:7:27 Unresolved reference 'DefaultLifecycleObserver'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:9:27 Unresolved reference 'ProcessLifecycleOwner'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:71:36 Unresolved reference 'DefaultLifecycleObserver'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:164:23 Unresolved reference 'coroutineContext'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:164:23 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:384:33 Unresolved reference 'DefaultLifecycleObserver'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:385:13 'onStop' overrides nothing.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:393:9 Unresolved reference 'ProcessLifecycleOwner'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:393:37 Unresolved reference 'lifecycle'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:406:28 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:406:28 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T, R> T.let(block: (T) -> R): R
+    [R|Contract description]
+     <
+        CallsInPlace(block, EXACTLY_ONCE)
+    >
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:406:34 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:407:13 Unresolved reference 'ProcessLifecycleOwner'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/EdgeVeda.kt:407:41 Unresolved reference 'lifecycle'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/RuntimePolicy.kt:284:76 Unresolved reference 'ActivityManager'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/RuntimePolicy.kt:286:60 Unresolved reference 'runningAppProcesses'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/RuntimePolicy.kt:287:62 Unresolved reference 'it'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/RuntimePolicy.kt:289:42 Unresolved reference 'importance'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/RuntimePolicy.kt:289:55 Unresolved reference 'ActivityManager'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:76:5 '@Synchronized' annotation is not applicable to 'suspend' functions and lambdas.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:79:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:80:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:100:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:101:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:122:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:123:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:148:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:149:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:194:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:195:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:265:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:266:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:295:5 '@Synchronized' annotation is not applicable to 'suspend' functions and lambdas.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:307:19 Cannot access 'constructor(message: String, cause: Throwable? = ...): EdgeVedaException': it is protected in 'com/edgeveda/sdk/EdgeVedaException'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/VisionWorker.kt:308:17 Unresolved reference 'EdgeVedaError'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:37:28 Argument type mismatch: actual type is 'kotlin.Double', but 'kotlin.Int?' was expected.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:40:31 Argument type mismatch: actual type is 'kotlin.Double', but 'kotlin.Int?' was expected.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:70:26 Argument type mismatch: actual type is 'kotlin.Long', but 'java.util.Date' was expected.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:91:25 Argument type mismatch: actual type is 'kotlin.Long', but 'java.util.Date' was expected.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:101:25 Argument type mismatch: actual type is 'kotlin.Long', but 'java.util.Date' was expected.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:120:17 No parameter with name 'hasMemoryPressureNotifications' found.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:120:17 No value passed for parameter 'hasMemoryMonitoring'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:120:17 No value passed for parameter 'hasBackgroundTasks'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:120:17 No value passed for parameter 'platform'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:120:17 No value passed for parameter 'osVersion'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:120:17 No value passed for parameter 'deviceModel'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:131:33 Unresolved reference 'name'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:136:13 No parameter with name 'name' found.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:138:17 No parameter with name 'throttleOnBattery' found.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:139:17 No parameter with name 'adaptiveMemory' found.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:140:17 No parameter with name 'backgroundOptimization' found.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:329:28 Argument type mismatch: actual type is 'kotlin.Float?', but 'kotlin.Double?' was expected.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:333:40 Unresolved reference 'P95_LATENCY'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/examples/RuntimeSupervisionExample.kt:346:55 Unresolved reference 'average'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:421:21 Unresolved reference 'nativeVisionDispose'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:429:32 Unresolved reference 'nativeVisionCreate'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:435:31 Unresolved reference 'nativeVisionInit'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:448:21 Unresolved reference 'nativeVisionDispose'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:454:22 Unresolved reference 'nativeVisionIsValid'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:455:21 Unresolved reference 'nativeVisionDispose'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:486:44 Unresolved reference 'nativeVisionIsValid'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:497:35 Unresolved reference 'nativeVisionDescribe'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:511:31 Unresolved reference 'nativeVisionGetLastTimings'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:536:17 Not enough information to infer type argument for 'K'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:537:21 Not enough information to infer type argument for 'K'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:538:25 Unresolved reference 'nativeVisionDispose'.
+e: file:///Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/kotlin/com/edgeveda/sdk/internal/NativeBridge.kt:551:46 Unresolved reference 'nativeVisionIsValid'.
+
+
+Error 2
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:170:12: error: unused parameter 'temperature' [-Werror,-Wunused-parameter]
+  170 |     jfloat temperature,
+      |            ^
+Ask Gemini
+
+Error 3
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:171:12: error: unused parameter 'top_p' [-Werror,-Wunused-parameter]
+  171 |     jfloat top_p,
+      |            ^
+Ask Gemini
+
+Error 4
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:172:10: error: unused parameter 'top_k' [-Werror,-Wunused-parameter]
+  172 |     jint top_k,
+      |          ^
+Ask Gemini
+
+Error 5
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:173:12: error: unused parameter 'repeat_penalty' [-Werror,-Wunused-parameter]
+  173 |     jfloat repeat_penalty,
+      |            ^
+Ask Gemini
+
+Error 6
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:247:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+  247 |     jlong seed
+      |           ^
+Ask Gemini
+
+Error 7
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:333:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+  333 |     jlong seed,
+      |           ^
+Ask Gemini
+
+Error 8
+Execution failed for task ':sdk:buildCMakeDebug[arm64-v8a]'.
+> com.android.ide.common.process.ProcessException: ninja: Entering directory `/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a'
+  [1/2] Building CXX object CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o
+  FAILED: CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o 
+  /Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+  /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:170:12: error: unused parameter 'temperature' [-Werror,-Wunused-parameter]
+    170 |     jfloat temperature,
+        |            ^
+  /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:171:12: error: unused parameter 'top_p' [-Werror,-Wunused-parameter]
+    171 |     jfloat top_p,
+        |            ^
+  /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:172:10: error: unused parameter 'top_k' [-Werror,-Wunused-parameter]
+    172 |     jint top_k,
+        |          ^
+  /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:173:12: error: unused parameter 'repeat_penalty' [-Werror,-Wunused-parameter]
+    173 |     jfloat repeat_penalty,
+        |            ^
+  /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:247:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+    247 |     jlong seed
+        |           ^
+  /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:333:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+    333 |     jlong seed,
+        |           ^
+  6 errors generated.
+  ninja: build stopped: subcommand failed.
+  
+  C++ build system [build] failed while executing:
+      /Users/a6119501/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+        -C \
+        /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a \
+        edgeveda_jni
+    from /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin
+
+* Try:
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':sdk:buildCMakeDebug[arm64-v8a]'.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:40)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.gradle.internal.UncheckedException: com.android.ide.common.process.ProcessException: ninja: Entering directory `/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a'
+[1/2] Building CXX object CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o
+FAILED: CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o 
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:170:12: error: unused parameter 'temperature' [-Werror,-Wunused-parameter]
+  170 |     jfloat temperature,
+      |            ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:171:12: error: unused parameter 'top_p' [-Werror,-Wunused-parameter]
+  171 |     jfloat top_p,
+      |            ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:172:10: error: unused parameter 'top_k' [-Werror,-Wunused-parameter]
+  172 |     jint top_k,
+      |          ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:173:12: error: unused parameter 'repeat_penalty' [-Werror,-Wunused-parameter]
+  173 |     jfloat repeat_penalty,
+      |            ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:247:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+  247 |     jlong seed
+      |           ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:333:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+  333 |     jlong seed,
+      |           ^
+6 errors generated.
+ninja: build stopped: subcommand failed.
+
+C++ build system [build] failed while executing:
+    /Users/a6119501/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+      -C \
+      /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a \
+      edgeveda_jni
+  from /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin
+	at org.gradle.internal.UncheckedException.throwAsUncheckedException(UncheckedException.java:69)
+	at org.gradle.internal.UncheckedException.throwAsUncheckedException(UncheckedException.java:42)
+	at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:128)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.doExecute(StandardTaskAction.java:58)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:51)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:29)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:244)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Right.fold(Either.java:175)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at java.base/java.util.Optional.orElseGet(Unknown Source)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at java.base/java.util.Optional.orElseGet(Unknown Source)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:40)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: com.android.ide.common.process.ProcessException: ninja: Entering directory `/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a'
+[1/2] Building CXX object CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o
+FAILED: CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o 
+/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dedgeveda_jni_EXPORTS -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp -I/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/../../../../core/include -I/Users/a6119501/Library/Android/sdk/ndk/27.0.12077973/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fexceptions -frtti -Wall -Wextra -Werror -fno-limit-debug-info  -O0 -g -DDEBUG -fPIC -std=c++17 -MD -MT CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -MF CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o.d -o CMakeFiles/edgeveda_jni.dir/edge_veda_jni.cpp.o -c /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:170:12: error: unused parameter 'temperature' [-Werror,-Wunused-parameter]
+  170 |     jfloat temperature,
+      |            ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:171:12: error: unused parameter 'top_p' [-Werror,-Wunused-parameter]
+  171 |     jfloat top_p,
+      |            ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:172:10: error: unused parameter 'top_k' [-Werror,-Wunused-parameter]
+  172 |     jint top_k,
+      |          ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:173:12: error: unused parameter 'repeat_penalty' [-Werror,-Wunused-parameter]
+  173 |     jfloat repeat_penalty,
+      |            ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:247:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+  247 |     jlong seed
+      |           ^
+/Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/src/main/cpp/edge_veda_jni.cpp:333:11: error: unused parameter 'seed' [-Werror,-Wunused-parameter]
+  333 |     jlong seed,
+      |           ^
+6 errors generated.
+ninja: build stopped: subcommand failed.
+
+C++ build system [build] failed while executing:
+    /Users/a6119501/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+      -C \
+      /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a \
+      edgeveda_jni
+  from /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin
+	at com.android.build.gradle.internal.cxx.process.ExecuteProcessKt.execute(ExecuteProcess.kt:288)
+	at com.android.build.gradle.internal.cxx.process.ExecuteProcessKt$executeProcess$1.invoke(ExecuteProcess.kt:108)
+	at com.android.build.gradle.internal.cxx.process.ExecuteProcessKt$executeProcess$1.invoke(ExecuteProcess.kt:106)
+	at com.android.build.gradle.internal.cxx.timing.TimingEnvironmentKt.time(TimingEnvironment.kt:32)
+	at com.android.build.gradle.internal.cxx.process.ExecuteProcessKt.executeProcess(ExecuteProcess.kt:106)
+	at com.android.build.gradle.internal.cxx.process.ExecuteProcessKt.executeProcess$default(ExecuteProcess.kt:85)
+	at com.android.build.gradle.internal.cxx.build.CxxRegularBuilder.executeProcessBatch(CxxRegularBuilder.kt:332)
+	at com.android.build.gradle.internal.cxx.build.CxxRegularBuilder.build(CxxRegularBuilder.kt:129)
+	at com.android.build.gradle.tasks.ExternalNativeBuildTask.doTaskAction(ExternalNativeBuildTask.kt:72)
+	at com.android.build.gradle.internal.tasks.UnsafeOutputsTask$taskAction$$inlined$recordTaskAction$1.invoke(BaseTask.kt:78)
+	at com.android.build.gradle.internal.tasks.Blocks.recordSpan(Blocks.java:51)
+	at com.android.build.gradle.internal.tasks.UnsafeOutputsTask.taskAction(UnsafeOutputsTask.kt:81)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source)
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source)
+	at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:125)
+	... 122 more
+Caused by: com.android.ide.common.process.ProcessException: Error while executing process /Users/a6119501/Library/Android/sdk/cmake/3.22.1/bin/ninja with arguments {-C /Users/a6119501/Library/CloudStorage/OneDrive-ThomsonReutersIncorporated/Desktop/Work/Personal/edge/edge-veda/kotlin/.cxx/Debug/6o3350s4/arm64-v8a edgeveda_jni}
+	at com.android.build.gradle.internal.process.GradleProcessResult.buildProcessException(GradleProcessResult.java:73)
+	at com.android.build.gradle.internal.process.GradleProcessResult.assertNormalExitValue(GradleProcessResult.java:48)
+	at com.android.build.gradle.internal.cxx.process.ExecuteProcessKt.execute(ExecuteProcess.kt:277)
+	... 136 more
+Caused by: org.gradle.process.internal.ExecException: Process 'command '/Users/a6119501/Library/Android/sdk/cmake/3.22.1/bin/ninja'' finished with non-zero exit value 1
+	at org.gradle.process.internal.DefaultExecHandle$ExecResultImpl.assertNormalExitValue(DefaultExecHandle.java:442)
+	at com.android.build.gradle.internal.process.GradleProcessResult.assertNormalExitValue(GradleProcessResult.java:46)
+	... 137 more
+Ask Gemini
+
+Error 9
+> Task :app:processDebugResources FAILED
+
+Execution failed for task ':app:processDebugResources'.
+> A failure occurred while executing com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction
+   > Android resource linking failed
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:12: error: resource color/purple_200 (aka com.edgeveda.example:color/purple_200) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:13: error: resource color/purple_700 (aka com.edgeveda.example:color/purple_700) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:14: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:16: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:17: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:18: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:12: error: resource color/purple_200 (aka com.edgeveda.example:color/purple_200) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:13: error: resource color/purple_700 (aka com.edgeveda.example:color/purple_700) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:14: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:16: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:17: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+     com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:18: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+     error: failed linking references.
+
+* Try:
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:processDebugResources'.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:40)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:111)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:46)
+	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:263)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:127)
+	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction
+	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:287)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:130)
+	at org.gradle.internal.Factories$1.create(Factories.java:31)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:335)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:318)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLock(DefaultWorkerLeaseService.java:323)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:126)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:92)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForAll(DefaultAsyncWorkTracker.java:78)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForCompletion(DefaultAsyncWorkTracker.java:66)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:252)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Right.fold(Either.java:175)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at java.base/java.util.Optional.orElseGet(Unknown Source)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at java.base/java.util.Optional.orElseGet(Unknown Source)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:40)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:111)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:46)
+	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:263)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:127)
+	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: com.android.builder.internal.aapt.v2.Aapt2Exception: Android resource linking failed
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:12: error: resource color/purple_200 (aka com.edgeveda.example:color/purple_200) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:13: error: resource color/purple_700 (aka com.edgeveda.example:color/purple_700) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:14: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:16: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:17: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:18: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:12: error: resource color/purple_200 (aka com.edgeveda.example:color/purple_200) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:13: error: resource color/purple_700 (aka com.edgeveda.example:color/purple_700) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:14: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:16: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:17: error: resource color/teal_200 (aka com.edgeveda.example:color/teal_200) not found.
+com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml:18: error: resource color/black (aka com.edgeveda.example:color/black) not found.
+error: failed linking references.
+
+	at com.android.builder.internal.aapt.v2.Aapt2Exception$Companion.create(Aapt2Exception.kt:45)
+	at com.android.builder.internal.aapt.v2.Aapt2Exception$Companion.create$default(Aapt2Exception.kt:31)
+	at com.android.builder.internal.aapt.v2.Aapt2DaemonImpl.doLink(Aapt2DaemonImpl.kt:191)
+	at com.android.builder.internal.aapt.v2.Aapt2Daemon.link(Aapt2Daemon.kt:124)
+	at com.android.builder.internal.aapt.v2.Aapt2DaemonManager$LeasedAaptDaemon.link(Aapt2DaemonManager.kt:176)
+	at com.android.builder.internal.aapt.v2.Aapt2DaemonManager$leasingAapt2Daemon$1.link(Aapt2DaemonManager.kt:199)
+	at com.android.build.gradle.internal.services.PartialInProcessResourceProcessor.link(PartialInProcessResourceProcessor.kt:51)
+	at com.android.build.gradle.internal.res.Aapt2ProcessResourcesRunnableKt.processResources(Aapt2ProcessResourcesRunnable.kt:74)
+	at com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$Companion.invokeAaptForSplit(LinkApplicationAndroidResourcesTask.kt:1060)
+	at com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$Companion.access$invokeAaptForSplit(LinkApplicationAndroidResourcesTask.kt:886)
+	at com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction.run(LinkApplicationAndroidResourcesTask.kt:463)
+	at com.android.build.gradle.internal.profile.ProfileAwareWorkAction.execute(ProfileAwareWorkAction.kt:74)
+	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:63)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:66)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:62)
+	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:100)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:62)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:59)
+	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:174)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:194)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$700(DefaultConditionalExecutionQueue.java:127)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:169)
+	at org.gradle.internal.Factories$1.create(Factories.java:31)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:263)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:127)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:132)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:164)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:133)
+	... 7 more
+	Suppressed: java.util.NoSuchElementException: Unable to get absolute path from com.edgeveda.example.app-mergeDebugResources-64:/values-night-v8/values-night-v8.xml
+                       because com.edgeveda.example.app-mergeDebugResources-64 is not key in sourceSetPathMap.
+		at com.android.ide.common.resources.RelativeResourceUtils$relativeResourcePathToAbsolutePath$1.invoke(RelativeResourceUtils.kt:91)
+		at com.android.ide.common.resources.RelativeResourceUtils$relativeResourcePathToAbsolutePath$1.invoke(RelativeResourceUtils.kt:68)
+		at com.android.ide.common.resources.RelativeResourceUtils.relativeResourcePathToAbsolutePath(RelativeResourceUtils.kt:61)
+		at com.android.ide.common.blame.parser.aapt.Aapt2ErrorParser$MessageParser.parse(Aapt2ErrorParser.kt:124)
+		at com.android.ide.common.blame.parser.aapt.Aapt2ErrorParser.parse(Aapt2ErrorParser.kt:99)
+		at com.android.ide.common.blame.parser.aapt.Aapt2OutputParser.parse(Aapt2OutputParser.java:56)
+		at com.android.ide.common.blame.parser.ToolOutputParser.parseToolOutput(ToolOutputParser.java:84)
+		at com.android.build.gradle.internal.res.Aapt2ErrorUtils.rewriteException(Aapt2ErrorUtils.kt:219)
+		at com.android.build.gradle.internal.res.Aapt2ErrorUtils.rewriteLinkException(Aapt2ErrorUtils.kt:133)
+		at com.android.build.gradle.internal.res.Aapt2ProcessResourcesRunnableKt.processResources(Aapt2ProcessResourcesRunnable.kt:76)
+		... 38 more
+Ask Gemini
+

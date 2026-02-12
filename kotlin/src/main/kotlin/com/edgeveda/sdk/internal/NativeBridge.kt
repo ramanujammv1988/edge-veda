@@ -313,40 +313,6 @@ internal class NativeBridge {
     // Stream Control
     private external fun nativeCancelStream(streamHandle: Long)
 
-    // Vision API
-    private external fun nativeVisionCreate(): Long
-
-    private external fun nativeVisionInit(
-        handle: Long,
-        modelPath: String,
-        mmprojPath: String,
-        numThreads: Int,
-        contextSize: Int,
-        batchSize: Int,
-        memoryLimitBytes: Long,
-        gpuLayers: Int,
-        useMmap: Boolean
-    ): Boolean
-
-    private external fun nativeVisionDescribe(
-        handle: Long,
-        imageBytes: ByteArray,
-        width: Int,
-        height: Int,
-        prompt: String,
-        maxTokens: Int,
-        temperature: Float,
-        topP: Float,
-        topK: Int,
-        repeatPenalty: Float
-    ): String?
-
-    private external fun nativeVisionIsValid(handle: Long): Boolean
-
-    private external fun nativeVisionGetLastTimings(handle: Long): DoubleArray?
-
-    private external fun nativeVisionDispose(handle: Long)
-
     companion object {
         private const val LIBRARY_NAME = "edgeveda_jni"
         private val libraryLoaded = AtomicBoolean(false)
@@ -355,6 +321,46 @@ internal class NativeBridge {
         // Vision context singleton
         private var visionHandle: Long = 0L
         private val visionLock = Any()
+
+        // Vision API JNI declarations (must be in companion object for static access)
+        @JvmStatic
+        private external fun nativeVisionCreate(): Long
+
+        @JvmStatic
+        private external fun nativeVisionInit(
+            handle: Long,
+            modelPath: String,
+            mmprojPath: String,
+            numThreads: Int,
+            contextSize: Int,
+            batchSize: Int,
+            memoryLimitBytes: Long,
+            gpuLayers: Int,
+            useMmap: Boolean
+        ): Boolean
+
+        @JvmStatic
+        private external fun nativeVisionDescribe(
+            handle: Long,
+            imageBytes: ByteArray,
+            width: Int,
+            height: Int,
+            prompt: String,
+            maxTokens: Int,
+            temperature: Float,
+            topP: Float,
+            topK: Int,
+            repeatPenalty: Float
+        ): String?
+
+        @JvmStatic
+        private external fun nativeVisionIsValid(handle: Long): Boolean
+
+        @JvmStatic
+        private external fun nativeVisionGetLastTimings(handle: Long): DoubleArray?
+
+        @JvmStatic
+        private external fun nativeVisionDispose(handle: Long)
 
         /**
          * Load the native library.

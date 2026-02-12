@@ -21,9 +21,10 @@ find_library(android-lib android)
 # Find NDK libraries
 find_library(VULKAN_LIB vulkan)
 
-# JNI source files
+# JNI source files (includes stubs for edge_veda C API since llama.cpp submodule is not initialized)
 set(JNI_SOURCES
     edge_veda_jni.cpp
+    edge_veda_stubs.cpp
 )
 
 # Create shared library
@@ -32,23 +33,14 @@ add_library(edgeveda_jni SHARED ${JNI_SOURCES})
 # Include directories
 target_include_directories(edgeveda_jni PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../core/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../core/include
     ${ANDROID_NDK}/sources/android/native_app_glue
 )
 
-# Add library search path for Edge Veda core
-link_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../core/build
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../core/build/${ANDROID_ABI}
-)
-
-# Link libraries
+# Link libraries (stubs are compiled in; no external edge_veda library needed)
 target_link_libraries(edgeveda_jni
     ${log-lib}
     ${android-lib}
-    ${VULKAN_LIB}
-    edge_veda
-    c++_shared
 )
 
 # Export JNI symbols

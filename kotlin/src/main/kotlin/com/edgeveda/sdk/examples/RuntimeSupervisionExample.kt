@@ -2,7 +2,7 @@ package com.edgeveda.sdk.examples
 
 import com.edgeveda.sdk.*
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import java.util.Date
 import kotlin.random.Random
 
 /**
@@ -34,10 +34,10 @@ object RuntimeSupervisionExample {
 
         // Explicit budget with hard limits
         val explicitBudget = EdgeVedaBudget(
-            p95LatencyMs = 2000.0,
+            p95LatencyMs = 2000,
             batteryDrainPerTenMinutes = 3.0,
             maxThermalLevel = 2,
-            memoryCeilingMb = 1200.0
+            memoryCeilingMb = 1200
         )
         println("Explicit budget:  $explicitBudget")
 
@@ -67,7 +67,7 @@ object RuntimeSupervisionExample {
             currentThermalState = 0,
             currentRssMb = 1800.0,
             sampleCount = 25,
-            measuredAt = System.currentTimeMillis()
+            measuredAt = Date()
         )
         println("Measured baseline:  $baseline")
 
@@ -88,7 +88,7 @@ object RuntimeSupervisionExample {
             currentValue = 2500.0,
             budgetValue = 2000.0,
             mitigation = "Reduced vision FPS 30→15",
-            timestamp = System.currentTimeMillis(),
+            timestamp = Date(),
             mitigated = true
         )
         println("  $violation")
@@ -98,7 +98,7 @@ object RuntimeSupervisionExample {
             currentValue = 2100.0,
             budgetValue = 1200.0,
             mitigation = "Observe-only: QoS cannot reduce model RSS",
-            timestamp = System.currentTimeMillis(),
+            timestamp = Date(),
             mitigated = false,
             observeOnly = true
         )
@@ -117,27 +117,33 @@ object RuntimeSupervisionExample {
             RuntimeCapabilities(
                 hasThermalMonitoring = false,
                 hasBatteryMonitoring = false,
-                hasMemoryPressureNotifications = true
+                hasMemoryMonitoring = true,
+                hasBackgroundTasks = false,
+                platform = "Android",
+                osVersion = "Unknown",
+                deviceModel = "Unknown"
             )
         }
         println("  Capabilities: $capabilities")
 
         val policies = listOf(
-            RuntimePolicy.CONSERVATIVE,
-            RuntimePolicy.BALANCED,
-            RuntimePolicy.PERFORMANCE
+            "CONSERVATIVE" to RuntimePolicy.CONSERVATIVE,
+            "BALANCED" to RuntimePolicy.BALANCED,
+            "PERFORMANCE" to RuntimePolicy.PERFORMANCE
         )
-        for (policy in policies) {
-            println("  ${policy.name}: $policy")
+        for ((label, policy) in policies) {
+            println("  $label: $policy")
         }
 
         // Custom policy
         val customPolicy = RuntimePolicy(
-            name = "background-sync",
+            throttleOnBattery = true,
+            adaptiveMemory = true,
+            thermalAware = true,
+            backgroundOptimization = true,
             options = RuntimePolicyOptions(
-                throttleOnBattery = true,
-                adaptiveMemory = true,
-                backgroundOptimization = true
+                thermalStateMonitoring = true,
+                backgroundTaskSupport = true
             )
         )
         println("  Custom: $customPolicy")
@@ -181,10 +187,10 @@ object RuntimeSupervisionExample {
         val avg = latencyTracker.average()
 
         println("  Samples: $count")
-        println("  p50=${p50?.let { "%.0f".format(it) } ?: "n/a"}ms  " +
-                "p95=${p95?.let { "%.0f".format(it) } ?: "n/a"}ms  " +
-                "p99=${p99?.let { "%.0f".format(it) } ?: "n/a"}ms")
-        println("  average=${avg?.let { "%.0f".format(it) } ?: "n/a"}ms")
+        println("  p50=${"%.0f".format(p50)}ms  " +
+                "p95=${"%.0f".format(p95)}ms  " +
+                "p99=${"%.0f".format(p99)}ms")
+        println("  average=${"%.0f".format(avg)}ms")
         println()
 
         // ─────────────────────────────────────────────────────
@@ -323,14 +329,14 @@ object RuntimeSupervisionExample {
 
         telemetry.logInferenceStart("req-001", "gemma-2b")
         telemetry.logInferenceComplete("req-001", tokensGenerated = 42)
-        telemetry.recordLatency("req-001", p95 ?: 1500.0)
+        telemetry.recordLatency("req-001", p95)
         telemetry.logResourceUsage(
             memoryMb = currentRss,
-            batteryLevel = batteryTracker.currentBatteryLevel(),
+            batteryLevel = batteryTracker.currentBatteryLevel()?.toDouble(),
             thermalLevel = thermalLevel
         )
         telemetry.logBudgetViolation(
-            type = BudgetViolationType.P95_LATENCY,
+            type = BudgetViolationType.LATENCY,
             current = 2500.0,
             limit = 2000.0,
             severity = ViolationSeverity.WARNING
@@ -343,7 +349,7 @@ object RuntimeSupervisionExample {
         if (latencyStats != null) {
             println("  Stats: p50=${"%.0f".format(latencyStats.p50)}ms, " +
                     "p95=${"%.0f".format(latencyStats.p95)}ms, " +
-                    "avg=${"%.0f".format(latencyStats.average)}ms")
+                    "avg=${"%.0f".format(latencyStats.mean)}ms")
         }
 
         val violations = telemetry.getRecentViolations(5)

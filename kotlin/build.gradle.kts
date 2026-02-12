@@ -1,6 +1,6 @@
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android") version "1.9.22"
+    id("org.jetbrains.kotlin.android")
     id("maven-publish")
 }
 
@@ -10,7 +10,6 @@ android {
 
     defaultConfig {
         minSdk = 26
-        targetSdk = 34
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -54,6 +53,14 @@ android {
         }
     }
 
+    testOptions {
+        targetSdk = 34
+    }
+
+    lint {
+        targetSdk = 34
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -87,7 +94,7 @@ android {
 
 dependencies {
     // Kotlin
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+    implementation(kotlin("stdlib"))
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
@@ -96,6 +103,8 @@ dependencies {
     // AndroidX
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.annotation:annotation:1.7.1")
+    implementation("androidx.lifecycle:lifecycle-process:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-common-java8:2.6.2")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -8,7 +8,7 @@
 #include <map>
 
 // Include Edge Veda C API
-#include "../../../../../../core/include/edge_veda.h"
+#include "../../../../core/include/edge_veda.h"
 
 #define LOG_TAG "EdgeVedaJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -205,6 +205,13 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
         config.auto_unload_on_memory_pressure = true;
         config.reserved = nullptr;
 
+        // Suppress unused parameter warnings – these are reserved for future use
+        (void)temperature;
+        (void)top_p;
+        (void)top_k;
+        (void)repeat_penalty;
+        (void)seed;
+
         // Initialize context
         ev_error_t error;
         instance->context = ev_init(&config, &error);
@@ -288,6 +295,9 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerate(
         params.stop_sequences = stop_ptrs.empty() ? nullptr : stop_ptrs.data();
         params.num_stop_sequences = static_cast<int>(stop_ptrs.size());
         params.reserved = nullptr;
+
+        // Suppress unused parameter warning – reserved for future use
+        (void)seed;
 
         // Generate text
         char* output = nullptr;
@@ -389,6 +399,9 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerateStream(
         params.stop_sequences = stop_ptrs.empty() ? nullptr : stop_ptrs.data();
         params.num_stop_sequences = static_cast<int>(stop_ptrs.size());
         params.reserved = nullptr;
+
+        // Suppress unused parameter warning – reserved for future use
+        (void)seed;
 
         // Start streaming generation
         ev_error_t error;

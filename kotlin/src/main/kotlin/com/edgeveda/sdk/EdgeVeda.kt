@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 
 /**
  * Memory pressure handler callback.
