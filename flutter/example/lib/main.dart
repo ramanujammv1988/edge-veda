@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
@@ -132,6 +133,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String? _modelPath;
   String _statusMessage = 'Ready to initialize';
 
+  // RAG document state
+  RagPipeline? _ragPipeline;
+  VectorIndex? _vectorIndex;
+  EdgeVeda? _ragEmbedder; // Separate EdgeVeda for embedding model
+  String? _attachedDocName; // Display name of attached document
+  int _attachedChunkCount = 0;
+  bool _isIndexingDocument = false;
+  int _indexingProgress = 0; // Current chunk being embedded
+  int _indexingTotal = 0; // Total chunks to embed
+  String? _embeddingModelPath; // Cached path to embedding model
+  final List<ChatMessage> _ragMessages = [];
+
   // ChatSession state
   ChatSession? _session;
   SystemPromptPreset _selectedPreset = SystemPromptPreset.assistant;
@@ -244,6 +257,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // CRITICAL: Remove observer FIRST to prevent callbacks after disposal
     WidgetsBinding.instance.removeObserver(this);
     _memorySubscription?.cancel();
+    _ragEmbedder?.dispose();
     _edgeVeda.dispose();
     _modelManager.dispose();
     _promptController.dispose();
@@ -370,6 +384,306 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Split text into chunks for embedding, respecting paragraph boundaries.
+  /// ~500 chars per chunk with 50-char overlap for context continuity.
+  static List<String> _chunkText(String text,
+      {int maxChars = 500, int overlap = 50}) {
+    final chunks = <String>[];
+    // Normalize whitespace
+    text = text.replaceAll('\r\n', '\n').trim();
+    if (text.isEmpty) return chunks;
+
+    int start = 0;
+    while (start < text.length) {
+      int end = start + maxChars;
+      if (end >= text.length) {
+        final chunk = text.substring(start).trim();
+        if (chunk.isNotEmpty) chunks.add(chunk);
+        break;
+      }
+      // Try to break at paragraph boundary
+      int breakPoint = text.lastIndexOf('\n\n', end);
+      if (breakPoint <= start) {
+        // Try sentence boundary
+        breakPoint = text.lastIndexOf('. ', end);
+        if (breakPoint > start) breakPoint += 2; // Include the period and space
+      }
+      if (breakPoint <= start) {
+        breakPoint = end;
+      }
+      final chunk = text.substring(start, breakPoint).trim();
+      if (chunk.isNotEmpty) chunks.add(chunk);
+      start = breakPoint - overlap;
+      if (start < 0) start = 0;
+    }
+    return chunks;
+  }
+
+  /// Pick a text file, chunk it, embed each chunk, build RAG pipeline.
+  Future<void> _pickAndIndexDocument() async {
+    // Step 1: Pick file
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['txt', 'md'],
+    );
+    if (result == null || result.files.single.path == null) return;
+
+    final filePath = result.files.single.path!;
+    final fileName = result.files.single.name;
+
+    setState(() {
+      _isIndexingDocument = true;
+      _indexingProgress = 0;
+      _indexingTotal = 0;
+      _statusMessage = 'Reading document...';
+    });
+
+    try {
+      // Step 2: Read file
+      final text = await File(filePath).readAsString();
+      if (text.trim().isEmpty) {
+        _showError('Document is empty');
+        setState(() => _isIndexingDocument = false);
+        return;
+      }
+
+      // Step 3: Chunk text
+      final chunks = _chunkText(text);
+      if (chunks.isEmpty) {
+        _showError('Could not extract text chunks from document');
+        setState(() => _isIndexingDocument = false);
+        return;
+      }
+
+      setState(() {
+        _indexingTotal = chunks.length;
+        _statusMessage = 'Downloading embedding model...';
+      });
+
+      // Step 4: Ensure embedding model is downloaded
+      if (_embeddingModelPath == null) {
+        final embModel = ModelRegistry.allMiniLmL6V2;
+        final isDownloaded = await _modelManager.isModelDownloaded(embModel.id);
+        if (!isDownloaded) {
+          _embeddingModelPath = await _modelManager.downloadModel(embModel);
+        } else {
+          _embeddingModelPath = await _modelManager.getModelPath(embModel.id);
+        }
+      }
+
+      setState(() {
+        _statusMessage = 'Initializing embedding model...';
+      });
+
+      // Step 5: Create embedder instance
+      _ragEmbedder?.dispose();
+      _ragEmbedder = EdgeVeda();
+      await _ragEmbedder!.init(EdgeVedaConfig(
+        modelPath: _embeddingModelPath!,
+        useGpu: true,
+        numThreads: 4,
+        contextLength: 512, // Embedding models use small context
+        maxMemoryMb: 256,
+        verbose: false,
+      ));
+
+      // Step 6: Create vector index and embed chunks
+      _vectorIndex = VectorIndex(dimensions: 384); // all-MiniLM output dim
+
+      for (int i = 0; i < chunks.length; i++) {
+        setState(() {
+          _indexingProgress = i + 1;
+          _statusMessage = 'Embedding chunk ${i + 1}/${chunks.length}...';
+        });
+
+        final embedding = await _ragEmbedder!.embed(chunks[i]);
+        _vectorIndex!.add(
+          'chunk_$i',
+          embedding.embedding,
+          metadata: {'text': chunks[i]},
+        );
+      }
+
+      // Step 7: Create RAG pipeline with separate embedder and generator.
+      // IMPORTANT: Keep _ragEmbedder alive -- queryStream() calls embed() on
+      // every user query to find relevant chunks. The embedder (all-MiniLM-L6-v2,
+      // 384-dim) MUST match what was used for document indexing. Using the
+      // generative model here would produce wrong-dimension embeddings.
+      _ragPipeline = RagPipeline.withModels(
+        embedder: _ragEmbedder!, // all-MiniLM-L6-v2 for query embedding
+        generator: _edgeVeda, // Llama 3.2 for answer generation
+        index: _vectorIndex!,
+      );
+
+      setState(() {
+        _attachedDocName = fileName;
+        _attachedChunkCount = chunks.length;
+        _isIndexingDocument = false;
+        _statusMessage = 'Document loaded! Ask questions about it.';
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$fileName indexed (${chunks.length} chunks)'),
+            backgroundColor: AppTheme.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _ragEmbedder?.dispose();
+      _ragEmbedder = null;
+      setState(() {
+        _isIndexingDocument = false;
+        _statusMessage = 'Document loading failed';
+      });
+      _showError('Failed to load document: ${e.toString()}');
+      debugPrint('EdgeVeda: Document indexing error: $e');
+    }
+  }
+
+  /// Remove the attached document and return to normal chat mode.
+  void _removeDocument() {
+    _ragEmbedder?.dispose(); // Free embedding model memory
+    _ragEmbedder = null;
+    setState(() {
+      _ragPipeline = null;
+      _vectorIndex = null;
+      _attachedDocName = null;
+      _attachedChunkCount = 0;
+      _statusMessage = 'Ready to chat!';
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Document removed'),
+          backgroundColor: AppTheme.accentDim,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Send a query via RAG pipeline (streaming) using the attached document context.
+  Future<void> _sendWithRag(String prompt) async {
+    setState(() {
+      _isStreaming = true;
+      _isLoading = true;
+      _isGenerating = true;
+      _cancelToken = CancelToken();
+      _streamingTokenCount = 0;
+      _streamingText = '';
+      _timeToFirstTokenMs = null;
+      _tokensPerSecond = null;
+      _statusMessage = 'Searching document...';
+    });
+
+    // Add user message for display
+    _ragMessages.add(ChatMessage(
+      role: ChatRole.user,
+      content: prompt,
+      timestamp: DateTime.now(),
+    ));
+
+    final buffer = StringBuffer();
+    final stopwatch = Stopwatch()..start();
+    bool receivedFirstToken = false;
+
+    try {
+      // Retrieve relevant chunks and stream response
+      setState(() => _statusMessage = 'Retrieving relevant context...');
+
+      final stream = _ragPipeline!.queryStream(
+        prompt,
+        options: const GenerateOptions(
+          maxTokens: 512,
+          temperature: 0.7,
+          topP: 0.9,
+        ),
+        cancelToken: _cancelToken,
+      );
+
+      setState(() => _statusMessage = 'Generating answer from document...');
+
+      await for (final chunk in stream) {
+        if (_cancelToken?.isCancelled == true) {
+          setState(() =>
+              _statusMessage = 'Cancelled ($_streamingTokenCount tokens)');
+          break;
+        }
+
+        if (chunk.isFinal) {
+          stopwatch.stop();
+          _tokensPerSecond = _streamingTokenCount > 0
+              ? _streamingTokenCount / (stopwatch.elapsedMilliseconds / 1000)
+              : 0;
+          setState(() {
+            _statusMessage =
+                'Complete ($_streamingTokenCount tokens, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s)';
+          });
+          break;
+        }
+
+        if (chunk.token.isEmpty) continue;
+
+        if (!receivedFirstToken) {
+          _timeToFirstTokenMs = stopwatch.elapsedMilliseconds;
+          receivedFirstToken = true;
+        }
+
+        buffer.write(chunk.token);
+        _streamingTokenCount++;
+
+        if (_streamingTokenCount == 1 ||
+            _streamingTokenCount % 3 == 0 ||
+            chunk.token.contains('\n')) {
+          setState(() {
+            _statusMessage =
+                'Streaming from document... ($_streamingTokenCount tokens)';
+            _streamingText = buffer.toString();
+          });
+          _scrollToBottom();
+        }
+      }
+
+      // Finalize
+      final responseText = buffer.toString();
+      setState(() => _streamingText = '');
+
+      // Add assistant response to RAG messages
+      if (responseText.isNotEmpty) {
+        _ragMessages.add(ChatMessage(
+          role: ChatRole.assistant,
+          content: responseText,
+          timestamp: DateTime.now(),
+        ));
+      }
+
+      // Get memory stats
+      final memStats = await _edgeVeda.getMemoryStats();
+      _memoryMb = memStats.currentBytes / (1024 * 1024);
+
+      debugPrint(
+          'EdgeVeda: RAG streaming complete - $_streamingTokenCount tokens');
+    } catch (e) {
+      stopwatch.stop();
+      setState(() {
+        _statusMessage = 'RAG query error';
+        _streamingText = '';
+      });
+      _showError('RAG query failed: ${e.toString()}');
+      debugPrint('EdgeVeda: RAG query error: $e');
+    } finally {
+      _isGenerating = false;
+      setState(() {
+        _isStreaming = false;
+        _isLoading = false;
+        _cancelToken = null;
+      });
+    }
+  }
+
   /// Send a message via ChatSession (streaming or tool-calling)
   Future<void> _sendMessage() async {
     if (!_isInitialized || _session == null) {
@@ -386,6 +700,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     _promptController.clear();
+
+    // Route to RAG if document is attached
+    if (_attachedDocName != null && _ragPipeline != null) {
+      await _sendWithRag(prompt);
+      return;
+    }
 
     if (_toolsEnabled) {
       await _sendWithToolCalling(prompt);
@@ -600,6 +920,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _resetChat() {
     if (_session == null) return;
     _session!.reset();
+    // Clear any attached document silently
+    _ragEmbedder?.dispose();
+    _ragEmbedder = null;
+    _ragPipeline = null;
+    _vectorIndex = null;
+    _attachedDocName = null;
+    _attachedChunkCount = 0;
+    _ragMessages.clear();
     setState(() {
       _streamingText = '';
       _timeToFirstTokenMs = null;
@@ -1146,6 +1474,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// Get the combined list of messages for display:
   /// session messages + streaming text (if currently streaming)
   List<ChatMessage> get _displayMessages {
+    // RAG mode: use _ragMessages
+    if (_attachedDocName != null) {
+      if (_isStreaming && _streamingText.isNotEmpty) {
+        return [
+          ..._ragMessages,
+          ChatMessage(
+            role: ChatRole.assistant,
+            content: _streamingText,
+            timestamp: DateTime.now(),
+          ),
+        ];
+      }
+      return _ragMessages;
+    }
+    // Normal mode: use session messages
     final sessionMessages = _session?.messages ?? [];
     if (_isStreaming && _streamingText.isNotEmpty) {
       return [
@@ -1162,6 +1505,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Whether the session has any messages (for showing persona picker vs context indicator)
   bool get _hasMessages {
+    if (_attachedDocName != null) {
+      return _ragMessages.isNotEmpty || _isStreaming;
+    }
     final msgs = _session?.messages ?? [];
     return msgs.isNotEmpty || _isStreaming;
   }
