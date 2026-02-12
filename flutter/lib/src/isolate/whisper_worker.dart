@@ -357,7 +357,6 @@ void _handleTranscribeChunk(
   final resultPtr = calloc<EvWhisperResult>();
 
   try {
-    print('[WhisperWorker] Calling ev_whisper_transcribe with $nSamples samples');
     final result = bindings.evWhisperTranscribe(
       ctx,
       nativeSamples,
@@ -365,10 +364,8 @@ void _handleTranscribeChunk(
       paramsPtr,
       resultPtr,
     );
-    print('[WhisperWorker] ev_whisper_transcribe returned: $result');
 
     if (result != 0) {
-      print('[WhisperWorker] Transcription error code: $result');
       responseSendPort.send(WhisperErrorResponse(
         message: 'Whisper transcription failed: error code $result',
         errorCode: result,
@@ -381,19 +378,13 @@ void _handleTranscribeChunk(
     final nSegments = resultPtr.ref.nSegments;
     final segmentsPtr = resultPtr.ref.segments;
 
-    print('[WhisperWorker] Got $nSegments segments, '
-        'processTime=${resultPtr.ref.processTimeMs.toStringAsFixed(1)}ms');
-
     for (int i = 0; i < nSegments; i++) {
       final seg = segmentsPtr[i];
-      final text = seg.text.toDartString();
       segments.add(WhisperSegment(
-        text: text,
+        text: seg.text.toDartString(),
         startMs: seg.startMs,
         endMs: seg.endMs,
       ));
-      print('[WhisperWorker] Segment $i: "$text" '
-          '(${seg.startMs}ms-${seg.endMs}ms)');
     }
 
     final processTimeMs = resultPtr.ref.processTimeMs;

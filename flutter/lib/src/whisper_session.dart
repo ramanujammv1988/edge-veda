@@ -24,8 +24,8 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'budget.dart';
@@ -166,9 +166,6 @@ class WhisperSession {
     _isActive = true;
   }
 
-  // Counter for periodic feed logging
-  int _feedCount = 0;
-
   /// Feed raw PCM audio samples for transcription.
   ///
   /// Samples must be 16kHz mono float32 (values between -1.0 and 1.0).
@@ -180,15 +177,6 @@ class WhisperSession {
 
     // Accumulate samples
     _audioBuffer.addAll(samples);
-    _feedCount++;
-
-    // Log every ~1 second (every 3rd callback at ~300ms intervals)
-    if (_feedCount % 3 == 0) {
-      debugPrint('[WhisperSession] feedAudio #$_feedCount: '
-          '+${samples.length} samples, '
-          'buffer=${_audioBuffer.length}/$_chunkSizeSamples'
-          '${_isProcessing ? " (processing)" : ""}');
-    }
 
     // Process when we have enough for a chunk.
     // Skip if another _processChunk is already in-flight to avoid
@@ -223,9 +211,7 @@ class WhisperSession {
     if (scheduler != null) {
       final knobs = scheduler!.getKnobsForWorkload(WorkloadId.stt);
       if (knobs.maxFps == 0) {
-        // QoS paused -- buffer audio but don't transcribe
-        debugPrint('[WhisperSession] STT paused by Scheduler, buffering audio');
-        return;
+        return; // QoS paused -- buffer audio but don't transcribe
       }
     }
 
@@ -240,10 +226,6 @@ class WhisperSession {
     // Remove processed samples from buffer
     _audioBuffer.removeRange(0, chunkLen);
 
-    debugPrint('[WhisperSession] Transcribing chunk: $chunkLen samples, '
-        '${(chunkLen / _sampleRate * 1000).round()}ms of audio, '
-        'buffer remaining: ${_audioBuffer.length}');
-
     try {
       final stopwatch = Stopwatch()..start();
       final response = await _worker!.transcribeChunk(
@@ -251,10 +233,6 @@ class WhisperSession {
         language: language,
       );
       stopwatch.stop();
-
-      debugPrint('[WhisperSession] Transcription complete: '
-          '${response.segments.length} segments in '
-          '${stopwatch.elapsedMilliseconds}ms');
 
       // Report latency to Scheduler for p95 tracking
       scheduler?.reportLatency(
@@ -264,9 +242,8 @@ class WhisperSession {
         _segments.add(segment);
         _segmentController.add(segment);
       }
-    } catch (e) {
-      // Log but don't crash -- audio capture should continue
-      debugPrint('[WhisperSession] Transcription error: $e');
+    } catch (_) {
+      // Swallow -- audio capture should continue even if one chunk fails
     } finally {
       _isProcessing = false;
 
