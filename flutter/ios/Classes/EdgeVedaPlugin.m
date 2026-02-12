@@ -1,5 +1,6 @@
 #import "EdgeVedaPlugin.h"
 #import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
 #import <mach/mach.h>
 #import <os/proc.h>
 
@@ -59,6 +60,72 @@
 
 @end
 
+#pragma mark - AudioCaptureStreamHandler
+
+/// Stream handler for microphone audio capture via AVAudioEngine.
+/// Delivers 16kHz mono float32 PCM samples via EventChannel.
+@interface EVAudioCaptureHandler : NSObject<FlutterStreamHandler>
+@property (nonatomic, strong) AVAudioEngine *audioEngine;
+@end
+
+@implementation EVAudioCaptureHandler {
+    FlutterEventSink _eventSink;
+}
+
+- (FlutterError *)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)events {
+    _eventSink = events;
+
+    self.audioEngine = [[AVAudioEngine alloc] init];
+    AVAudioInputNode *inputNode = [self.audioEngine inputNode];
+
+    // Request 16kHz mono float32 -- whisper.cpp expects exactly this format
+    AVAudioFormat *desiredFormat = [[AVAudioFormat alloc]
+        initWithCommonFormat:AVAudioPCMFormatFloat32
+                  sampleRate:16000.0
+                    channels:1
+                 interleaved:NO];
+
+    // 4800 samples = 300ms at 16kHz (small buffers to avoid UI jank)
+    [inputNode installTapOnBus:0
+                    bufferSize:4800
+                        format:desiredFormat
+                         block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
+        const float *channelData = buffer.floatChannelData[0];
+        NSUInteger frameLength = buffer.frameLength;
+
+        // Copy to FlutterStandardTypedData (Float32)
+        NSData *pcmData = [NSData dataWithBytes:channelData
+                                         length:frameLength * sizeof(float)];
+        FlutterStandardTypedData *typedData =
+            [FlutterStandardTypedData typedDataWithFloat32:pcmData];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (self->_eventSink) {
+                self->_eventSink(typedData);
+            }
+        });
+    }];
+
+    NSError *error;
+    [self.audioEngine startAndReturnError:&error];
+    if (error) {
+        return [FlutterError errorWithCode:@"AUDIO_ERROR"
+                                   message:error.localizedDescription
+                                   details:nil];
+    }
+    return nil;
+}
+
+- (FlutterError *)onCancelWithArguments:(id)arguments {
+    [self.audioEngine.inputNode removeTapOnBus:0];
+    [self.audioEngine stop];
+    self.audioEngine = nil;
+    _eventSink = nil;
+    return nil;
+}
+
+@end
+
 #pragma mark - EdgeVedaPlugin
 
 @implementation EdgeVedaPlugin
@@ -77,6 +144,12 @@
         eventChannelWithName:@"com.edgeveda.edge_veda/thermal"
              binaryMessenger:[registrar messenger]];
     [thermalChannel setStreamHandler:[[EVThermalStreamHandler alloc] init]];
+
+    // EventChannel for microphone audio capture (16kHz mono float32 PCM)
+    FlutterEventChannel *audioChannel = [FlutterEventChannel
+        eventChannelWithName:@"com.edgeveda.edge_veda/audio_capture"
+             binaryMessenger:[registrar messenger]];
+    [audioChannel setStreamHandler:[[EVAudioCaptureHandler alloc] init]];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
@@ -92,6 +165,8 @@
         [self handleGetAvailableMemory:result];
     } else if ([@"isLowPowerMode" isEqualToString:call.method]) {
         [self handleIsLowPowerMode:result];
+    } else if ([@"requestMicrophonePermission" isEqualToString:call.method]) {
+        [self handleRequestMicrophonePermission:result];
     } else if ([@"shareFile" isEqualToString:call.method]) {
         [self handleShareFile:call result:result];
     } else {
@@ -153,6 +228,19 @@
 - (void)handleIsLowPowerMode:(FlutterResult)result {
     BOOL lowPower = [[NSProcessInfo processInfo] isLowPowerModeEnabled];
     result(@(lowPower));
+}
+
+#pragma mark - Microphone Permission
+
+/// Request microphone recording permission from the user.
+/// Returns YES if granted, NO if denied.
+- (void)handleRequestMicrophonePermission:(FlutterResult)result {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    [session requestRecordPermission:^(BOOL granted) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            result(@(granted));
+        });
+    }];
 }
 
 #pragma mark - Share

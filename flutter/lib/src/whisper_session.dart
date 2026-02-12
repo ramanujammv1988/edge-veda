@@ -26,6 +26,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'budget.dart';
 import 'isolate/whisper_worker.dart';
@@ -85,6 +86,40 @@ class WhisperSession {
 
   /// All segments produced so far.
   List<WhisperSegment> get segments => List.unmodifiable(_segments);
+
+  // =========================================================================
+  // Static helpers for microphone audio capture
+  // =========================================================================
+
+  /// Create a stream of PCM audio from the device microphone.
+  ///
+  /// Returns [Float32List] chunks of 16kHz mono audio captured via
+  /// AVAudioEngine on iOS. The EventChannel is managed by
+  /// [EVAudioCaptureHandler] in EdgeVedaPlugin.m.
+  ///
+  /// Call [Stream.listen] to start capture, cancel the subscription to stop.
+  static Stream<Float32List> microphone() {
+    const channel = EventChannel('com.edgeveda.edge_veda/audio_capture');
+    return channel.receiveBroadcastStream().map((data) {
+      if (data is Float32List) return data;
+      // FlutterStandardTypedData comes as Float64List on some platforms
+      if (data is List<double>) return Float32List.fromList(data);
+      return Float32List(0);
+    });
+  }
+
+  /// Request microphone recording permission.
+  ///
+  /// Returns true if permission was granted, false otherwise.
+  /// On iOS this triggers the system permission dialog on first call.
+  static Future<bool> requestMicrophonePermission() async {
+    const channel = MethodChannel('com.edgeveda.edge_veda/telemetry');
+    final result =
+        await channel.invokeMethod<bool>('requestMicrophonePermission');
+    return result ?? false;
+  }
+
+  // =========================================================================
 
   /// Creates a new [WhisperSession].
   ///
