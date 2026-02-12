@@ -35,14 +35,22 @@
 /// ```
 library;
 
+import 'dart:convert';
+
 import 'chat_template.dart';
 import 'chat_types.dart';
 import 'edge_veda_impl.dart';
+import 'gbnf_builder.dart';
+import 'schema_validator.dart';
+import 'tool_registry.dart';
+import 'tool_template.dart';
+import 'tool_types.dart';
 import 'types.dart'
     show
         CancelToken,
         ConfigurationException,
         GenerateOptions,
+        GenerationException,
         TokenChunk;
 
 /// Manages multi-turn conversation state on top of [EdgeVeda]
@@ -68,6 +76,9 @@ class ChatSession {
   final List<ChatMessage> _messages = [];
   bool _isSummarizing = false;
 
+  /// Optional tool registry for function calling support.
+  final ToolRegistry? _tools;
+
   /// Create a new chat session
   ///
   /// Requires an initialized [EdgeVeda] instance. Throws
@@ -81,16 +92,21 @@ class ChatSession {
   ///
   /// [maxResponseTokens] reserves space in the context window for the
   /// model's response (defaults to 512 tokens).
+  ///
+  /// [tools] is an optional [ToolRegistry] for function calling. When
+  /// provided, [sendWithTools] can invoke tools based on model output.
   ChatSession({
     required EdgeVeda edgeVeda,
     String? systemPrompt,
     SystemPromptPreset? preset,
     this.templateFormat = ChatTemplateFormat.llama3Instruct,
     int maxResponseTokens = 512,
+    ToolRegistry? tools,
   })  : _edgeVeda = edgeVeda,
         systemPrompt = systemPrompt ?? preset?.prompt,
         _contextLength = edgeVeda.config?.contextLength ?? 2048,
-        _maxResponseTokens = maxResponseTokens {
+        _maxResponseTokens = maxResponseTokens,
+        _tools = tools {
     if (!edgeVeda.isInitialized) {
       throw const ConfigurationException(
         'EdgeVeda must be initialized before creating a ChatSession. Call init() first.',
@@ -125,6 +141,9 @@ class ChatSession {
 
   /// Whether a summarization is currently in progress
   bool get isSummarizing => _isSummarizing;
+
+  /// The tool registry for this session, or null if no tools registered.
+  ToolRegistry? get toolRegistry => _tools;
 
   /// Send a message and get the complete response
   ///
@@ -252,6 +271,198 @@ class ChatSession {
     }
   }
 
+  /// Send a message with tool calling support.
+  ///
+  /// If the model responds with a tool call, [onToolCall] is invoked.
+  /// The developer executes the tool and returns a [ToolResult]. The
+  /// result is added to the conversation and sent back to the model
+  /// for a final natural language response.
+  ///
+  /// If the model responds with plain text (no tool call detected),
+  /// it is returned as a normal assistant message.
+  ///
+  /// Tool call and result messages are added to [messages] for
+  /// inspection/debugging.
+  ///
+  /// [maxToolRounds] limits tool call loops (default 3) to prevent
+  /// infinite chains.
+  ///
+  /// Example:
+  /// ```dart
+  /// final reply = await session.sendWithTools(
+  ///   'What is the weather in Tokyo?',
+  ///   onToolCall: (toolCall) async {
+  ///     final weather = await fetchWeather(toolCall.arguments['location']);
+  ///     return ToolResult.success(
+  ///       toolCallId: toolCall.id,
+  ///       data: {'temperature': weather.temp, 'condition': weather.condition},
+  ///     );
+  ///   },
+  /// );
+  /// ```
+  Future<ChatMessage> sendWithTools(
+    String prompt, {
+    required Future<ToolResult> Function(ToolCall toolCall) onToolCall,
+    GenerateOptions? options,
+    CancelToken? cancelToken,
+    int maxToolRounds = 3,
+  }) async {
+    // Add user message
+    _messages.add(ChatMessage(
+      role: ChatRole.user,
+      content: prompt,
+      timestamp: DateTime.now(),
+    ));
+
+    try {
+      // Check and summarize if needed
+      await _summarizeIfNeeded(cancelToken: cancelToken);
+
+      for (int round = 0; round < maxToolRounds; round++) {
+        // Format conversation with tool definitions injected
+        final formatted = _formatConversationWithTools();
+
+        // Generate response
+        final response = await _edgeVeda.generate(formatted, options: options);
+
+        // Check if the response contains a tool call
+        final toolCalls = ToolTemplate.parseToolCalls(
+          format: templateFormat,
+          output: response.text,
+        );
+
+        if (toolCalls == null || toolCalls.isEmpty) {
+          // No tool call -- return as normal assistant message
+          final assistantMsg = ChatMessage(
+            role: ChatRole.assistant,
+            content: response.text,
+            timestamp: DateTime.now(),
+          );
+          _messages.add(assistantMsg);
+          return assistantMsg;
+        }
+
+        // Process the first tool call (single-call per round)
+        final toolCall = toolCalls.first;
+
+        // Add tool call message to history
+        _messages.add(ChatMessage(
+          role: ChatRole.toolCall,
+          content: jsonEncode({
+            'name': toolCall.name,
+            'arguments': toolCall.arguments,
+          }),
+          timestamp: DateTime.now(),
+        ));
+
+        // Invoke the developer's tool handler
+        final toolResult = await onToolCall(toolCall);
+
+        // Add tool result message to history
+        _messages.add(ChatMessage(
+          role: ChatRole.toolResult,
+          content: toolResult.isError
+              ? jsonEncode({'error': toolResult.error})
+              : jsonEncode(toolResult.data),
+          timestamp: DateTime.now(),
+        ));
+
+        // Loop continues -- model will see the tool result and may call
+        // another tool or produce a final response.
+      }
+
+      // Max rounds exhausted -- do one final generation without tool parsing
+      final formatted = _formatConversationWithTools();
+      final finalResponse =
+          await _edgeVeda.generate(formatted, options: options);
+      final assistantMsg = ChatMessage(
+        role: ChatRole.assistant,
+        content: finalResponse.text,
+        timestamp: DateTime.now(),
+      );
+      _messages.add(assistantMsg);
+      return assistantMsg;
+    } catch (e) {
+      // Rollback user message on error (only if last user message is ours)
+      if (_messages.isNotEmpty && _messages.last.role == ChatRole.user) {
+        _messages.removeLast();
+      }
+      rethrow;
+    }
+  }
+
+  /// Send a message and get a structured JSON response validated
+  /// against the provided schema.
+  ///
+  /// Uses GBNF grammar-constrained decoding to guarantee the output
+  /// is valid JSON conforming to [schema]. The response is validated
+  /// before delivery.
+  ///
+  /// Returns the validated JSON as a Map.
+  ///
+  /// Throws [GenerationException] if the model output fails schema
+  /// validation even with grammar constraints (should be rare).
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = await session.sendStructured(
+  ///   'Extract the name and age from: John is 30 years old.',
+  ///   schema: {
+  ///     'type': 'object',
+  ///     'properties': {
+  ///       'name': {'type': 'string'},
+  ///       'age': {'type': 'integer'},
+  ///     },
+  ///     'required': ['name', 'age'],
+  ///   },
+  /// );
+  /// print(result); // {name: John, age: 30}
+  /// ```
+  Future<Map<String, dynamic>> sendStructured(
+    String prompt, {
+    required Map<String, dynamic> schema,
+    GenerateOptions? options,
+    CancelToken? cancelToken,
+  }) async {
+    // Generate GBNF grammar from schema
+    final grammar = GbnfBuilder.fromJsonSchema(schema);
+
+    // Merge grammar into options
+    final grammarOptions = (options ?? const GenerateOptions()).copyWith(
+      grammarStr: grammar,
+      grammarRoot: 'root',
+    );
+
+    // Use the existing send() method with grammar-constrained options
+    final reply = await send(
+      prompt,
+      options: grammarOptions,
+      cancelToken: cancelToken,
+    );
+
+    // Parse the response as JSON
+    final Map<String, dynamic> parsed;
+    try {
+      parsed = jsonDecode(reply.content) as Map<String, dynamic>;
+    } catch (e) {
+      throw GenerationException(
+        'Model output is not valid JSON',
+        details: 'Output: "${reply.content.length > 200 ? '${reply.content.substring(0, 200)}...' : reply.content}"',
+      );
+    }
+
+    // Validate against schema
+    final validation = SchemaValidator.validate(parsed, schema);
+    if (!validation.isValid) {
+      throw GenerationException(
+        'Model output failed schema validation',
+        details: 'Errors: ${validation.errors.join(', ')}',
+      );
+    }
+
+    return parsed;
+  }
+
   /// Reset conversation history (keep model loaded)
   ///
   /// Clears all messages but preserves the system prompt and model state.
@@ -266,6 +477,30 @@ class ChatSession {
     return ChatTemplate.format(
       template: templateFormat,
       systemPrompt: systemPrompt,
+      messages: _messages,
+    );
+  }
+
+  /// Format conversation with tool definitions injected into the system prompt.
+  ///
+  /// If tools are registered, combines the system prompt with tool definitions
+  /// via [ToolTemplate.formatToolSystemPrompt]. Falls back to normal formatting
+  /// if no tools are registered.
+  String _formatConversationWithTools() {
+    final tools = _tools;
+    if (tools == null || tools.tools.isEmpty) {
+      return _formatConversation();
+    }
+
+    final toolSystemPrompt = ToolTemplate.formatToolSystemPrompt(
+      format: templateFormat,
+      tools: tools.tools,
+      systemPrompt: systemPrompt,
+    );
+
+    return ChatTemplate.format(
+      template: templateFormat,
+      systemPrompt: toolSystemPrompt,
       messages: _messages,
     );
   }
