@@ -199,6 +199,10 @@ final class EvGenerationParams extends Struct {
   /// Grammar root rule name (nullptr = "root")
   external Pointer<Utf8> grammarRoot;
 
+  /// Confidence threshold for cloud handoff (0.0 = disabled)
+  @Float()
+  external double confidenceThreshold;
+
   /// Reserved for future use - must be NULL
   external Pointer<Void> reserved;
 }
@@ -310,6 +314,49 @@ final class EvTimingsData extends Struct {
   /// Number of tokens generated
   @Int32()
   external int generatedTokens;
+}
+
+// =============================================================================
+// Embeddings Types (matching edge_veda.h Embeddings API)
+// =============================================================================
+
+/// Result of text embedding operation
+/// Corresponds to: ev_embed_result in edge_veda.h
+final class EvEmbedResult extends Struct {
+  /// Embedding vector pointer
+  external Pointer<Float> embeddings;
+
+  /// Number of dimensions
+  @Int32()
+  external int dimensions;
+
+  /// Number of tokens in input
+  @Int32()
+  external int tokenCount;
+}
+
+// =============================================================================
+// Streaming Token Info Types (matching edge_veda.h confidence scoring)
+// =============================================================================
+
+/// Extended token information from streaming
+/// Corresponds to: ev_stream_token_info in edge_veda.h
+final class EvStreamTokenInfo extends Struct {
+  /// Token confidence score (0.0-1.0), -1.0 if not computed
+  @Float()
+  external double confidence;
+
+  /// Running average confidence
+  @Float()
+  external double avgConfidence;
+
+  /// True when avg confidence drops below threshold
+  @Bool()
+  external bool needsCloudHandoff;
+
+  /// Token position in generated sequence
+  @Int32()
+  external int tokenIndex;
 }
 
 // =============================================================================
@@ -658,6 +705,44 @@ typedef EvWhisperIsValidNative = Bool Function(Pointer<EvWhisperContextImpl> ctx
 typedef EvWhisperIsValidDart = bool Function(Pointer<EvWhisperContextImpl> ctx);
 
 // =============================================================================
+// Embeddings Function Types (matching edge_veda.h Embeddings API)
+// =============================================================================
+
+/// ev_error_t ev_embed(ev_context ctx, const char* text, ev_embed_result* result)
+typedef EvEmbedNative = Int32 Function(
+  Pointer<EvContextImpl> ctx,
+  Pointer<Utf8> text,
+  Pointer<EvEmbedResult> result,
+);
+typedef EvEmbedDart = int Function(
+  Pointer<EvContextImpl> ctx,
+  Pointer<Utf8> text,
+  Pointer<EvEmbedResult> result,
+);
+
+/// void ev_free_embeddings(ev_embed_result* result)
+typedef EvFreeEmbeddingsNative = Void Function(
+  Pointer<EvEmbedResult> result,
+);
+typedef EvFreeEmbeddingsDart = void Function(
+  Pointer<EvEmbedResult> result,
+);
+
+// =============================================================================
+// Streaming Token Info Function Types (matching edge_veda.h confidence scoring)
+// =============================================================================
+
+/// ev_error_t ev_stream_get_token_info(ev_stream stream, ev_stream_token_info* info)
+typedef EvStreamGetTokenInfoNative = Int32 Function(
+  Pointer<EvStreamImpl> stream,
+  Pointer<EvStreamTokenInfo> info,
+);
+typedef EvStreamGetTokenInfoDart = int Function(
+  Pointer<EvStreamImpl> stream,
+  Pointer<EvStreamTokenInfo> info,
+);
+
+// =============================================================================
 // Native Library Bindings
 // =============================================================================
 
@@ -851,6 +936,53 @@ class EdgeVedaNativeBindings {
 
   /// Check if whisper context is valid and ready for transcription
   late final EvWhisperIsValidDart evWhisperIsValid;
+
+  // ---------------------------------------------------------------------------
+  // Embeddings Functions (lazy - XCFramework not rebuilt yet)
+  // ---------------------------------------------------------------------------
+
+  /// Compute text embeddings (lazy binding - symbol may not exist yet)
+  EvEmbedDart? _evEmbed;
+  EvEmbedDart? get evEmbed {
+    if (_evEmbed == null) {
+      try {
+        _evEmbed = _dylib.lookupFunction<EvEmbedNative, EvEmbedDart>('ev_embed');
+      } catch (_) {
+        return null;
+      }
+    }
+    return _evEmbed;
+  }
+
+  /// Free embedding result (lazy binding - symbol may not exist yet)
+  EvFreeEmbeddingsDart? _evFreeEmbeddings;
+  EvFreeEmbeddingsDart? get evFreeEmbeddings {
+    if (_evFreeEmbeddings == null) {
+      try {
+        _evFreeEmbeddings = _dylib.lookupFunction<EvFreeEmbeddingsNative, EvFreeEmbeddingsDart>('ev_free_embeddings');
+      } catch (_) {
+        return null;
+      }
+    }
+    return _evFreeEmbeddings;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Streaming Token Info Functions (lazy - XCFramework not rebuilt yet)
+  // ---------------------------------------------------------------------------
+
+  /// Get extended token information (lazy binding - symbol may not exist yet)
+  EvStreamGetTokenInfoDart? _evStreamGetTokenInfo;
+  EvStreamGetTokenInfoDart? get evStreamGetTokenInfo {
+    if (_evStreamGetTokenInfo == null) {
+      try {
+        _evStreamGetTokenInfo = _dylib.lookupFunction<EvStreamGetTokenInfoNative, EvStreamGetTokenInfoDart>('ev_stream_get_token_info');
+      } catch (_) {
+        return null;
+      }
+    }
+    return _evStreamGetTokenInfo;
+  }
 
   // ---------------------------------------------------------------------------
   // Binding Initialization
