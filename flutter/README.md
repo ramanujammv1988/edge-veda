@@ -1,8 +1,8 @@
 # Edge-Veda
 
-**A managed on-device AI runtime for Flutter that keeps text and vision models running sustainably on real phones under real constraints — private by default.**
+**A managed on-device AI runtime for Flutter — text generation, vision, speech-to-text, embeddings, RAG, and function calling, all running locally with zero cloud dependencies.**
 
-`~15,900 LOC | 31 C API functions | 21 Dart SDK files | 0 cloud dependencies`
+`~14,000 LOC | 43 C API functions | 31 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
@@ -26,13 +26,13 @@ Edge-Veda exists to make on-device AI **predictable, observable, and sustainable
 
 A **supervised on-device AI runtime** that:
 
-- Runs **text and vision models fully on device**
-- Keeps models **alive across long sessions**
+- Runs **text, vision, speech, and embedding models fully on device**
+- Keeps models **alive across long sessions** via persistent worker isolates
 - Enforces **compute budget contracts** (p95 latency, battery, thermal, memory)
 - **Auto-calibrates** to each device's actual performance via adaptive profiles
-- Adapts automatically to **thermal, memory, and battery pressure**
-- Applies **runtime policies** instead of crashing
-- Provides **structured observability** for debugging and analysis
+- Provides **structured output and function calling** for agent-style apps
+- Enables **on-device RAG** with embeddings, vector search, and retrieval-augmented generation
+- Detects **model uncertainty** via confidence scoring and signals cloud handoff
 - Is **private by default** (no network calls during inference)
 
 ---
@@ -41,7 +41,7 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^1.2.0
+  edge_veda: ^1.3.0
 ```
 
 ---
@@ -91,6 +91,76 @@ print('Context: ${(session.contextUsage * 100).toInt()}%');
 session.reset();
 ```
 
+## Function Calling
+
+```dart
+final tools = [
+  ToolDefinition(
+    name: 'get_weather',
+    description: 'Get current weather for a city',
+    parameters: {
+      'type': 'object',
+      'properties': {
+        'city': {'type': 'string', 'description': 'City name'},
+      },
+      'required': ['city'],
+    },
+  ),
+];
+
+// Model selects and invokes tools, multi-round chains
+final response = await session.sendWithTools(
+  'What\'s the weather in Tokyo?',
+  tools: tools,
+  toolHandler: (call) async {
+    // Execute the tool and return result
+    return ToolResult.success(call.id, {'temp': '22°C', 'condition': 'Sunny'});
+  },
+);
+```
+
+## Structured JSON Output
+
+```dart
+// Grammar-constrained generation ensures valid JSON
+final result = await session.sendStructured(
+  'Extract the person\'s name and age from: "John is 30 years old"',
+  schema: {
+    'type': 'object',
+    'properties': {
+      'name': {'type': 'string'},
+      'age': {'type': 'integer'},
+    },
+    'required': ['name', 'age'],
+  },
+);
+// result is guaranteed-valid JSON matching the schema
+```
+
+## Speech-to-Text (Whisper)
+
+```dart
+final whisperWorker = WhisperWorker();
+await whisperWorker.spawn();
+await whisperWorker.initWhisper(
+  modelPath: whisperModelPath,
+  numThreads: 4,
+);
+
+// Streaming transcription from microphone
+final whisperSession = WhisperSession(worker: whisperWorker);
+whisperSession.transcriptionStream.listen((segments) {
+  for (final segment in segments) {
+    print(segment.text);
+  }
+});
+
+// Feed audio chunks (16kHz mono Float32)
+whisperSession.addAudioChunk(audioData);
+
+await whisperWorker.dispose();
+```
+
 ## Continuous Vision Inference
 
 ```dart
@@ -112,8 +182,59 @@ final result = await visionWorker.describeFrame(
 );
 print(result.description);
 
-// Clean up when done
 await visionWorker.dispose();
+```
+
+## Text Embeddings
+
+```dart
+// Generate embeddings with any GGUF embedding model
+final result = await edgeVeda.embed('The quick brown fox');
+print('Dimensions: ${result.dimensions}');
+print('Vector: ${result.embedding.take(5)}...');
+```
+
+## Confidence Scoring & Cloud Handoff
+
+```dart
+// Enable confidence tracking — zero overhead when disabled
+final response = await edgeVeda.generate(
+  'Explain quantum computing',
+  options: GenerateOptions(confidenceThreshold: 0.3),
+);
+
+print('Confidence: ${response.avgConfidence}');
+
+if (response.needsCloudHandoff) {
+  // Model is uncertain — route to cloud API
+  print('Low confidence, falling back to cloud');
+}
+```
+
+## On-Device RAG
+
+```dart
+// 1. Build a knowledge base
+final index = VectorIndex(dimensions: 768);
+final docs = ['Flutter is a UI framework', 'Dart is a language', ...];
+
+for (final doc in docs) {
+  final emb = await edgeVeda.embed(doc);
+  index.add(doc, emb.embedding, metadata: {'source': 'docs'});
+}
+
+// Save index to disk
+await index.save(indexPath);
+
+// 2. Query with RAG pipeline
+final rag = RagPipeline(
+  edgeVeda: edgeVeda,
+  index: index,
+  config: RagConfig(topK: 3, minScore: 0.5),
+);
+
+final answer = await rag.query('What is Flutter?');
+print(answer.text);  // Answer grounded in your documents
 ```
 
 ## Compute Budget Contracts
@@ -151,12 +272,16 @@ final resolved = scheduler.resolvedBudget;
 ```
 Flutter App (Dart)
     |
-    +-- ChatSession ---------- Chat templates, context summarization, system presets
+    +-- ChatSession ---------- Chat templates, context summarization, tool calling
     |
-    +-- EdgeVeda ------------- generate(), generateStream(), describeImage()
+    +-- EdgeVeda ------------- generate(), generateStream(), embed()
     |
     +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
     +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
+    +-- WhisperWorker -------- Persistent isolate, keeps Whisper model loaded
+    |
+    +-- RagPipeline ---------- embed → search → inject context → generate
+    +-- VectorIndex ---------- Pure Dart HNSW vector search (local_hnsw)
     |
     +-- Scheduler ------------ Central budget enforcer, priority-based degradation
     +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
@@ -165,16 +290,18 @@ Flutter App (Dart)
     +-- FrameQueue ----------- Drop-newest backpressure for camera frames
     +-- PerfTrace ------------ JSONL flight recorder for offline analysis
     |
-    +-- FFI Bindings --------- 31 C functions via DynamicLibrary.process()
+    +-- FFI Bindings --------- 43 C functions via DynamicLibrary.process()
          |
-    XCFramework (libedge_veda_full.a, ~15MB)
-    +-- engine.cpp ----------- Text inference (wraps llama.cpp)
+    XCFramework (libedge_veda_full.a, ~8MB)
+    +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
     +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
+    +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)
     +-- memory_guard.cpp ----- Cross-platform RSS monitoring, pressure callbacks
     +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
+    +-- whisper.cpp v1.8.3 --- Shared ggml with llama.cpp (unmodified)
 ```
 
-**Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. The `StreamingWorker` and `VisionWorker` maintain persistent contexts so models load once and stay in memory across the entire session.
+**Key design constraint:** Dart FFI is synchronous — calling native code directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. The `StreamingWorker`, `VisionWorker`, and `WhisperWorker` maintain persistent contexts so models load once and stay in memory across the entire session.
 
 ---
 
@@ -215,15 +342,31 @@ Validated on physical iPhone, continuous vision inference:
 
 Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 
+### Text Generation
 | Model | Size | Quantization | Use Case |
 |-------|------|-------------|----------|
 | Llama 3.2 1B Instruct | 668 MB | Q4_K_M | General chat, instruction following |
 | Phi 3.5 Mini Instruct | 2.3 GB | Q4_K_M | Reasoning, longer context |
 | Gemma 2 2B Instruct | 1.6 GB | Q4_K_M | General purpose |
 | TinyLlama 1.1B Chat | 669 MB | Q4_K_M | Lightweight, fast inference |
-| SmolVLM2 500M | 417 MB | Q8_0 | Vision / image description |
 
-Any GGUF model compatible with llama.cpp can be loaded by file path.
+### Vision
+| Model | Size | Quantization | Use Case |
+|-------|------|-------------|----------|
+| SmolVLM2 500M | 417 MB + 190 MB mmproj | Q8_0 / F16 | Image description, visual Q&A |
+
+### Speech-to-Text
+| Model | Size | Quantization | Use Case |
+|-------|------|-------------|----------|
+| Whisper Tiny | ~75 MB | GGUF | Fast transcription, lower accuracy |
+| Whisper Base | ~142 MB | GGUF | Balanced speed and accuracy |
+
+### Embeddings
+| Model | Size | Quantization | Use Case |
+|-------|------|-------------|----------|
+| nomic-embed-text v1.5 | ~70 MB | Q4_K_M | Semantic search, RAG (768 dimensions) |
+
+Any GGUF model compatible with llama.cpp or whisper.cpp can be loaded by file path.
 
 ---
 
@@ -249,4 +392,4 @@ Any GGUF model compatible with llama.cpp can be loaded by file path.
 
 [Apache 2.0](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
 
-Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov and contributors.
+Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) and [whisper.cpp](https://github.com/ggml-org/whisper.cpp) by Georgi Gerganov and contributors.
