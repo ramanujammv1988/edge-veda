@@ -18,7 +18,11 @@ import 'app_theme.dart';
 /// - Subtle pulsing indicator during inference
 /// - Vision model downloads on first open, then initializes camera
 class VisionScreen extends StatefulWidget {
-  const VisionScreen({super.key});
+  /// Whether this tab is currently visible to the user.
+  /// When false, the camera stream is paused to save GPU/battery.
+  final bool isActive;
+
+  const VisionScreen({super.key, this.isActive = true});
 
   @override
   State<VisionScreen> createState() => _VisionScreenState();
@@ -33,6 +37,7 @@ class _VisionScreenState extends State<VisionScreen>
   // Vision state
   bool _isVisionReady = false;
   bool _isDownloading = false;
+  bool _hasInitialized = false;
   String? _description;
   double _downloadProgress = 0.0;
   String _statusMessage = 'Preparing vision...';
@@ -48,7 +53,28 @@ class _VisionScreenState extends State<VisionScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeVision();
+    // Only initialize if tab is already active (e.g. deep-linked)
+    if (widget.isActive) {
+      _hasInitialized = true;
+      _initializeVision();
+    }
+  }
+
+  @override
+  void didUpdateWidget(VisionScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      // Tab became visible
+      if (!_hasInitialized) {
+        _hasInitialized = true;
+        _initializeVision();
+      } else if (_isVisionReady && _cameraController != null) {
+        _startCameraStream();
+      }
+    } else if (!widget.isActive && oldWidget.isActive) {
+      // Tab became hidden — pause camera to save GPU/battery
+      _stopCameraStream();
+    }
   }
 
   @override
@@ -66,7 +92,7 @@ class _VisionScreenState extends State<VisionScreen>
     if (state == AppLifecycleState.paused) {
       _stopCameraStream();
     } else if (state == AppLifecycleState.resumed) {
-      if (_isVisionReady && _cameraController != null) {
+      if (widget.isActive && _isVisionReady && _cameraController != null) {
         _startCameraStream();
       }
     }
@@ -194,7 +220,8 @@ class _VisionScreenState extends State<VisionScreen>
   void _startCameraStream() {
     if (_cameraController == null ||
         !_cameraController!.value.isInitialized ||
-        !_isVisionReady) {
+        !_isVisionReady ||
+        _cameraController!.value.isStreamingImages) {
       return;
     }
 
