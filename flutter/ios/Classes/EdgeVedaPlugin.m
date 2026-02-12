@@ -134,6 +134,11 @@
                 initWithPCMFormat:whisperFormat
                     frameCapacity:outputCapacity];
 
+            // Reset converter state before each conversion.
+            // AVAudioConverter is stateful -- after seeing EndOfStream it
+            // permanently stops producing output. reset() clears that state.
+            [converter reset];
+
             NSError *convError = nil;
             __block BOOL inputConsumed = NO;
             AVAudioConverterOutputStatus status = [converter
