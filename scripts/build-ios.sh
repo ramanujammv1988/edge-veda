@@ -85,7 +85,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Initialize submodules if needed
-if [ ! -f "$CORE_DIR/third_party/llama.cpp/CMakeLists.txt" ]; then
+if [ ! -f "$CORE_DIR/third_party/llama.cpp/CMakeLists.txt" ] || [ ! -f "$CORE_DIR/third_party/whisper.cpp/CMakeLists.txt" ]; then
     echo "Initializing git submodules..."
     cd "$PROJECT_ROOT"
     git submodule update --init --recursive
@@ -184,9 +184,9 @@ fi
 echo "Simulator library: $SIM_LIB"
 echo "Simulator library size: $(du -h "$SIM_LIB" | cut -f1)"
 
-# Find llama.cpp and ggml static libraries
+# Find llama.cpp, ggml, and whisper.cpp static libraries
 echo ""
-echo "=== Collecting llama.cpp libraries ==="
+echo "=== Collecting llama.cpp + whisper.cpp libraries ==="
 
 # Device libs - search in all possible locations
 DEVICE_LLAMA_LIB=$(find "$BUILD_IOS_DEVICE" -name "libllama.a" 2>/dev/null | head -1)
@@ -196,6 +196,7 @@ DEVICE_GGML_METAL_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-metal.a" 2>/dev/
 DEVICE_GGML_CPU_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-cpu.a" 2>/dev/null | head -1)
 DEVICE_GGML_BLAS_LIB=$(find "$BUILD_IOS_DEVICE" -name "libggml-blas.a" 2>/dev/null | head -1)
 DEVICE_MTMD_LIB=$(find "$BUILD_IOS_DEVICE" -name "libmtmd.a" 2>/dev/null | head -1)
+DEVICE_WHISPER_LIB=$(find "$BUILD_IOS_DEVICE" -name "libwhisper.a" 2>/dev/null | head -1)
 
 echo "Device llama: $DEVICE_LLAMA_LIB"
 echo "Device ggml: $DEVICE_GGML_LIB"
@@ -204,6 +205,7 @@ echo "Device ggml-metal: $DEVICE_GGML_METAL_LIB"
 echo "Device ggml-cpu: $DEVICE_GGML_CPU_LIB"
 echo "Device ggml-blas: $DEVICE_GGML_BLAS_LIB"
 echo "Device mtmd: $DEVICE_MTMD_LIB"
+echo "Device whisper: $DEVICE_WHISPER_LIB"
 
 # Simulator libs - search in all possible locations
 SIM_LLAMA_LIB=$(find "$BUILD_IOS_SIM" -name "libllama.a" 2>/dev/null | head -1)
@@ -213,6 +215,7 @@ SIM_GGML_METAL_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-metal.a" 2>/dev/null |
 SIM_GGML_CPU_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-cpu.a" 2>/dev/null | head -1)
 SIM_GGML_BLAS_LIB=$(find "$BUILD_IOS_SIM" -name "libggml-blas.a" 2>/dev/null | head -1)
 SIM_MTMD_LIB=$(find "$BUILD_IOS_SIM" -name "libmtmd.a" 2>/dev/null | head -1)
+SIM_WHISPER_LIB=$(find "$BUILD_IOS_SIM" -name "libwhisper.a" 2>/dev/null | head -1)
 
 echo "Simulator llama: $SIM_LLAMA_LIB"
 echo "Simulator ggml: $SIM_GGML_LIB"
@@ -221,6 +224,7 @@ echo "Simulator ggml-metal: $SIM_GGML_METAL_LIB"
 echo "Simulator ggml-cpu: $SIM_GGML_CPU_LIB"
 echo "Simulator ggml-blas: $SIM_GGML_BLAS_LIB"
 echo "Simulator mtmd: $SIM_MTMD_LIB"
+echo "Simulator whisper: $SIM_WHISPER_LIB"
 
 # Merge libraries into single static library per platform
 echo ""
@@ -238,6 +242,7 @@ DEVICE_LIBS_TO_MERGE="$DEVICE_LIB"
 [ -n "$DEVICE_GGML_CPU_LIB" ] && [ -f "$DEVICE_GGML_CPU_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_CPU_LIB"
 [ -n "$DEVICE_GGML_BLAS_LIB" ] && [ -f "$DEVICE_GGML_BLAS_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_GGML_BLAS_LIB"
 [ -n "$DEVICE_MTMD_LIB" ] && [ -f "$DEVICE_MTMD_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_MTMD_LIB"
+[ -n "$DEVICE_WHISPER_LIB" ] && [ -f "$DEVICE_WHISPER_LIB" ] && DEVICE_LIBS_TO_MERGE="$DEVICE_LIBS_TO_MERGE $DEVICE_WHISPER_LIB"
 
 # Build list of simulator libraries to merge
 SIM_LIBS_TO_MERGE="$SIM_LIB"
@@ -248,6 +253,7 @@ SIM_LIBS_TO_MERGE="$SIM_LIB"
 [ -n "$SIM_GGML_CPU_LIB" ] && [ -f "$SIM_GGML_CPU_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_CPU_LIB"
 [ -n "$SIM_GGML_BLAS_LIB" ] && [ -f "$SIM_GGML_BLAS_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_GGML_BLAS_LIB"
 [ -n "$SIM_MTMD_LIB" ] && [ -f "$SIM_MTMD_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_MTMD_LIB"
+[ -n "$SIM_WHISPER_LIB" ] && [ -f "$SIM_WHISPER_LIB" ] && SIM_LIBS_TO_MERGE="$SIM_LIBS_TO_MERGE $SIM_WHISPER_LIB"
 
 echo "Merging device libraries: $DEVICE_LIBS_TO_MERGE"
 # shellcheck disable=SC2086
@@ -362,6 +368,23 @@ if [ -d "$OUTPUT_DIR/EdgeVedaCore.xcframework" ]; then
 
         MTMD_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "mtmd_" || echo "0")
         echo "$lib: $MTMD_SYMBOLS mtmd_* symbols found"
+
+        # Verify whisper symbols (whisper_* from libwhisper)
+        WHISPER_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "whisper_" || echo "0")
+        echo "$lib: $WHISPER_SYMBOLS whisper_* symbols found"
+        if [ "$WHISPER_SYMBOLS" -lt 5 ]; then
+            echo "WARNING: Expected at least 5 whisper_* symbols in $lib (found $WHISPER_SYMBOLS)"
+        fi
+
+        # Verify NO duplicate ggml symbols (critical: shared ggml, not duplicated)
+        GGML_DUP_CHECK=$(nm "$lib" 2>/dev/null | grep " T " | grep "ggml_" | sort | uniq -d | wc -l | tr -d ' ')
+        if [ "$GGML_DUP_CHECK" -gt 0 ]; then
+            echo "ERROR: Duplicate ggml symbols detected ($GGML_DUP_CHECK duplicates)"
+            echo "This indicates ggml was built twice (both llama.cpp and whisper.cpp)"
+            VERIFICATION_FAILED=true
+        else
+            echo "$lib: No duplicate ggml symbols (shared ggml working correctly)"
+        fi
     done
 
     if [ "$VERIFICATION_FAILED" = true ]; then
