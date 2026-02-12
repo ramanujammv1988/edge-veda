@@ -160,6 +160,20 @@ class Scheduler {
     return RuntimePolicy.knobsForLevel(level);
   }
 
+  /// Get the current QoS level for the tool calling workload.
+  ///
+  /// If no tool calling workload is registered, returns null (no
+  /// degradation). Developers should call this before sending
+  /// tool-enabled messages to [ChatSession] to get the
+  /// budget-appropriate tool filtering level via
+  /// [ToolRegistry.forBudgetLevel].
+  ///
+  /// Returns null if tool calling workload is not registered.
+  QoSLevel? getToolQoSLevel() {
+    final state = _workloads[WorkloadId.toolCall];
+    return state?.level;
+  }
+
   /// Report an inference latency sample for a workload.
   ///
   /// Call this after each inference completes to feed the per-workload
@@ -471,6 +485,23 @@ class Scheduler {
           'reason': violations.first.name,
         },
       );
+
+      // Log tool-specific degradation for tracing
+      if (id == WorkloadId.toolCall) {
+        _trace?.record(
+          stage: 'tool_degradation',
+          value: state.level.index.toDouble(),
+          extra: {
+            'action': 'tool_degrade',
+            'level': state.level.name,
+            'tools_available': state.level == QoSLevel.full
+                ? 'all'
+                : state.level == QoSLevel.reduced
+                    ? 'required_only'
+                    : 'none',
+          },
+        );
+      }
 
       degraded = true;
       break; // Only degrade one workload per enforcement cycle
