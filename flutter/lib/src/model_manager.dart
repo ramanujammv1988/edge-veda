@@ -557,13 +557,33 @@ class ModelRegistry {
     return [whisperTinyEn, whisperBaseEn];
   }
 
-  /// Get model by ID (searches text, vision, and whisper models)
+  // === Embedding Models ===
+
+  /// All MiniLM L6 v2 (F16) - Lightweight sentence embedding model
+  static final ModelInfo allMiniLmL6V2 = ModelInfo(
+    id: 'all-minilm-l6-v2-f16',
+    name: 'All MiniLM L6 v2',
+    sizeBytes: 46 * 1024 * 1024, // ~46 MB F16
+    description: 'Lightweight sentence embedding model (384 dimensions)',
+    downloadUrl:
+        'https://huggingface.co/Mungert/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2-F16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+  );
+
+  /// Get all available embedding models
+  static List<ModelInfo> getEmbeddingModels() {
+    return [allMiniLmL6V2];
+  }
+
+  /// Get model by ID (searches text, vision, whisper, and embedding models)
   static ModelInfo? getModelById(String id) {
     final allModels = [
       ...getAllModels(),
       ...getVisionModels(),
       smolvlm2_500m_mmproj,
       ...getWhisperModels(),
+      ...getEmbeddingModels(),
     ];
     try {
       return allModels.firstWhere((model) => model.id == id);
