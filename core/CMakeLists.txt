@@ -169,6 +169,26 @@ else()
     set(LLAMA_CPP_AVAILABLE FALSE)
 endif()
 
+# Include whisper.cpp as subdirectory (MUST come AFTER llama.cpp so ggml targets exist)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/CMakeLists.txt")
+    # whisper.cpp checks `if (NOT TARGET ggml)` and skips building its own ggml
+    # when the ggml target already exists from llama.cpp above.
+    # Setting WHISPER_USE_SYSTEM_GGML is a fallback in case the target check changes.
+    set(WHISPER_USE_SYSTEM_GGML ON CACHE BOOL "" FORCE)
+    set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+    set(WHISPER_SDL2 OFF CACHE BOOL "" FORCE)
+    set(WHISPER_FFMPEG OFF CACHE BOOL "" FORCE)
+    set(WHISPER_COREML OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(third_party/whisper.cpp)
+    set(WHISPER_CPP_AVAILABLE TRUE)
+else()
+    message(WARNING "whisper.cpp not found in third_party/whisper.cpp - STT support disabled")
+    set(WHISPER_CPP_AVAILABLE FALSE)
+endif()
+
 # Create library target
 if(EDGE_VEDA_BUILD_SHARED)
     add_library(edge_veda SHARED ${EDGE_VEDA_SOURCES} ${EDGE_VEDA_HEADERS})
@@ -206,6 +226,15 @@ function(configure_edge_veda_target target_name)
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/include
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/ggml/include
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp/tools/mtmd
+        )
+    endif()
+
+    # Link whisper.cpp if available (shares ggml from llama.cpp)
+    if(WHISPER_CPP_AVAILABLE)
+        target_link_libraries(${target_name} PRIVATE whisper)
+        target_compile_definitions(${target_name} PRIVATE EDGE_VEDA_WHISPER_ENABLED)
+        target_include_directories(${target_name} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/include
         )
     endif()
 
@@ -309,4 +338,5 @@ message(STATUS "  Metal backend: ${EDGE_VEDA_ENABLE_METAL}")
 message(STATUS "  Vulkan backend: ${EDGE_VEDA_ENABLE_VULKAN}")
 message(STATUS "  CPU backend: ${EDGE_VEDA_ENABLE_CPU}")
 message(STATUS "  llama.cpp available: ${LLAMA_CPP_AVAILABLE}")
+message(STATUS "  whisper.cpp available: ${WHISPER_CPP_AVAILABLE}")
 message(STATUS "")
