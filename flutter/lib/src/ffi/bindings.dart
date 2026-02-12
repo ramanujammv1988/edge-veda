@@ -193,6 +193,12 @@ final class EvGenerationParams extends Struct {
   @Int32()
   external int numStopSequences;
 
+  /// GBNF grammar string for constrained decoding (nullptr = no constraint)
+  external Pointer<Utf8> grammarStr;
+
+  /// Grammar root rule name (nullptr = "root")
+  external Pointer<Utf8> grammarRoot;
+
   /// Reserved for future use - must be NULL
   external Pointer<Void> reserved;
 }
@@ -304,6 +310,80 @@ final class EvTimingsData extends Struct {
   /// Number of tokens generated
   @Int32()
   external int generatedTokens;
+}
+
+// =============================================================================
+// Whisper Types (matching edge_veda.h Whisper API)
+// =============================================================================
+
+/// Opaque context handle for Edge Veda whisper (speech-to-text) engine
+/// Corresponds to: typedef struct ev_whisper_context_impl* ev_whisper_context;
+final class EvWhisperContextImpl extends Opaque {}
+
+/// Configuration structure for initializing whisper context
+/// Corresponds to: ev_whisper_config in edge_veda.h
+final class EvWhisperConfig extends Struct {
+  /// Path to Whisper GGUF model file
+  external Pointer<Utf8> modelPath;
+
+  /// Number of CPU threads (0 = auto-detect)
+  @Int32()
+  external int numThreads;
+
+  /// Use GPU acceleration (Metal on iOS/macOS)
+  @Bool()
+  external bool useGpu;
+
+  /// Reserved for future use - must be NULL
+  external Pointer<Void> reserved;
+}
+
+/// Parameters for whisper transcription
+/// Corresponds to: ev_whisper_params in edge_veda.h
+final class EvWhisperParams extends Struct {
+  /// Number of threads for transcription (0 = use config default)
+  @Int32()
+  external int nThreads;
+
+  /// Language code: "en", "auto", etc. (NULL = "en")
+  external Pointer<Utf8> language;
+
+  /// Translate to English (true = translate, false = transcribe)
+  @Bool()
+  external bool translate;
+
+  /// Reserved for future use - must be NULL
+  external Pointer<Void> reserved;
+}
+
+/// A single transcription segment with timing information
+/// Corresponds to: ev_whisper_segment in edge_veda.h
+final class EvWhisperSegment extends Struct {
+  /// Transcribed text for this segment
+  external Pointer<Utf8> text;
+
+  /// Segment start time in milliseconds
+  @Int64()
+  external int startMs;
+
+  /// Segment end time in milliseconds
+  @Int64()
+  external int endMs;
+}
+
+/// Result of a whisper transcription
+/// Corresponds to: ev_whisper_result in edge_veda.h
+final class EvWhisperResult extends Struct {
+  /// Array of transcription segments
+  external Pointer<EvWhisperSegment> segments;
+
+  /// Number of segments in the array
+  @Int32()
+  external int nSegments;
+
+  /// Total processing time in milliseconds
+  @Double()
+  external double processTimeMs;
 }
 
 // =============================================================================
@@ -524,6 +604,60 @@ typedef EvVisionGetLastTimingsDart = int Function(
 );
 
 // =============================================================================
+// Whisper Function Types (matching edge_veda.h Whisper API)
+// =============================================================================
+
+/// void ev_whisper_config_default(ev_whisper_config* config)
+typedef EvWhisperConfigDefaultNative = Void Function(
+  Pointer<EvWhisperConfig> config,
+);
+typedef EvWhisperConfigDefaultDart = void Function(
+  Pointer<EvWhisperConfig> config,
+);
+
+/// ev_whisper_context ev_whisper_init(const ev_whisper_config* config, ev_error_t* error)
+typedef EvWhisperInitNative = Pointer<EvWhisperContextImpl> Function(
+  Pointer<EvWhisperConfig> config,
+  Pointer<Int32> error,
+);
+typedef EvWhisperInitDart = Pointer<EvWhisperContextImpl> Function(
+  Pointer<EvWhisperConfig> config,
+  Pointer<Int32> error,
+);
+
+/// ev_error_t ev_whisper_transcribe(ev_whisper_context ctx, const float* pcm_samples, int n_samples, const ev_whisper_params* params, ev_whisper_result* result)
+typedef EvWhisperTranscribeNative = Int32 Function(
+  Pointer<EvWhisperContextImpl> ctx,
+  Pointer<Float> pcmSamples,
+  Int32 nSamples,
+  Pointer<EvWhisperParams> params,
+  Pointer<EvWhisperResult> result,
+);
+typedef EvWhisperTranscribeDart = int Function(
+  Pointer<EvWhisperContextImpl> ctx,
+  Pointer<Float> pcmSamples,
+  int nSamples,
+  Pointer<EvWhisperParams> params,
+  Pointer<EvWhisperResult> result,
+);
+
+/// void ev_whisper_free_result(ev_whisper_result* result)
+typedef EvWhisperFreeResultNative = Void Function(
+  Pointer<EvWhisperResult> result,
+);
+typedef EvWhisperFreeResultDart = void Function(
+  Pointer<EvWhisperResult> result,
+);
+
+/// void ev_whisper_free(ev_whisper_context ctx)
+typedef EvWhisperFreeNative = Void Function(Pointer<EvWhisperContextImpl> ctx);
+typedef EvWhisperFreeDart = void Function(Pointer<EvWhisperContextImpl> ctx);
+
+/// bool ev_whisper_is_valid(ev_whisper_context ctx)
+typedef EvWhisperIsValidNative = Bool Function(Pointer<EvWhisperContextImpl> ctx);
+typedef EvWhisperIsValidDart = bool Function(Pointer<EvWhisperContextImpl> ctx);
+
+// =============================================================================
 // Native Library Bindings
 // =============================================================================
 
@@ -697,6 +831,28 @@ class EdgeVedaNativeBindings {
   late final EvVisionGetLastTimingsDart evVisionGetLastTimings;
 
   // ---------------------------------------------------------------------------
+  // Whisper Functions
+  // ---------------------------------------------------------------------------
+
+  /// Get default whisper configuration with recommended settings
+  late final EvWhisperConfigDefaultDart evWhisperConfigDefault;
+
+  /// Initialize whisper context with model
+  late final EvWhisperInitDart evWhisperInit;
+
+  /// Transcribe PCM audio samples to text
+  late final EvWhisperTranscribeDart evWhisperTranscribe;
+
+  /// Free whisper transcription result
+  late final EvWhisperFreeResultDart evWhisperFreeResult;
+
+  /// Free whisper context and release all resources
+  late final EvWhisperFreeDart evWhisperFree;
+
+  /// Check if whisper context is valid and ready for transcription
+  late final EvWhisperIsValidDart evWhisperIsValid;
+
+  // ---------------------------------------------------------------------------
   // Binding Initialization
   // ---------------------------------------------------------------------------
 
@@ -808,5 +964,28 @@ class EdgeVedaNativeBindings {
       EvVisionGetLastTimingsNative,
       EvVisionGetLastTimingsDart
     >('ev_vision_get_last_timings');
+
+    // Whisper functions
+    evWhisperConfigDefault = _dylib.lookupFunction<
+      EvWhisperConfigDefaultNative,
+      EvWhisperConfigDefaultDart
+    >('ev_whisper_config_default');
+    evWhisperInit = _dylib.lookupFunction<EvWhisperInitNative, EvWhisperInitDart>(
+      'ev_whisper_init',
+    );
+    evWhisperTranscribe = _dylib.lookupFunction<
+      EvWhisperTranscribeNative,
+      EvWhisperTranscribeDart
+    >('ev_whisper_transcribe');
+    evWhisperFreeResult = _dylib.lookupFunction<
+      EvWhisperFreeResultNative,
+      EvWhisperFreeResultDart
+    >('ev_whisper_free_result');
+    evWhisperFree = _dylib.lookupFunction<EvWhisperFreeNative, EvWhisperFreeDart>(
+      'ev_whisper_free',
+    );
+    evWhisperIsValid = _dylib.lookupFunction<EvWhisperIsValidNative, EvWhisperIsValidDart>(
+      'ev_whisper_is_valid',
+    );
   }
 }

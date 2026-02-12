@@ -369,6 +369,8 @@ void _handleDescribeFrame(
   paramsPtr.ref.presencePenalty = 0.0;
   paramsPtr.ref.stopSequences = ffi.nullptr;
   paramsPtr.ref.numStopSequences = 0;
+  paramsPtr.ref.grammarStr = ffi.nullptr;
+  paramsPtr.ref.grammarRoot = ffi.nullptr;
   paramsPtr.ref.reserved = ffi.nullptr;
 
   final promptPtr = cmd.prompt.toNativeUtf8();

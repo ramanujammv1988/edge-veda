@@ -72,6 +72,18 @@ class GenerateOptions {
   /// Stream responses token-by-token (defaults to false)
   final bool stream;
 
+  /// GBNF grammar string for constrained decoding (null = no constraint)
+  ///
+  /// When set, the model output is constrained to match this GBNF grammar.
+  /// Use with [grammarRoot] to specify the root rule name.
+  final String? grammarStr;
+
+  /// Grammar root rule name (null = "root")
+  ///
+  /// Specifies which rule in the GBNF grammar is the entry point.
+  /// Only used when [grammarStr] is also set.
+  final String? grammarRoot;
+
   const GenerateOptions({
     this.systemPrompt,
     this.maxTokens = 512,
@@ -82,6 +94,8 @@ class GenerateOptions {
     this.stopSequences = const [],
     this.jsonMode = false,
     this.stream = false,
+    this.grammarStr,
+    this.grammarRoot,
   });
 
   GenerateOptions copyWith({
@@ -94,6 +108,8 @@ class GenerateOptions {
     List<String>? stopSequences,
     bool? jsonMode,
     bool? stream,
+    String? grammarStr,
+    String? grammarRoot,
   }) {
     return GenerateOptions(
       systemPrompt: systemPrompt ?? this.systemPrompt,
@@ -105,6 +121,8 @@ class GenerateOptions {
       stopSequences: stopSequences ?? this.stopSequences,
       jsonMode: jsonMode ?? this.jsonMode,
       stream: stream ?? this.stream,
+      grammarStr: grammarStr ?? this.grammarStr,
+      grammarRoot: grammarRoot ?? this.grammarRoot,
     );
   }
 
@@ -118,6 +136,8 @@ class GenerateOptions {
         'stopSequences': stopSequences,
         'jsonMode': jsonMode,
         'stream': stream,
+        'grammarStr': grammarStr,
+        'grammarRoot': grammarRoot,
       };
 
   @override

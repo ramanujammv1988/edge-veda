@@ -269,6 +269,12 @@ class GenerationParams {
   /// Stop sequences
   final List<String> stopSequences;
 
+  /// GBNF grammar string for constrained decoding (null = no constraint)
+  final String? grammarStr;
+
+  /// Grammar root rule name (null = "root")
+  final String? grammarRoot;
+
   const GenerationParams({
     this.maxTokens = 256,
     this.temperature = 0.7,
@@ -278,6 +284,8 @@ class GenerationParams {
     this.frequencyPenalty = 0.0,
     this.presencePenalty = 0.0,
     this.stopSequences = const [],
+    this.grammarStr,
+    this.grammarRoot,
   });
 
   /// Default parameters for quick use
@@ -309,6 +317,12 @@ class NativeParamsScope {
   /// Pointer to stop sequences array
   Pointer<Pointer<Utf8>>? _stopSequencesArrayPtr;
 
+  /// Grammar string pointer (must be freed if non-null)
+  Pointer<Utf8>? _grammarStrPtr;
+
+  /// Grammar root pointer (must be freed if non-null)
+  Pointer<Utf8>? _grammarRootPtr;
+
   /// Whether this scope has been freed
   bool _isFreed = false;
 
@@ -338,6 +352,21 @@ class NativeParamsScope {
     } else {
       ptr.ref.stopSequences = nullptr;
     }
+
+    // Allocate grammar strings if any
+    if (params.grammarStr != null && params.grammarStr!.isNotEmpty) {
+      _grammarStrPtr = params.grammarStr!.toNativeUtf8();
+      ptr.ref.grammarStr = _grammarStrPtr!;
+    } else {
+      ptr.ref.grammarStr = nullptr;
+    }
+
+    if (params.grammarRoot != null && params.grammarRoot!.isNotEmpty) {
+      _grammarRootPtr = params.grammarRoot!.toNativeUtf8();
+      ptr.ref.grammarRoot = _grammarRootPtr!;
+    } else {
+      ptr.ref.grammarRoot = nullptr;
+    }
   }
 
   /// Free all native memory associated with this scope
@@ -357,6 +386,16 @@ class NativeParamsScope {
     if (_stopSequencesArrayPtr != null) {
       calloc.free(_stopSequencesArrayPtr!);
       _stopSequencesArrayPtr = null;
+    }
+
+    // Free grammar string pointers
+    if (_grammarStrPtr != null) {
+      calloc.free(_grammarStrPtr!);
+      _grammarStrPtr = null;
+    }
+    if (_grammarRootPtr != null) {
+      calloc.free(_grammarRootPtr!);
+      _grammarRootPtr = null;
     }
 
     // Free the params struct
