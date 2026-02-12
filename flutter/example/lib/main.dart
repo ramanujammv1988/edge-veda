@@ -453,6 +453,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       // Step 3: Chunk text
       final chunks = _chunkText(text);
+      debugPrint('RAG: ${chunks.length} chunks from ${text.length} chars');
       if (chunks.isEmpty) {
         _showError('Could not extract text chunks from document');
         setState(() => _isIndexingDocument = false);
@@ -468,12 +469,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (_embeddingModelPath == null) {
         final embModel = ModelRegistry.allMiniLmL6V2;
         final isDownloaded = await _modelManager.isModelDownloaded(embModel.id);
+        debugPrint('RAG: embedding model downloaded=$isDownloaded');
         if (!isDownloaded) {
           _embeddingModelPath = await _modelManager.downloadModel(embModel);
         } else {
           _embeddingModelPath = await _modelManager.getModelPath(embModel.id);
         }
       }
+      debugPrint('RAG: embedding model at $_embeddingModelPath');
 
       setState(() {
         _statusMessage = 'Initializing embedding model...';
@@ -482,6 +485,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // Step 5: Create embedder instance
       _ragEmbedder?.dispose();
       _ragEmbedder = EdgeVeda();
+      debugPrint('RAG: calling embedder init...');
       await _ragEmbedder!.init(EdgeVedaConfig(
         modelPath: _embeddingModelPath!,
         useGpu: true,
@@ -490,13 +494,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         maxMemoryMb: 256,
         verbose: false,
       ));
+      debugPrint('RAG: embedder init complete');
 
       // Step 6: Batch-embed all chunks (single model load)
       setState(() {
         _statusMessage = 'Embedding ${chunks.length} chunks...';
       });
 
+      debugPrint('RAG: starting embedBatch for ${chunks.length} chunks...');
+      final sw = Stopwatch()..start();
       final embeddings = await _ragEmbedder!.embedBatch(chunks);
+      sw.stop();
+      debugPrint('RAG: embedBatch done in ${sw.elapsedMilliseconds}ms');
 
       _vectorIndex = VectorIndex(dimensions: 384); // all-MiniLM output dim
       for (int i = 0; i < chunks.length; i++) {
