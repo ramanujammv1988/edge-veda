@@ -201,8 +201,8 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
         config.use_mmap = use_mmap;
         config.use_mlock = use_mlock;
         config.seed = static_cast<int>(seed);
-        config.memory_limit_bytes = 0; // No limit
-        config.auto_unload_on_memory_pressure = false;
+        config.memory_limit_bytes = 2147483648ULL; // 2 GB safe default for mobile
+        config.auto_unload_on_memory_pressure = true;
         config.reserved = nullptr;
 
         // Initialize context
@@ -1173,5 +1173,4 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionDispose(
     }
 }
 
-} // extern "C"
 } // extern "C"
