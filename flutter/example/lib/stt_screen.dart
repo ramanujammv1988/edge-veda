@@ -166,10 +166,26 @@ class _SttScreenState extends State<SttScreen>
         }
       });
 
-      // Start microphone audio capture
-      _audioSubscription = WhisperSession.microphone().listen((samples) {
-        _session?.feedAudio(samples);
-      });
+      // Start microphone audio capture.
+      // The onError handler catches native-side failures (e.g., simulator has
+      // no valid audio input format) which arrive as stream errors, not as
+      // exceptions catchable by try/catch.
+      _audioSubscription = WhisperSession.microphone().listen(
+        (samples) {
+          _session?.feedAudio(samples);
+        },
+        onError: (error) {
+          if (mounted) {
+            _stopRecording();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Microphone error: $error'),
+                backgroundColor: AppTheme.danger,
+              ),
+            );
+          }
+        },
+      );
 
       // Start duration timer
       _recordingStartTime = DateTime.now();
