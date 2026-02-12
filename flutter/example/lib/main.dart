@@ -491,22 +491,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         verbose: false,
       ));
 
-      // Step 6: Create vector index and embed chunks
+      // Step 6: Batch-embed all chunks (single model load)
+      setState(() {
+        _statusMessage = 'Embedding ${chunks.length} chunks...';
+      });
+
+      final embeddings = await _ragEmbedder!.embedBatch(chunks);
+
       _vectorIndex = VectorIndex(dimensions: 384); // all-MiniLM output dim
-
       for (int i = 0; i < chunks.length; i++) {
-        setState(() {
-          _indexingProgress = i + 1;
-          _statusMessage = 'Embedding chunk ${i + 1}/${chunks.length}...';
-        });
-
-        final embedding = await _ragEmbedder!.embed(chunks[i]);
         _vectorIndex!.add(
           'chunk_$i',
-          embedding.embedding,
+          embeddings[i].embedding,
           metadata: {'text': chunks[i]},
         );
       }
+
+      setState(() {
+        _indexingProgress = chunks.length;
+        _indexingTotal = chunks.length;
+      });
 
       // Step 7: Create RAG pipeline with separate embedder and generator.
       // IMPORTANT: Keep _ragEmbedder alive -- queryStream() calls embed() on

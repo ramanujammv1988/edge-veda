@@ -629,6 +629,95 @@ class EdgeVeda {
     });
   }
 
+  /// Embed multiple texts in a single model load/unload cycle.
+  ///
+  /// Much faster than calling [embed] in a loop because the model is loaded
+  /// once and reused for all texts. Returns embeddings in the same order.
+  /// The [onProgress] callback fires after each text is embedded.
+  Future<List<EmbeddingResult>> embedBatch(
+    List<String> texts, {
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    _ensureInitialized();
+
+    if (texts.isEmpty) return [];
+
+    final modelPath = _config!.modelPath;
+    final numThreads = _config!.numThreads;
+    final contextSize = _config!.contextLength;
+    final useGpu = _config!.useGpu;
+
+    // Run all embeddings in a single isolate with one model load
+    return await Isolate.run(() {
+      final bindings = EdgeVedaNativeBindings.instance;
+
+      final configPtr = calloc<EvConfig>();
+      final modelPathPtr = modelPath.toNativeUtf8();
+      final errorPtr = calloc<ffi.Int32>();
+
+      try {
+        configPtr.ref.modelPath = modelPathPtr;
+        configPtr.ref.backend =
+            useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+        configPtr.ref.numThreads = numThreads;
+        configPtr.ref.contextSize = contextSize;
+        configPtr.ref.batchSize = 512;
+        configPtr.ref.memoryLimitBytes = 0;
+        configPtr.ref.autoUnloadOnMemoryPressure = true;
+        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+        configPtr.ref.useMmap = true;
+        configPtr.ref.useMlock = false;
+        configPtr.ref.seed = -1;
+        configPtr.ref.reserved = ffi.nullptr;
+
+        final ctx = bindings.evInit(configPtr, errorPtr);
+        if (ctx == ffi.nullptr) {
+          final errorCode = NativeErrorCode.fromCode(errorPtr.value);
+          final exception = errorCode.toException('Embedding init failed');
+          throw exception ??
+              ModelLoadException('Failed to load model for embedding');
+        }
+
+        try {
+          final results = <EmbeddingResult>[];
+          for (final text in texts) {
+            final textPtr = text.toNativeUtf8();
+            final result = calloc<EvEmbedResult>();
+            try {
+              final err = bindings.evEmbed(ctx, textPtr, result);
+              if (err != 0) {
+                throw EmbeddingException('Embedding failed',
+                    details: 'Error code: $err');
+              }
+              final dims = result.ref.dimensions;
+              final tokenCount = result.ref.tokenCount;
+              final floatPtr = result.ref.embeddings;
+              final embedding = List<double>.generate(
+                dims,
+                (i) => floatPtr[i].toDouble(),
+              );
+              bindings.evFreeEmbeddings(result);
+              results.add(EmbeddingResult(
+                embedding: embedding,
+                tokenCount: tokenCount,
+              ));
+            } finally {
+              calloc.free(textPtr);
+              calloc.free(result);
+            }
+          }
+          return results;
+        } finally {
+          bindings.evFree(ctx);
+        }
+      } finally {
+        calloc.free(modelPathPtr);
+        calloc.free(configPtr);
+        calloc.free(errorPtr);
+      }
+    });
+  }
+
   /// Ensure SDK is initialized before operations
   void _ensureInitialized() {
     if (!_isInitialized || _config == null) {
