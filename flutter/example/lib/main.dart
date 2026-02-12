@@ -1306,6 +1306,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
+          if (_attachedDocName != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.search, size: 10, color: AppTheme.accent),
+                  SizedBox(width: 3),
+                  Text(
+                    'RAG',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppTheme.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Spacer(),
           Text(
             '$usagePercent%',
@@ -1512,6 +1537,122 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return msgs.isNotEmpty || _isStreaming;
   }
 
+  /// Build document indicator chip showing filename, chunk count, and remove button.
+  Widget _buildDocumentChip() {
+    if (_attachedDocName == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.border, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.description, size: 16, color: AppTheme.accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$_attachedDocName  \u00B7  $_attachedChunkCount chunks',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          InkWell(
+            onTap: _removeDocument,
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build indexing progress overlay shown during document embedding.
+  Widget _buildIndexingOverlay() {
+    if (!_isIndexingDocument) return const SizedBox.shrink();
+
+    final progress =
+        _indexingTotal > 0 ? _indexingProgress / _indexingTotal : 0.0;
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.7),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.all(40),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.description, size: 48, color: AppTheme.accent),
+              const SizedBox(height: 16),
+              const Text(
+                'Indexing Document',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _statusMessage,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              if (_indexingTotal > 0) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    color: AppTheme.accent,
+                    backgroundColor: AppTheme.surfaceVariant,
+                    minHeight: 6,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$_indexingProgress / $_indexingTotal chunks',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textTertiary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ] else
+                const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: AppTheme.accent,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final messages = _displayMessages;
@@ -1630,10 +1771,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Status bar
-          Container(
+          Column(
+            children: [
+              // Status bar
+              Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: const BoxDecoration(
@@ -1695,6 +1838,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           if (_isInitialized && _hasMessages)
             _buildContextIndicator(),
 
+          // Document indicator chip (shown when document is attached)
+          if (_isInitialized) _buildDocumentChip(),
+
           // Messages list
           Expanded(
             child: messages.isEmpty
@@ -1702,20 +1848,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.chat_bubble_outline,
-                            size: 64, color: AppTheme.border),
+                        Icon(
+                          _attachedDocName != null
+                              ? Icons.description_outlined
+                              : Icons.chat_bubble_outline,
+                          size: 64,
+                          color: AppTheme.border,
+                        ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'Start a conversation',
-                          style: TextStyle(
+                        Text(
+                          _attachedDocName != null
+                              ? 'Ask a question about your document'
+                              : 'Start a conversation',
+                          style: const TextStyle(
                             color: AppTheme.textTertiary,
                             fontSize: 16,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Ask anything. It runs on your device.',
-                          style: TextStyle(
+                        Text(
+                          _attachedDocName != null
+                              ? 'Answers are generated from the attached file.'
+                              : 'Ask anything. It runs on your device.',
+                          style: const TextStyle(
                             color: AppTheme.textTertiary,
                             fontSize: 13,
                           ),
@@ -1749,12 +1904,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             child: SafeArea(
               child: Row(
                 children: [
+                  // Attach document button
+                  if (_isInitialized &&
+                      !_isStreaming &&
+                      !_isIndexingDocument)
+                    IconButton(
+                      icon: Icon(
+                        Icons.attach_file,
+                        color: _attachedDocName != null
+                            ? AppTheme.accent
+                            : AppTheme.textSecondary,
+                      ),
+                      tooltip: 'Attach document',
+                      onPressed: _pickAndIndexDocument,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 40, minHeight: 40),
+                    ),
                   Expanded(
                     child: TextField(
                       controller: _promptController,
                       style: const TextStyle(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
-                        hintText: 'Message...',
+                        hintText: _attachedDocName != null
+                            ? 'Ask about the document...'
+                            : 'Message...',
                         hintStyle: const TextStyle(color: AppTheme.textTertiary),
                         filled: true,
                         fillColor: AppTheme.surfaceVariant,
@@ -1808,6 +1982,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
+            ],
+          ),
+          // Indexing overlay
+          _buildIndexingOverlay(),
         ],
       ),
     );
