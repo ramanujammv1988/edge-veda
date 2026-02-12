@@ -167,9 +167,9 @@ class _SttScreenState extends State<SttScreen>
       });
 
       // Start microphone audio capture.
-      // The onError handler catches native-side failures (e.g., simulator has
-      // no valid audio input format) which arrive as stream errors, not as
-      // exceptions catchable by try/catch.
+      // When native onListen returns a FlutterError (e.g., simulator has no
+      // valid audio input), receiveBroadcastStream sends it as the first
+      // error event on the stream. The onError handler shows a SnackBar.
       _audioSubscription = WhisperSession.microphone().listen(
         (samples) {
           _session?.feedAudio(samples);
