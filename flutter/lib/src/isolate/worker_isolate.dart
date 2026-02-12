@@ -392,6 +392,7 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
     paramsPtr.ref.numStopSequences = 0;
     paramsPtr.ref.grammarStr = ffi.nullptr;
     paramsPtr.ref.grammarRoot = ffi.nullptr;
+    paramsPtr.ref.confidenceThreshold = 0.0;
     paramsPtr.ref.reserved = ffi.nullptr;
 
     final stream =

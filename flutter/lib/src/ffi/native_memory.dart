@@ -275,6 +275,9 @@ class GenerationParams {
   /// Grammar root rule name (null = "root")
   final String? grammarRoot;
 
+  /// Confidence threshold for cloud handoff (0.0 = disabled)
+  final double confidenceThreshold;
+
   const GenerationParams({
     this.maxTokens = 256,
     this.temperature = 0.7,
@@ -286,6 +289,7 @@ class GenerationParams {
     this.stopSequences = const [],
     this.grammarStr,
     this.grammarRoot,
+    this.confidenceThreshold = 0.0,
   });
 
   /// Default parameters for quick use
@@ -367,6 +371,8 @@ class NativeParamsScope {
     } else {
       ptr.ref.grammarRoot = nullptr;
     }
+
+    ptr.ref.confidenceThreshold = params.confidenceThreshold;
   }
 
   /// Free all native memory associated with this scope
