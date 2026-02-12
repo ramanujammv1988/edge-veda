@@ -219,12 +219,22 @@ typedef struct {
     /** Number of stop sequences */
     int num_stop_sequences;
 
+    /** GBNF grammar string for constrained decoding (NULL = no constraint) */
+    const char* grammar_str;
+
+    /** Grammar root rule name (NULL = "root") */
+    const char* grammar_root;
+
     /** Reserved for future use - must be NULL */
     void* reserved;
 } ev_generation_params;
 
 /**
  * @brief Get default generation parameters
+ *
+ * Sets all fields to sensible defaults. Grammar fields (grammar_str,
+ * grammar_root) default to NULL, meaning no grammar constraint is applied.
+ *
  * @param params Pointer to parameters structure to fill
  */
 EV_API void ev_generation_params_default(ev_generation_params* params);
