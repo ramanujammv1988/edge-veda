@@ -233,8 +233,8 @@ class TokenChunk {
 
   @override
   String toString() {
-    final confStr = confidence != null ? ', confidence: \${confidence!.toStringAsFixed(3)}' : '';
-    return 'TokenChunk(token: "\$token", index: \$index, isFinal: \$isFinal\$confStr)';
+    final confStr = confidence != null ? ', confidence: ${confidence!.toStringAsFixed(3)}' : '';
+    return 'TokenChunk(token: "$token", index: $index, isFinal: $isFinal$confStr)';
   }
 }
 
@@ -720,7 +720,7 @@ class EmbeddingResult {
   });
 
   @override
-  String toString() => 'EmbeddingResult(dims: \$dimensions, tokens: \$tokenCount)';
+  String toString() => 'EmbeddingResult(dims: $dimensions, tokens: $tokenCount)';
 }
 
 /// Confidence information for a generated token or response
@@ -749,7 +749,7 @@ class ConfidenceInfo {
 
   @override
   String toString() =>
-    'ConfidenceInfo(confidence: \${confidence.toStringAsFixed(3)}, avg: \${avgConfidence.toStringAsFixed(3)}, handoff: \$needsCloudHandoff)';
+    'ConfidenceInfo(confidence: ${confidence.toStringAsFixed(3)}, avg: ${avgConfidence.toStringAsFixed(3)}, handoff: $needsCloudHandoff)';
 }
 
 /// Exception thrown when embedding operation fails
