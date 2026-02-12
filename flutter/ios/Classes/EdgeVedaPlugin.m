@@ -75,86 +75,117 @@
 - (FlutterError *)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)events {
     _eventSink = events;
 
-    self.audioEngine = [[AVAudioEngine alloc] init];
-    AVAudioInputNode *inputNode = [self.audioEngine inputNode];
+    @try {
+        self.audioEngine = [[AVAudioEngine alloc] init];
+        AVAudioInputNode *inputNode = [self.audioEngine inputNode];
 
-    // Use the input node's native hardware format for the tap.
-    // On iPhone this is typically 48kHz mono Float32.
-    // You CANNOT install a tap with an arbitrary format on AVAudioInputNode --
-    // it must match the hardware format. We convert to 16kHz afterwards.
-    AVAudioFormat *nativeFormat = [inputNode outputFormatForBus:0];
+        // Use the input node's native hardware format for the tap.
+        // On iPhone this is typically 48kHz mono Float32.
+        // You CANNOT install a tap with an arbitrary format on AVAudioInputNode --
+        // it must match the hardware format. We convert to 16kHz afterwards.
+        AVAudioFormat *nativeFormat = [inputNode outputFormatForBus:0];
 
-    // Target format: 16kHz mono float32 (what whisper.cpp expects)
-    AVAudioFormat *whisperFormat = [[AVAudioFormat alloc]
-        initWithCommonFormat:AVAudioPCMFormatFloat32
-                  sampleRate:16000.0
-                    channels:1
-                 interleaved:NO];
+        // Defensive check: simulator may return invalid format (0 Hz, 0 channels).
+        // Bail out gracefully instead of crashing on division-by-zero or nil converter.
+        if (!nativeFormat || nativeFormat.sampleRate < 1.0 || nativeFormat.channelCount == 0) {
+            NSString *detail = [NSString stringWithFormat:
+                @"sampleRate=%.0f channels=%u",
+                nativeFormat ? nativeFormat.sampleRate : 0.0,
+                (unsigned)(nativeFormat ? nativeFormat.channelCount : 0)];
+            self.audioEngine = nil;
+            return [FlutterError errorWithCode:@"AUDIO_FORMAT_UNAVAILABLE"
+                                       message:@"Microphone audio format is invalid (simulator may lack audio input)"
+                                       details:detail];
+        }
 
-    // Create a converter from native hardware format -> 16kHz mono
-    AVAudioConverter *converter = [[AVAudioConverter alloc]
-        initFromFormat:nativeFormat
-              toFormat:whisperFormat];
+        // Target format: 16kHz mono float32 (what whisper.cpp expects)
+        AVAudioFormat *whisperFormat = [[AVAudioFormat alloc]
+            initWithCommonFormat:AVAudioPCMFormatFloat32
+                      sampleRate:16000.0
+                        channels:1
+                     interleaved:NO];
 
-    // Buffer size in native sample rate frames (~300ms worth)
-    AVAudioFrameCount tapBufferSize =
-        (AVAudioFrameCount)(nativeFormat.sampleRate * 0.3);
+        // Create a converter from native hardware format -> 16kHz mono
+        AVAudioConverter *converter = [[AVAudioConverter alloc]
+            initFromFormat:nativeFormat
+                  toFormat:whisperFormat];
 
-    [inputNode installTapOnBus:0
-                    bufferSize:tapBufferSize
-                        format:nativeFormat
-                         block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
-        // Calculate output capacity: proportional to sample rate ratio
-        double ratio = 16000.0 / nativeFormat.sampleRate;
-        AVAudioFrameCount outputCapacity =
-            (AVAudioFrameCount)(buffer.frameLength * ratio) + 1;
+        if (!converter) {
+            self.audioEngine = nil;
+            return [FlutterError errorWithCode:@"AUDIO_CONVERTER_FAILED"
+                                       message:@"Failed to create audio format converter"
+                                       details:nil];
+        }
 
-        AVAudioPCMBuffer *converted = [[AVAudioPCMBuffer alloc]
-            initWithPCMFormat:whisperFormat
-                frameCapacity:outputCapacity];
+        // Buffer size in native sample rate frames (~300ms worth)
+        AVAudioFrameCount tapBufferSize =
+            (AVAudioFrameCount)(nativeFormat.sampleRate * 0.3);
 
-        NSError *convError = nil;
-        __block BOOL inputConsumed = NO;
-        AVAudioConverterOutputStatus status = [converter
-            convertToBuffer:converted
-                      error:&convError
-     withInputFromBlock:^AVAudioBuffer *(AVAudioPacketCount inNumberOfPackets,
-                                          AVAudioConverterInputStatus *outStatus) {
-            if (inputConsumed) {
-                *outStatus = AVAudioConverterInputStatus_EndOfStream;
-                return nil;
+        [inputNode installTapOnBus:0
+                        bufferSize:tapBufferSize
+                            format:nativeFormat
+                             block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
+            // Calculate output capacity: proportional to sample rate ratio
+            double ratio = 16000.0 / nativeFormat.sampleRate;
+            AVAudioFrameCount outputCapacity =
+                (AVAudioFrameCount)(buffer.frameLength * ratio) + 1;
+
+            AVAudioPCMBuffer *converted = [[AVAudioPCMBuffer alloc]
+                initWithPCMFormat:whisperFormat
+                    frameCapacity:outputCapacity];
+
+            NSError *convError = nil;
+            __block BOOL inputConsumed = NO;
+            AVAudioConverterOutputStatus status = [converter
+                convertToBuffer:converted
+                          error:&convError
+         withInputFromBlock:^AVAudioBuffer *(AVAudioPacketCount inNumberOfPackets,
+                                              AVAudioConverterInputStatus *outStatus) {
+                if (inputConsumed) {
+                    *outStatus = AVAudioConverterInputStatus_EndOfStream;
+                    return nil;
+                }
+                inputConsumed = YES;
+                *outStatus = AVAudioConverterInputStatus_HaveData;
+                return buffer;
+            }];
+
+            if (status == AVAudioConverterOutputStatus_HaveData && !convError) {
+                const float *channelData = converted.floatChannelData[0];
+                NSUInteger frameLength = converted.frameLength;
+
+                // Copy to FlutterStandardTypedData (Float32)
+                NSData *pcmData = [NSData dataWithBytes:channelData
+                                                 length:frameLength * sizeof(float)];
+                FlutterStandardTypedData *typedData =
+                    [FlutterStandardTypedData typedDataWithFloat32:pcmData];
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (self->_eventSink) {
+                        self->_eventSink(typedData);
+                    }
+                });
             }
-            inputConsumed = YES;
-            *outStatus = AVAudioConverterInputStatus_HaveData;
-            return buffer;
         }];
 
-        if (status == AVAudioConverterOutputStatus_HaveData && !convError) {
-            const float *channelData = converted.floatChannelData[0];
-            NSUInteger frameLength = converted.frameLength;
-
-            // Copy to FlutterStandardTypedData (Float32)
-            NSData *pcmData = [NSData dataWithBytes:channelData
-                                             length:frameLength * sizeof(float)];
-            FlutterStandardTypedData *typedData =
-                [FlutterStandardTypedData typedDataWithFloat32:pcmData];
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (self->_eventSink) {
-                    self->_eventSink(typedData);
-                }
-            });
+        NSError *error;
+        [self.audioEngine startAndReturnError:&error];
+        if (error) {
+            [self.audioEngine.inputNode removeTapOnBus:0];
+            self.audioEngine = nil;
+            return [FlutterError errorWithCode:@"AUDIO_ERROR"
+                                       message:error.localizedDescription
+                                       details:nil];
         }
-    }];
-
-    NSError *error;
-    [self.audioEngine startAndReturnError:&error];
-    if (error) {
-        return [FlutterError errorWithCode:@"AUDIO_ERROR"
-                                   message:error.localizedDescription
-                                   details:nil];
+        return nil;
+    } @catch (NSException *exception) {
+        // AVAudioEngine can throw NSException (e.g., invalid format on simulator).
+        // Catch and return as FlutterError instead of crashing the app.
+        self.audioEngine = nil;
+        return [FlutterError errorWithCode:@"AUDIO_EXCEPTION"
+                                   message:exception.reason ?: @"Audio engine exception"
+                                   details:exception.name];
     }
-    return nil;
 }
 
 - (FlutterError *)onCancelWithArguments:(id)arguments {
