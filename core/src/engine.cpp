@@ -108,6 +108,8 @@ struct ev_stream_impl {
         , ended(false)
         , cancelled(false) {
         if (prms) {
+            // Note: grammar_str and grammar_root are borrowed pointers from the caller.
+            // They must remain valid for the lifetime of the stream.
             params = *prms;
         } else {
             ev_generation_params_default(&params);
@@ -412,13 +414,17 @@ static std::vector<llama_token> tokenize_prompt(
 /**
  * Create a sampler chain with the specified generation parameters
  * @param params Generation parameters
+ * @param vocab  Vocabulary (needed for grammar sampler; may be nullptr if no grammar)
  * @return Configured sampler chain
  */
-static llama_sampler* create_sampler(const ev_generation_params& params) {
+static llama_sampler* create_sampler(
+    const ev_generation_params& params,
+    const llama_vocab* vocab
+) {
     llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
     llama_sampler* sampler = llama_sampler_chain_init(chain_params);
 
-    // Add samplers in order: penalties -> top-k -> top-p -> temperature -> dist
+    // Add samplers in order: penalties -> top-k -> top-p -> temperature -> grammar -> dist
     llama_sampler_chain_add(sampler,
         llama_sampler_init_penalties(
             64,                        // penalty_last_n
@@ -439,6 +445,15 @@ static llama_sampler* create_sampler(const ev_generation_params& params) {
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(params.temperature));
     }
 
+    // Add grammar sampler if grammar provided (constrains valid tokens at each step)
+    if (params.grammar_str && params.grammar_str[0] != '\0' && vocab) {
+        const char* root = (params.grammar_root && params.grammar_root[0] != '\0')
+            ? params.grammar_root : "root";
+        llama_sampler_chain_add(sampler,
+            llama_sampler_init_grammar(vocab, params.grammar_str, root));
+    }
+
+    // dist sampler (always last -- performs final random selection)
     llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 
     return sampler;
@@ -462,6 +477,8 @@ void ev_generation_params_default(ev_generation_params* params) {
     params->presence_penalty = 0.0f;
     params->stop_sequences = nullptr;
     params->num_stop_sequences = 0;
+    params->grammar_str = nullptr;
+    params->grammar_root = nullptr;
     params->reserved = nullptr;
 }
 
@@ -519,8 +536,9 @@ ev_error_t ev_generate(
         return EV_ERROR_INFERENCE_FAILED;
     }
 
-    // Create sampler
-    llama_sampler* sampler = create_sampler(gen_params);
+    // Create sampler (pass vocab for grammar support)
+    const llama_vocab* vocab = llama_model_get_vocab(ctx->model);
+    llama_sampler* sampler = create_sampler(gen_params, vocab);
     if (!sampler) {
         ctx->last_error = "Failed to create sampler";
         return EV_ERROR_INFERENCE_FAILED;
@@ -528,7 +546,6 @@ ev_error_t ev_generate(
 
     // Generate tokens
     std::string result;
-    const llama_vocab* vocab = llama_model_get_vocab(ctx->model);
 
     for (int i = 0; i < gen_params.max_tokens; ++i) {
         // Sample next token
@@ -622,8 +639,8 @@ ev_stream ev_generate_stream(
         return nullptr;
     }
 
-    // Create sampler (owned by stream)
-    stream->sampler = create_sampler(stream->params);
+    // Create sampler (owned by stream, pass vocab for grammar support)
+    stream->sampler = create_sampler(stream->params, llama_model_get_vocab(ctx->model));
     if (!stream->sampler) {
         delete stream;
         if (error) *error = EV_ERROR_INFERENCE_FAILED;
