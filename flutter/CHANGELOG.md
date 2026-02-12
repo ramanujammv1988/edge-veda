@@ -5,6 +5,32 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-12
+
+### Added
+- **Whisper STT:** On-device speech-to-text via whisper.cpp with streaming transcription API
+- **WhisperWorker:** Persistent isolate for speech recognition (model loads once)
+- **WhisperSession:** High-level streaming API with 3-second chunk processing at 16kHz
+- **iOS Audio Capture:** AVAudioEngine + AVAudioConverter for native 48kHz to 16kHz mono conversion
+- **Structured Output:** Grammar-constrained generation via GBNF sampler for valid JSON output
+- **Function Calling:** `sendWithTools()` for multi-round tool chains with `ToolDefinition`, `ToolCall`, `ToolResult`
+- **Tool Registry:** Register tools with JSON schema validation, model selects and invokes relevant tools
+- **Embeddings API:** `embed()` returns L2-normalized float vectors via `ev_embed()` C API — works with any GGUF embedding model
+- **Confidence Scoring:** Per-token confidence (0.0-1.0) from softmax entropy of logits, zero overhead when disabled
+- **Cloud Handoff:** `needsCloudHandoff` flag when average confidence drops below `confidenceThreshold`
+- **VectorIndex:** Pure Dart HNSW vector search (via local_hnsw) with cosine similarity and JSON persistence
+- **RagPipeline:** End-to-end retrieval-augmented generation — embed query, search index, inject context, generate
+- **STT Demo Screen:** Live microphone transcription with pulsing recording indicator
+- **Chat Tools Demo:** Toggle function calling (get_time, calculate) in chat screen
+
+### Changed
+- XCFramework rebuilt with whisper, grammar, embedding, and confidence symbols
+- Podspec symbol whitelist expanded for all new `ev_*` functions
+- `EvGenerationParams` struct layout fixed (grammar_str/grammar_root fields added)
+- `TokenChunk` and `GenerateResponse` now include confidence fields
+- Chat templates extended with Qwen3/Hermes-style tool message support
+- Android builds use 16KB page alignment for Android 15+ compliance
+
 ## [1.2.0] - 2026-02-09
 
 ### Added
