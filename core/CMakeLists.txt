@@ -79,6 +79,7 @@ set(EDGE_VEDA_SOURCES
     src/engine.cpp
     src/memory_guard.cpp
     src/vision_engine.cpp
+    src/whisper_engine.cpp
 )
 
 # Header files

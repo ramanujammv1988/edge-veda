@@ -624,6 +624,150 @@ EV_API ev_error_t ev_vision_get_last_timings(
     ev_timings_data* timings
 );
 
+/* ============================================================================
+ * Whisper API (STT - Speech-to-Text)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda whisper (speech-to-text) engine
+ *
+ * Whisper context is SEPARATE from text context (ev_context) and
+ * vision context (ev_vision_context).
+ * Create with ev_whisper_init(), free with ev_whisper_free().
+ */
+typedef struct ev_whisper_context_impl* ev_whisper_context;
+
+/**
+ * @brief Configuration structure for initializing whisper context
+ */
+typedef struct {
+    /** Path to Whisper GGUF model file */
+    const char* model_path;
+
+    /** Number of CPU threads (0 = auto-detect) */
+    int num_threads;
+
+    /** Use GPU acceleration (Metal on iOS/macOS) */
+    bool use_gpu;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_whisper_config;
+
+/**
+ * @brief Parameters for whisper transcription
+ */
+typedef struct {
+    /** Number of threads for transcription (0 = use config default) */
+    int n_threads;
+
+    /** Language code: "en", "auto", etc. (NULL = "en") */
+    const char* language;
+
+    /** Translate to English (true = translate, false = transcribe) */
+    bool translate;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_whisper_params;
+
+/**
+ * @brief A single transcription segment with timing information
+ */
+typedef struct {
+    /** Transcribed text for this segment */
+    const char* text;
+
+    /** Segment start time in milliseconds */
+    int64_t start_ms;
+
+    /** Segment end time in milliseconds */
+    int64_t end_ms;
+} ev_whisper_segment;
+
+/**
+ * @brief Result of a whisper transcription
+ *
+ * Contains an array of segments with timing information.
+ * Must be freed with ev_whisper_free_result() after use.
+ */
+typedef struct {
+    /** Array of transcription segments */
+    ev_whisper_segment* segments;
+
+    /** Number of segments in the array */
+    int n_segments;
+
+    /** Total processing time in milliseconds */
+    double process_time_ms;
+} ev_whisper_result;
+
+/**
+ * @brief Get default whisper configuration with recommended settings
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_whisper_config_default(ev_whisper_config* config);
+
+/**
+ * @brief Initialize whisper context with model
+ *
+ * Loads the Whisper model for speech-to-text transcription.
+ * The whisper context is independent from text and vision contexts.
+ *
+ * @param config Whisper configuration (model_path required)
+ * @param error Optional pointer to receive error code
+ * @return Whisper context handle on success, NULL on failure
+ */
+EV_API ev_whisper_context ev_whisper_init(
+    const ev_whisper_config* config,
+    ev_error_t* error
+);
+
+/**
+ * @brief Transcribe PCM audio samples to text
+ *
+ * Takes 16kHz mono float32 PCM samples and returns transcribed text
+ * with segment-level timing information.
+ * This is a blocking call that returns the complete transcription.
+ *
+ * @param ctx Whisper context handle
+ * @param pcm_samples PCM audio data (16kHz, mono, float32, range [-1.0, 1.0])
+ * @param n_samples Number of samples in pcm_samples array
+ * @param params Transcription parameters (NULL = use defaults)
+ * @param result Pointer to result structure to fill (caller must free with ev_whisper_free_result)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_whisper_transcribe(
+    ev_whisper_context ctx,
+    const float* pcm_samples,
+    int n_samples,
+    const ev_whisper_params* params,
+    ev_whisper_result* result
+);
+
+/**
+ * @brief Free whisper transcription result
+ *
+ * Frees the segments array and associated text strings
+ * allocated by ev_whisper_transcribe().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_whisper_free_result(ev_whisper_result* result);
+
+/**
+ * @brief Free whisper context and release all resources
+ * @param ctx Whisper context handle to free
+ */
+EV_API void ev_whisper_free(ev_whisper_context ctx);
+
+/**
+ * @brief Check if whisper context is valid and ready for transcription
+ * @param ctx Whisper context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_whisper_is_valid(ev_whisper_context ctx);
+
 #ifdef __cplusplus
 }
 #endif
