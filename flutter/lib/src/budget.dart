@@ -49,6 +49,12 @@ enum WorkloadId {
 
   /// Text/chat inference (StreamingWorker via ChatSession).
   text,
+
+  /// Speech-to-text inference (WhisperWorker via WhisperSession).
+  stt,
+
+  /// Tool/function calling inference.
+  toolCall,
 }
 
 /// Adaptive budget profile expressing intent as multipliers on measured device baseline.
