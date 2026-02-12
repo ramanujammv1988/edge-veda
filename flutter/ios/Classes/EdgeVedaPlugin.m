@@ -78,32 +78,73 @@
     self.audioEngine = [[AVAudioEngine alloc] init];
     AVAudioInputNode *inputNode = [self.audioEngine inputNode];
 
-    // Request 16kHz mono float32 -- whisper.cpp expects exactly this format
-    AVAudioFormat *desiredFormat = [[AVAudioFormat alloc]
+    // Use the input node's native hardware format for the tap.
+    // On iPhone this is typically 48kHz mono Float32.
+    // You CANNOT install a tap with an arbitrary format on AVAudioInputNode --
+    // it must match the hardware format. We convert to 16kHz afterwards.
+    AVAudioFormat *nativeFormat = [inputNode outputFormatForBus:0];
+
+    // Target format: 16kHz mono float32 (what whisper.cpp expects)
+    AVAudioFormat *whisperFormat = [[AVAudioFormat alloc]
         initWithCommonFormat:AVAudioPCMFormatFloat32
                   sampleRate:16000.0
                     channels:1
                  interleaved:NO];
 
-    // 4800 samples = 300ms at 16kHz (small buffers to avoid UI jank)
+    // Create a converter from native hardware format -> 16kHz mono
+    AVAudioConverter *converter = [[AVAudioConverter alloc]
+        initFromFormat:nativeFormat
+              toFormat:whisperFormat];
+
+    // Buffer size in native sample rate frames (~300ms worth)
+    AVAudioFrameCount tapBufferSize =
+        (AVAudioFrameCount)(nativeFormat.sampleRate * 0.3);
+
     [inputNode installTapOnBus:0
-                    bufferSize:4800
-                        format:desiredFormat
+                    bufferSize:tapBufferSize
+                        format:nativeFormat
                          block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
-        const float *channelData = buffer.floatChannelData[0];
-        NSUInteger frameLength = buffer.frameLength;
+        // Calculate output capacity: proportional to sample rate ratio
+        double ratio = 16000.0 / nativeFormat.sampleRate;
+        AVAudioFrameCount outputCapacity =
+            (AVAudioFrameCount)(buffer.frameLength * ratio) + 1;
 
-        // Copy to FlutterStandardTypedData (Float32)
-        NSData *pcmData = [NSData dataWithBytes:channelData
-                                         length:frameLength * sizeof(float)];
-        FlutterStandardTypedData *typedData =
-            [FlutterStandardTypedData typedDataWithFloat32:pcmData];
+        AVAudioPCMBuffer *converted = [[AVAudioPCMBuffer alloc]
+            initWithPCMFormat:whisperFormat
+                frameCapacity:outputCapacity];
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (self->_eventSink) {
-                self->_eventSink(typedData);
+        NSError *convError = nil;
+        __block BOOL inputConsumed = NO;
+        AVAudioConverterOutputStatus status = [converter
+            convertToBuffer:converted
+                      error:&convError
+     withInputFromBlock:^AVAudioBuffer *(AVAudioPacketCount inNumberOfPackets,
+                                          AVAudioConverterInputStatus *outStatus) {
+            if (inputConsumed) {
+                *outStatus = AVAudioConverterInputStatus_EndOfStream;
+                return nil;
             }
-        });
+            inputConsumed = YES;
+            *outStatus = AVAudioConverterInputStatus_HaveData;
+            return buffer;
+        }];
+
+        if (status == AVAudioConverterOutputStatus_HaveData && !convError) {
+            const float *channelData = converted.floatChannelData[0];
+            NSUInteger frameLength = converted.frameLength;
+
+            // Copy to FlutterStandardTypedData (Float32)
+            NSData *pcmData = [NSData dataWithBytes:channelData
+                                             length:frameLength * sizeof(float)];
+            FlutterStandardTypedData *typedData =
+                [FlutterStandardTypedData typedDataWithFloat32:pcmData];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (self->_eventSink) {
+                    self->_eventSink(typedData);
+                }
+            });
+        }
     }];
 
     NSError *error;
