@@ -165,3 +165,15 @@ export 'src/tool_template.dart' show ToolTemplate;
 export 'src/schema_validator.dart' show SchemaValidator, SchemaValidationResult;
 
 export 'src/gbnf_builder.dart' show GbnfBuilder;
+
+// Embeddings and confidence
+export 'src/types.dart' show
+    EmbeddingResult,
+    ConfidenceInfo,
+    EmbeddingException;
+
+// Vector index
+export 'src/vector_index.dart' show VectorIndex, SearchResult;
+
+// RAG pipeline
+export 'src/rag_pipeline.dart' show RagPipeline, RagConfig;
