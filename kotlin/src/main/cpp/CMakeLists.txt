@@ -32,7 +32,14 @@ add_library(edgeveda_jni SHARED ${JNI_SOURCES})
 # Include directories
 target_include_directories(edgeveda_jni PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../core/include
     ${ANDROID_NDK}/sources/android/native_app_glue
+)
+
+# Add library search path for Edge Veda core
+link_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../core/build
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../core/build/${ANDROID_ABI}
 )
 
 # Link libraries
@@ -40,11 +47,9 @@ target_link_libraries(edgeveda_jni
     ${log-lib}
     ${android-lib}
     ${VULKAN_LIB}
+    edge_veda
+    c++_shared
 )
-
-# TODO: Link against EdgeVeda core C++ library when available
-# This would typically link against libedgeveda_core.a or similar
-# target_link_libraries(edgeveda_jni edgeveda_core)
 
 # Export JNI symbols
 set_target_properties(edgeveda_jni PROPERTIES

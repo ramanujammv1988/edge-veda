@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class NativeBridge {
 
     private val disposed = AtomicBoolean(false)
+    private val streamCancelFlag = AtomicBoolean(false)
     private var nativeHandle: Long = 0L
 
     init {
@@ -95,9 +96,16 @@ internal class NativeBridge {
     ) {
         checkNotDisposed()
 
+        // Reset cancel flag before starting a new stream
+        streamCancelFlag.set(false)
+
         // Create a callback bridge that the native code can invoke
         val callbackBridge = object : StreamCallbackBridge {
             override fun onToken(token: String) {
+                // Check cancel flag before delivering token
+                if (streamCancelFlag.get()) {
+                    throw kotlinx.coroutines.CancellationException("Stream cancelled via cancelCurrentStream()")
+                }
                 // Note: We can't use suspend here directly with JNI
                 // In production, this would need a more sophisticated approach
                 // using coroutine contexts or channels
@@ -126,6 +134,17 @@ internal class NativeBridge {
     }
 
     /**
+     * Cancel the current streaming generation.
+     *
+     * Sets an atomic flag that is checked in the StreamCallbackBridge.onToken()
+     * callback. When the flag is set, the callback throws a CancellationException
+     * which aborts the native generation loop.
+     */
+    fun cancelCurrentStream() {
+        streamCancelFlag.set(true)
+    }
+
+    /**
      * Get current memory usage in bytes.
      */
     fun getMemoryUsage(): Long {
@@ -134,11 +153,62 @@ internal class NativeBridge {
     }
 
     /**
+     * Set memory pressure callback.
+     *
+     * @param callback Callback to invoke on memory pressure events (null to unregister)
+     * @return true if successful, false otherwise
+     */
+    fun setMemoryPressureCallback(callback: ((Long, Long) -> Unit)?): Boolean {
+        checkNotDisposed()
+        val callbackBridge = if (callback != null) {
+            object : MemoryPressureCallback {
+                override fun onMemoryPressure(currentBytes: Long, limitBytes: Long) {
+                    callback(currentBytes, limitBytes)
+                }
+            }
+        } else {
+            null
+        }
+        return nativeSetMemoryPressureCallback(nativeHandle, callbackBridge)
+    }
+
+    /**
      * Unload the model from memory.
      */
     fun unloadModel() {
         checkNotDisposed()
         nativeUnloadModel(nativeHandle)
+    }
+
+    /**
+     * Reset the conversation context while keeping the model loaded.
+     *
+     * @return true if successful, false otherwise
+     */
+    fun resetContext(): Boolean {
+        checkNotDisposed()
+        return nativeReset(nativeHandle)
+    }
+
+    /**
+     * Get model information including architecture, parameters, and metadata.
+     *
+     * @return Map of model information
+     * @throws EdgeVedaException.GenerationError if retrieval fails
+     */
+    fun getModelInfo(): Map<String, String> {
+        checkNotDisposed()
+        val infoArray = nativeGetModelInfo(nativeHandle)
+            ?: throw EdgeVedaException.GenerationError("Failed to retrieve model information")
+
+        // Convert array to map (assumes array contains key-value pairs)
+        val infoMap = mutableMapOf<String, String>()
+        var i = 0
+        while (i < infoArray.size - 1) {
+            infoMap[infoArray[i]] = infoArray[i + 1]
+            i += 2
+        }
+        return infoMap
     }
 
     /**
@@ -211,10 +281,80 @@ internal class NativeBridge {
 
     private external fun nativeDispose(handle: Long)
 
+    // Context Management
+    private external fun nativeIsValid(handle: Long): Boolean
+
+    private external fun nativeReset(handle: Long): Boolean
+
+    // Memory Management
+    private external fun nativeSetMemoryLimit(handle: Long, limitBytes: Long): Boolean
+
+    private external fun nativeMemoryCleanup(handle: Long): Boolean
+
+    private external fun nativeSetMemoryPressureCallback(handle: Long, callback: MemoryPressureCallback?): Boolean
+
+    private external fun nativeGetMemoryStats(handle: Long): LongArray?
+
+    // Model Information
+    private external fun nativeGetModelInfo(handle: Long): Array<String>?
+
+    // Backend Detection (static methods)
+    private external fun nativeDetectBackend(): Int
+
+    private external fun nativeIsBackendAvailable(backend: Int): Boolean
+
+    private external fun nativeGetBackendName(backend: Int): String
+
+    // Utility Functions (static methods)
+    private external fun nativeGetVersion(): String
+
+    private external fun nativeSetVerbose(enable: Boolean)
+
+    // Stream Control
+    private external fun nativeCancelStream(streamHandle: Long)
+
+    // Vision API
+    private external fun nativeVisionCreate(): Long
+
+    private external fun nativeVisionInit(
+        handle: Long,
+        modelPath: String,
+        mmprojPath: String,
+        numThreads: Int,
+        contextSize: Int,
+        batchSize: Int,
+        memoryLimitBytes: Long,
+        gpuLayers: Int,
+        useMmap: Boolean
+    ): Boolean
+
+    private external fun nativeVisionDescribe(
+        handle: Long,
+        imageBytes: ByteArray,
+        width: Int,
+        height: Int,
+        prompt: String,
+        maxTokens: Int,
+        temperature: Float,
+        topP: Float,
+        topK: Int,
+        repeatPenalty: Float
+    ): String?
+
+    private external fun nativeVisionIsValid(handle: Long): Boolean
+
+    private external fun nativeVisionGetLastTimings(handle: Long): DoubleArray?
+
+    private external fun nativeVisionDispose(handle: Long)
+
     companion object {
         private const val LIBRARY_NAME = "edgeveda_jni"
         private val libraryLoaded = AtomicBoolean(false)
         private var libraryLoadError: Throwable? = null
+        
+        // Vision context singleton
+        private var visionHandle: Long = 0L
+        private val visionLock = Any()
 
         /**
          * Load the native library.
@@ -264,12 +404,222 @@ internal class NativeBridge {
         fun getLibraryLoadError(): Throwable? {
             return libraryLoadError
         }
+
+        /**
+         * Initialize vision context with VLM model.
+         *
+         * @param configJson JSON string with VisionConfig parameters
+         * @return Backend name (e.g., "Vulkan", "CPU")
+         * @throws EdgeVedaException if initialization fails
+         */
+        fun initVision(configJson: String): String {
+            synchronized(visionLock) {
+                ensureLibraryLoaded()
+                
+                // Free existing context if any
+                if (visionHandle != 0L) {
+                    nativeVisionDispose(visionHandle)
+                    visionHandle = 0L
+                }
+                
+                // Parse config JSON
+                val config = parseVisionConfig(configJson)
+                
+                // Create new context
+                visionHandle = nativeVisionCreate()
+                if (visionHandle == 0L) {
+                    throw EdgeVedaException.NativeLibraryError("Failed to create vision context")
+                }
+                
+                // Initialize vision model
+                val success = nativeVisionInit(
+                    visionHandle,
+                    config.modelPath,
+                    config.mmprojPath,
+                    config.numThreads,
+                    config.contextSize,
+                    config.batchSize,
+                    config.memoryLimitBytes,
+                    config.gpuLayers,
+                    config.useMmap
+                )
+                
+                if (!success) {
+                    nativeVisionDispose(visionHandle)
+                    visionHandle = 0L
+                    throw EdgeVedaException.ModelLoadError("Failed to initialize vision model")
+                }
+                
+                // Verify context is valid
+                if (!nativeVisionIsValid(visionHandle)) {
+                    nativeVisionDispose(visionHandle)
+                    visionHandle = 0L
+                    throw EdgeVedaException.ModelLoadError("Vision context validation failed")
+                }
+                
+                // Return backend name (hardcoded for now, could be queried from native)
+                return "Vulkan"
+            }
+        }
+
+        /**
+         * Describe an image using the vision model.
+         *
+         * @param base64Image Base64-encoded RGB888 image data
+         * @param width Image width in pixels
+         * @param height Image height in pixels
+         * @param prompt Text prompt for the model
+         * @param paramsJson JSON string with VisionGenerationParams
+         * @return JSON string with description and timings
+         * @throws EdgeVedaException if inference fails
+         */
+        fun describeImage(
+            base64Image: String,
+            width: Int,
+            height: Int,
+            prompt: String,
+            paramsJson: String
+        ): String {
+            synchronized(visionLock) {
+                ensureLibraryLoaded()
+                
+                if (visionHandle == 0L || !nativeVisionIsValid(visionHandle)) {
+                    throw EdgeVedaException.ModelLoadError("Vision context not initialized")
+                }
+                
+                // Parse params JSON
+                val params = parseVisionParams(paramsJson)
+                
+                // Decode Base64 to bytes
+                val imageBytes = android.util.Base64.decode(base64Image, android.util.Base64.NO_WRAP)
+                
+                // Perform vision inference
+                val description = nativeVisionDescribe(
+                    visionHandle,
+                    imageBytes,
+                    width,
+                    height,
+                    prompt,
+                    params.maxTokens,
+                    params.temperature,
+                    params.topP,
+                    params.topK,
+                    params.repeatPenalty
+                ) ?: throw EdgeVedaException.GenerationError("Vision inference returned null")
+                
+                // Get timings
+                val timings = nativeVisionGetLastTimings(visionHandle)
+                    ?: doubleArrayOf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+                
+                // Build result JSON
+                val result = org.json.JSONObject().apply {
+                    put("description", description)
+                    put("modelLoadMs", timings.getOrNull(0) ?: 0.0)
+                    put("imageEncodeMs", timings.getOrNull(1) ?: 0.0)
+                    put("promptEvalMs", timings.getOrNull(2) ?: 0.0)
+                    put("decodeMs", timings.getOrNull(3) ?: 0.0)
+                    put("promptTokens", timings.getOrNull(4)?.toInt() ?: 0)
+                    put("generatedTokens", timings.getOrNull(5)?.toInt() ?: 0)
+                }
+                
+                return result.toString()
+            }
+        }
+
+        /**
+         * Free vision context and release resources.
+         *
+         * @throws EdgeVedaException if cleanup fails
+         */
+        fun freeVision() {
+            synchronized(visionLock) {
+                if (visionHandle != 0L) {
+                    try {
+                        nativeVisionDispose(visionHandle)
+                    } finally {
+                        visionHandle = 0L
+                    }
+                }
+            }
+        }
+
+        /**
+         * Check if vision context is initialized.
+         */
+        fun isVisionInitialized(): Boolean {
+            synchronized(visionLock) {
+                return visionHandle != 0L && nativeVisionIsValid(visionHandle)
+            }
+        }
+
+        /**
+         * Parse vision config JSON string.
+         */
+        private fun parseVisionConfig(json: String): VisionConfigData {
+            val obj = org.json.JSONObject(json)
+            return VisionConfigData(
+                modelPath = obj.getString("modelPath"),
+                mmprojPath = obj.getString("mmprojPath"),
+                numThreads = obj.optInt("numThreads", 4),
+                contextSize = obj.optInt("contextSize", 2048),
+                batchSize = obj.optInt("batchSize", 512),
+                memoryLimitBytes = obj.optLong("memoryLimitBytes", 0L),
+                gpuLayers = obj.optInt("gpuLayers", -1),
+                useMmap = obj.optBoolean("useMmap", true)
+            )
+        }
+
+        /**
+         * Parse vision params JSON string.
+         */
+        private fun parseVisionParams(json: String): VisionParamsData {
+            val obj = org.json.JSONObject(json)
+            return VisionParamsData(
+                maxTokens = obj.optInt("maxTokens", 100),
+                temperature = obj.optDouble("temperature", 0.3).toFloat(),
+                topP = obj.optDouble("topP", 0.9).toFloat(),
+                topK = obj.optInt("topK", 40),
+                repeatPenalty = obj.optDouble("repeatPenalty", 1.1).toFloat()
+            )
+        }
     }
 }
+
+/**
+ * Internal data class for vision config parsing.
+ */
+private data class VisionConfigData(
+    val modelPath: String,
+    val mmprojPath: String,
+    val numThreads: Int,
+    val contextSize: Int,
+    val batchSize: Int,
+    val memoryLimitBytes: Long,
+    val gpuLayers: Int,
+    val useMmap: Boolean
+)
+
+/**
+ * Internal data class for vision params parsing.
+ */
+private data class VisionParamsData(
+    val maxTokens: Int,
+    val temperature: Float,
+    val topP: Float,
+    val topK: Int,
+    val repeatPenalty: Float
+)
 
 /**
  * Internal callback interface for streaming generation.
  */
 internal interface StreamCallbackBridge {
     fun onToken(token: String)
+}
+
+/**
+ * Internal callback interface for memory pressure events.
+ */
+internal interface MemoryPressureCallback {
+    fun onMemoryPressure(currentBytes: Long, limitBytes: Long)
 }

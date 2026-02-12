@@ -17,22 +17,9 @@ Pod::Spec.new do |s|
 
   # React Native dependencies
   s.dependency "React-Core"
-  s.dependency "React-RCTAppDelegate"
 
-  # New Architecture support
-  if ENV['RCT_NEW_ARCH_ENABLED'] == '1' then
-    s.compiler_flags = "-DRCT_NEW_ARCH_ENABLED=1"
-    s.pod_target_xcconfig = {
-      "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
-      "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
-    }
-
-    s.dependency "React-Codegen"
-    s.dependency "RCT-Folly"
-    s.dependency "RCTRequired"
-    s.dependency "RCTTypeSafety"
-    s.dependency "ReactCommon/turbomodule/core"
-  end
+  # Install all dependencies for New Architecture, but only use them when enabled
+  install_modules_dependencies(s)
 
   # TODO: Add Edge Veda Core iOS framework dependency
   # s.dependency "EdgeVedaCore", "~> 0.1.0"

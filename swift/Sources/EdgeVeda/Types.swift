@@ -25,6 +25,21 @@ public enum EdgeVedaError: LocalizedError, Sendable {
     /// Backend not supported on this device
     case unsupportedBackend(Backend)
 
+    /// Context overflow - prompt exceeds context window
+    case contextOverflow
+
+    /// Operation was cancelled
+    case cancellation
+
+    /// Vision processing error
+    case visionError(reason: String)
+
+    /// Error during model unloading
+    case unloadError(reason: String)
+
+    /// Invalid configuration
+    case invalidConfig(reason: String)
+
     /// FFI/C interop error
     case ffiError(message: String)
 
@@ -54,6 +69,21 @@ public enum EdgeVedaError: LocalizedError, Sendable {
         case .unsupportedBackend(let backend):
             return "Backend '\(backend.rawValue)' is not supported on this device."
 
+        case .contextOverflow:
+            return "Context overflow: prompt exceeds the model's context window size."
+
+        case .cancellation:
+            return "Operation was cancelled."
+
+        case .visionError(let reason):
+            return "Vision processing error: \(reason)"
+
+        case .unloadError(let reason):
+            return "Failed to unload model: \(reason)"
+
+        case .invalidConfig(let reason):
+            return "Invalid configuration: \(reason)"
+
         case .ffiError(let message):
             return "FFI error: \(message)"
 
@@ -78,6 +108,21 @@ public enum EdgeVedaError: LocalizedError, Sendable {
 
         case .unsupportedBackend(let backend) where backend == .metal:
             return "Metal is only available on Apple Silicon devices. Use .cpu backend instead."
+
+        case .contextOverflow:
+            return "Reduce the prompt length or increase contextSize in configuration."
+
+        case .cancellation:
+            return nil
+
+        case .visionError:
+            return "Ensure the image data is valid and the vision model is loaded."
+
+        case .unloadError:
+            return "Try calling unloadModel() again or force-terminate the engine."
+
+        case .invalidConfig:
+            return "Review the EdgeVedaConfig values and ensure all parameters are within valid ranges."
 
         default:
             return nil

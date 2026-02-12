@@ -14,6 +14,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+        
+        // Generate BuildConfig with version
+        buildConfigField("String", "VERSION_NAME", "\"1.2.0\"")
 
         externalNativeBuild {
             cmake {
@@ -28,6 +31,10 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -105,7 +112,7 @@ publishing {
         create<MavenPublication>("release") {
             groupId = "com.edgeveda"
             artifactId = "sdk"
-            version = "1.0.0"
+            version = "1.2.0"
 
             afterEvaluate {
                 from(components["release"])

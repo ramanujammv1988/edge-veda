@@ -12,14 +12,6 @@ public enum Backend: String, Sendable {
 
     /// Auto-detect best available backend
     case auto = "Auto"
-
-    internal var cValue: Int32 {
-        switch self {
-        case .cpu: return 0
-        case .metal: return 1
-        case .auto: return 2
-        }
-    }
 }
 
 // MARK: - EdgeVeda Configuration
