@@ -18,6 +18,10 @@
 #include <mutex>
 #include <chrono>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #ifdef EDGE_VEDA_WHISPER_ENABLED
 #include "whisper.h"
 #endif
@@ -101,6 +105,12 @@ ev_whisper_context ev_whisper_init(
     // Configure whisper context parameters
     struct whisper_context_params cparams = whisper_context_default_params();
     cparams.use_gpu = config->use_gpu;
+
+    // iOS Simulator: force CPU-only.  whisper.cpp's ggml-metal calls
+    // MTLSimDevice which triggers _xpc_api_misuse SIGTRAP.
+#if TARGET_OS_SIMULATOR
+    cparams.use_gpu = false;
+#endif
 
     // Load the whisper model
     ctx->wctx = whisper_init_from_file_with_params(
