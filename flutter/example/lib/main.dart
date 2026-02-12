@@ -9,6 +9,7 @@ import 'package:edge_veda/edge_veda.dart';
 import 'app_theme.dart';
 import 'model_selection_modal.dart';
 import 'settings_screen.dart';
+import 'stt_screen.dart';
 import 'vision_screen.dart';
 import 'welcome_screen.dart';
 
@@ -45,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = const [
     ChatScreen(),
     VisionScreen(),
+    SttScreen(),
     SettingsScreen(),
   ];
 
@@ -77,6 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.camera_alt_outlined),
             selectedIcon: Icon(Icons.camera_alt),
             label: 'Vision',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mic_none),
+            selectedIcon: Icon(Icons.mic),
+            label: 'STT',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

@@ -30,6 +30,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed for real-time vision inference</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Veda needs microphone access for on-device speech-to-text transcription. Audio is processed entirely on your device and never sent to any server.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
