@@ -479,6 +479,7 @@ void ev_generation_params_default(ev_generation_params* params) {
     params->num_stop_sequences = 0;
     params->grammar_str = nullptr;
     params->grammar_root = nullptr;
+    params->confidence_threshold = 0.0f;
     params->reserved = nullptr;
 }
 

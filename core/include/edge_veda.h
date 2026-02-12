@@ -225,6 +225,9 @@ typedef struct {
     /** Grammar root rule name (NULL = "root") */
     const char* grammar_root;
 
+    /** Confidence threshold for cloud handoff (0.0 = disabled, >0.0 = enable confidence tracking) */
+    float confidence_threshold;
+
     /** Reserved for future use - must be NULL */
     void* reserved;
 } ev_generation_params;
@@ -622,6 +625,74 @@ typedef struct {
 EV_API ev_error_t ev_vision_get_last_timings(
     ev_vision_context ctx,
     ev_timings_data* timings
+);
+
+/* ============================================================================
+ * Embeddings API
+ * ========================================================================= */
+
+/**
+ * @brief Result of text embedding operation
+ */
+typedef struct {
+    float* embeddings;    /**< Embedding vector (caller must free with ev_free_embeddings()) */
+    int dimensions;       /**< Number of dimensions (n_embd) */
+    int token_count;      /**< Number of tokens in input text */
+} ev_embed_result;
+
+/**
+ * @brief Compute text embeddings
+ *
+ * Generates an embedding vector for the input text using the loaded model.
+ * The caller must free the result with ev_free_embeddings().
+ *
+ * @param ctx Context handle
+ * @param text Input text to embed
+ * @param result Pointer to result structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_embed(
+    ev_context ctx,
+    const char* text,
+    ev_embed_result* result
+);
+
+/**
+ * @brief Free embedding result
+ *
+ * Frees the embeddings array allocated by ev_embed().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_free_embeddings(ev_embed_result* result);
+
+/* ============================================================================
+ * Streaming Token Info (confidence scoring)
+ * ========================================================================= */
+
+/**
+ * @brief Extended token information from streaming generation
+ */
+typedef struct {
+    float confidence;        /**< Token confidence score (0.0-1.0), -1.0 if not computed */
+    float avg_confidence;    /**< Running average confidence across all tokens */
+    bool needs_cloud_handoff; /**< True when avg confidence drops below threshold */
+    int token_index;         /**< Token position in generated sequence */
+} ev_stream_token_info;
+
+/**
+ * @brief Get extended token information from current stream position
+ *
+ * Returns confidence scoring and cloud handoff information for the
+ * most recently generated token in the stream.
+ *
+ * @param stream Stream handle
+ * @param info Pointer to info structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_stream_get_token_info(
+    ev_stream stream,
+    ev_stream_token_info* info
 );
 
 /* ============================================================================
