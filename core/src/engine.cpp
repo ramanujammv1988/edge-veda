@@ -9,6 +9,7 @@
 #include "edge_veda.h"
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -99,6 +100,12 @@ struct ev_stream_impl {
     int n_cur = 0;                           // Current position in generation
     bool prompt_evaluated = false;           // Whether prompt has been processed
 #endif
+
+    // Confidence tracking
+    float last_confidence = -1.0f;      // Last token's confidence (-1 = not computed)
+    double confidence_sum = 0.0;         // Running sum for average
+    int confidence_count = 0;            // Number of confidence measurements
+    bool needs_handoff = false;          // Cloud handoff signal
 
     std::mutex mutex;
 
@@ -725,6 +732,45 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
         return nullptr;
     }
 
+    // Compute confidence score (only when threshold > 0)
+    if (stream->params.confidence_threshold > 0.0f) {
+        const float* logits = llama_get_logits_ith(ctx->llama_ctx, -1);
+        const llama_vocab* vocab_for_conf = llama_model_get_vocab(ctx->model);
+        int n_vocab = llama_vocab_n_tokens(vocab_for_conf);
+
+        // Softmax with numerical stability
+        float max_val = -1e30f;
+        for (int i = 0; i < n_vocab; i++) {
+            if (logits[i] > max_val) max_val = logits[i];
+        }
+
+        double sum_exp = 0.0;
+        for (int i = 0; i < n_vocab; i++) {
+            sum_exp += exp((double)(logits[i] - max_val));
+        }
+
+        // Shannon entropy: H = -sum(p * log(p))
+        double entropy = 0.0;
+        for (int i = 0; i < n_vocab; i++) {
+            double p = exp((double)(logits[i] - max_val)) / sum_exp;
+            if (p > 1e-10) entropy -= p * log(p);
+        }
+
+        // Normalize to [0, 1] and invert: 1.0 = certain, 0.0 = uniform
+        double max_entropy = log((double)n_vocab);
+        stream->last_confidence = (float)(1.0 - entropy / max_entropy);
+
+        // Update running average
+        stream->confidence_sum += stream->last_confidence;
+        stream->confidence_count++;
+        float avg = (float)(stream->confidence_sum / stream->confidence_count);
+
+        // Check handoff threshold
+        if (avg < stream->params.confidence_threshold && stream->confidence_count >= 3) {
+            stream->needs_handoff = true;
+        }
+    }
+
     // Convert token to text
     char buf[256];
     int n = llama_token_to_piece(vocab, new_token, buf, sizeof(buf), 0, true);
@@ -787,6 +833,25 @@ void ev_stream_free(ev_stream stream) {
     if (!stream) return;
     // Destructor handles sampler cleanup
     delete stream;
+}
+
+/* ============================================================================
+ * Streaming Token Info (confidence scoring)
+ * ========================================================================= */
+
+ev_error_t ev_stream_get_token_info(ev_stream stream, ev_stream_token_info* info) {
+    if (!stream || !info) return EV_ERROR_INVALID_PARAM;
+
+    std::lock_guard<std::mutex> lock(stream->mutex);
+
+    info->confidence = stream->last_confidence;
+    info->avg_confidence = stream->confidence_count > 0
+        ? (float)(stream->confidence_sum / stream->confidence_count)
+        : -1.0f;
+    info->needs_cloud_handoff = stream->needs_handoff;
+    info->token_index = stream->confidence_count;
+
+    return EV_SUCCESS;
 }
 
 /* ============================================================================
@@ -884,6 +949,131 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
     memory_guard_cleanup();
 
     return EV_SUCCESS;
+}
+
+/* ============================================================================
+ * Embeddings API
+ * ========================================================================= */
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+ev_error_t ev_embed(
+    ev_context ctx,
+    const char* text,
+    ev_embed_result* result
+) {
+    // Validate parameters
+    if (!ctx || !text || !result) {
+        return EV_ERROR_INVALID_PARAM;
+    }
+
+    if (!ctx->model) {
+        return EV_ERROR_CONTEXT_INVALID;
+    }
+
+    // Zero-initialize result
+    std::memset(result, 0, sizeof(ev_embed_result));
+
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+
+    // Create a SEPARATE embedding context
+    llama_context_params emb_params = llama_context_default_params();
+    emb_params.embeddings = true;
+    emb_params.n_ctx = 512;
+    emb_params.n_batch = 512;
+    emb_params.n_threads = ctx->config.num_threads > 0
+        ? static_cast<uint32_t>(ctx->config.num_threads) : 4;
+    emb_params.n_threads_batch = emb_params.n_threads;
+    emb_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+
+    llama_context* emb_ctx = llama_init_from_model(ctx->model, emb_params);
+    if (!emb_ctx) {
+        ctx->last_error = "Failed to create embedding context";
+        return EV_ERROR_BACKEND_INIT_FAILED;
+    }
+
+    // Enable embedding mode and non-causal attention for bidirectional encoding
+    llama_set_embeddings(emb_ctx, true);
+    llama_set_causal_attn(emb_ctx, false);
+
+    // Clear KV cache
+    llama_memory_clear(llama_get_memory(emb_ctx), true);
+
+    // Tokenize input text
+    std::vector<llama_token> tokens = tokenize_prompt(ctx->model, text, true);
+    if (tokens.empty()) {
+        ctx->last_error = "Failed to tokenize text for embedding";
+        llama_free(emb_ctx);
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Create batch and decode
+    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
+    if (llama_decode(emb_ctx, batch) != 0) {
+        ctx->last_error = "Failed to decode for embedding";
+        llama_free(emb_ctx);
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Get pooled embeddings
+    const float* emb = llama_get_embeddings_seq(emb_ctx, 0);
+    if (!emb) {
+        // Fallback: try last token embeddings
+        emb = llama_get_embeddings_ith(emb_ctx, -1);
+    }
+    if (!emb) {
+        ctx->last_error = "Failed to retrieve embeddings";
+        llama_free(emb_ctx);
+        return EV_ERROR_INFERENCE_FAILED;
+    }
+
+    // Get embedding dimension
+    int n_embd = llama_model_n_embd(ctx->model);
+
+    // Allocate result buffer
+    result->embeddings = (float*)malloc(sizeof(float) * n_embd);
+    if (!result->embeddings) {
+        llama_free(emb_ctx);
+        return EV_ERROR_OUT_OF_MEMORY;
+    }
+
+    // L2-normalize into result buffer
+    double sum_sq = 0.0;
+    for (int i = 0; i < n_embd; i++) {
+        sum_sq += (double)emb[i] * (double)emb[i];
+    }
+    float norm = (sum_sq > 0.0) ? (float)(1.0 / sqrt(sum_sq)) : 0.0f;
+    for (int i = 0; i < n_embd; i++) {
+        result->embeddings[i] = emb[i] * norm;
+    }
+
+    result->dimensions = n_embd;
+    result->token_count = static_cast<int>(tokens.size());
+
+    // Free embedding context
+    llama_free(emb_ctx);
+
+    return EV_SUCCESS;
+}
+#else
+ev_error_t ev_embed(
+    ev_context ctx,
+    const char* text,
+    ev_embed_result* result
+) {
+    (void)ctx;
+    (void)text;
+    if (result) std::memset(result, 0, sizeof(ev_embed_result));
+    return EV_ERROR_NOT_IMPLEMENTED;
+}
+#endif
+
+void ev_free_embeddings(ev_embed_result* result) {
+    if (result && result->embeddings) {
+        free(result->embeddings);
+        result->embeddings = nullptr;
+        result->dimensions = 0;
+        result->token_count = 0;
+    }
 }
 
 /* ============================================================================
