@@ -70,6 +70,12 @@ class WhisperSession {
   static const int _chunkSizeSamples =
       _sampleRate * _chunkSizeMs ~/ 1000; // 48000 samples
 
+  // Guard against re-entrant _processChunk calls.
+  // Only one transcription can be in-flight at a time because
+  // WhisperWorker.transcribeChunk uses a broadcast stream pattern
+  // that races when multiple callers listen concurrently.
+  bool _isProcessing = false;
+
   final StreamController<WhisperSegment> _segmentController =
       StreamController<WhisperSegment>.broadcast();
 
@@ -160,6 +166,9 @@ class WhisperSession {
     _isActive = true;
   }
 
+  // Counter for periodic feed logging
+  int _feedCount = 0;
+
   /// Feed raw PCM audio samples for transcription.
   ///
   /// Samples must be 16kHz mono float32 (values between -1.0 and 1.0).
@@ -171,9 +180,20 @@ class WhisperSession {
 
     // Accumulate samples
     _audioBuffer.addAll(samples);
+    _feedCount++;
 
-    // Process when we have enough for a chunk
-    if (_audioBuffer.length >= _chunkSizeSamples) {
+    // Log every ~1 second (every 3rd callback at ~300ms intervals)
+    if (_feedCount % 3 == 0) {
+      debugPrint('[WhisperSession] feedAudio #$_feedCount: '
+          '+${samples.length} samples, '
+          'buffer=${_audioBuffer.length}/$_chunkSizeSamples'
+          '${_isProcessing ? " (processing)" : ""}');
+    }
+
+    // Process when we have enough for a chunk.
+    // Skip if another _processChunk is already in-flight to avoid
+    // broadcast stream race condition in WhisperWorker.
+    if (_audioBuffer.length >= _chunkSizeSamples && !_isProcessing) {
       _processChunk();
     }
   }
@@ -181,9 +201,16 @@ class WhisperSession {
   /// Force transcription of any remaining buffered audio.
   ///
   /// Useful when recording stops and you want the last partial chunk.
+  /// Waits for any in-flight transcription to complete first.
   Future<void> flush() async {
     if (!_isActive || _audioBuffer.isEmpty) return;
-    await _processChunk();
+    // Wait for in-flight transcription to complete before flushing
+    while (_isProcessing) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (_audioBuffer.isNotEmpty) {
+      await _processChunk();
+    }
   }
 
   Future<void> _processChunk() async {
@@ -202,15 +229,20 @@ class WhisperSession {
       }
     }
 
+    _isProcessing = true;
+
     // Take up to chunkSizeSamples from buffer
     final chunkLen = _audioBuffer.length < _chunkSizeSamples
         ? _audioBuffer.length
         : _chunkSizeSamples;
-    final chunk = Float32List.fromList(
-        _audioBuffer.sublist(0, chunkLen).map((d) => d.toDouble()).toList());
+    final chunk = Float32List.fromList(_audioBuffer.sublist(0, chunkLen));
 
     // Remove processed samples from buffer
     _audioBuffer.removeRange(0, chunkLen);
+
+    debugPrint('[WhisperSession] Transcribing chunk: $chunkLen samples, '
+        '${(chunkLen / _sampleRate * 1000).round()}ms of audio, '
+        'buffer remaining: ${_audioBuffer.length}');
 
     try {
       final stopwatch = Stopwatch()..start();
@@ -219,6 +251,10 @@ class WhisperSession {
         language: language,
       );
       stopwatch.stop();
+
+      debugPrint('[WhisperSession] Transcription complete: '
+          '${response.segments.length} segments in '
+          '${stopwatch.elapsedMilliseconds}ms');
 
       // Report latency to Scheduler for p95 tracking
       scheduler?.reportLatency(
@@ -231,6 +267,13 @@ class WhisperSession {
     } catch (e) {
       // Log but don't crash -- audio capture should continue
       debugPrint('[WhisperSession] Transcription error: $e');
+    } finally {
+      _isProcessing = false;
+
+      // If audio accumulated while we were processing, kick off next chunk.
+      if (_isActive && _audioBuffer.length >= _chunkSizeSamples) {
+        _processChunk();
+      }
     }
   }
 
@@ -240,14 +283,12 @@ class WhisperSession {
   /// [WorkloadId.stt] from the [Scheduler].
   Future<void> stop() async {
     if (!_isActive) return;
-    _isActive = false;
 
-    // Flush remaining audio
-    if (_audioBuffer.isNotEmpty && _worker != null) {
-      try {
-        await _processChunk();
-      } catch (_) {}
-    }
+    // Note: flush() should be called before stop() to process remaining
+    // audio. We set _isActive = false here which prevents further
+    // processing. The caller (stt_screen) calls flush() then stop().
+    _isActive = false;
+    _isProcessing = false;
 
     _audioBuffer.clear();
 

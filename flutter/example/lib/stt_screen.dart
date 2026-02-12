@@ -366,12 +366,52 @@ class _SttScreenState extends State<SttScreen>
         Expanded(
           child: _segments.isEmpty && !_isRecording
               ? _buildEmptyTranscript()
-              : _buildSegmentList(),
+              : _segments.isEmpty && _isRecording
+                  ? _buildListeningIndicator()
+                  : _buildSegmentList(),
         ),
 
         // Recording controls
         _buildControls(),
       ],
+    );
+  }
+
+  /// Listening indicator shown during recording before first segment arrives
+  Widget _buildListeningIndicator() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (_, __) => Opacity(
+              opacity: 0.3 + 0.4 * _pulseController.value,
+              child: const Icon(
+                Icons.hearing,
+                size: 48,
+                color: AppTheme.accent,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Listening...',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Transcription will appear shortly',
+            style: TextStyle(
+              color: AppTheme.textTertiary,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
