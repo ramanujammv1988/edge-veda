@@ -189,17 +189,14 @@ class RagPipeline {
     final context = contextParts.join('\n\n');
 
     // Log retrieval metrics
-    print('[RAG-METRICS] Query Embedding: ${embedSw.elapsedMilliseconds}ms');
-    print('[RAG-METRICS] Vector Search: ${searchSw.elapsedMilliseconds}ms '
-        '(${results.length} raw results, ${matchedDocs.length} after filter)');
-    for (int i = 0; i < results.length; i++) {
-      print('[RAG-METRICS]   #${i + 1} ${results[i].id} '
-          'score=${results[i].score.toStringAsFixed(4)}');
+    print('[RAG-RETRIEVAL] Query Embed: ${embedSw.elapsedMilliseconds}ms | '
+        'Search: ${searchSw.elapsedMilliseconds}ms | '
+        '${matchedDocs.length}/${results.length} hits | '
+        'Context: ${contextParts.length} chunks, ${context.length} chars');
+    for (int i = 0; i < matchedDocs.length; i++) {
+      print('[RAG-RETRIEVAL]   #${i + 1} ${matchedDocs[i].id} '
+          'sim=${matchedDocs[i].score.toStringAsFixed(3)}');
     }
-    print('[RAG-METRICS] Context: ${contextParts.length} chunks, '
-        '${context.length} chars injected');
-    print('[RAG-METRICS] Retrieval Total: '
-        '${embedSw.elapsedMilliseconds + searchSw.elapsedMilliseconds}ms');
 
     // Step 4: Build augmented prompt
     final augmentedPrompt = config.promptTemplate

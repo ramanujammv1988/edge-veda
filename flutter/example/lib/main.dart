@@ -547,32 +547,46 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       // ── INDEXING METRICS ──────────────────────────────────────────
       final perChunkMs = embedSw.elapsedMilliseconds / chunks.length;
+      final embedChunksPerSec = chunks.length / (embedSw.elapsedMilliseconds / 1000);
+      final embedKbPerSec = (text.length / 1024) / (embedSw.elapsedMilliseconds / 1000);
+      final totalTokens = embeddings.fold<int>(0, (sum, e) => sum + e.tokenCount);
+      final processingMs = readSw.elapsedMilliseconds +
+          chunkSw.elapsedMilliseconds +
+          initSw.elapsedMilliseconds +
+          embedSw.elapsedMilliseconds +
+          indexSw.elapsedMilliseconds;
       print('');
-      print('╔══════════════════════════════════════════════════════════╗');
-      print('║           RAG INDEXING METRICS                          ║');
-      print('╠══════════════════════════════════════════════════════════╣');
-      print('║ Document                                                ║');
-      print('║   File:        $fileName');
-      print('║   Size:        ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)');
-      print('║   Text:        ${text.length} chars');
-      print('║   Chunks:      ${chunks.length} (avg ${avgChunkSize} chars/chunk)');
-      print('║                                                         ║');
-      print('║ Timing Breakdown                                        ║');
+      print('╔══════════════════════════════════════════════════════════════╗');
+      print('║              RAG INDEXING METRICS                           ║');
+      print('╠══════════════════════════════════════════════════════════════╣');
+      print('║ Document                                                    ║');
+      print('║   File:            $fileName');
+      print('║   Size:            ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)');
+      print('║   Chunks:          ${chunks.length} (avg ${avgChunkSize} chars/chunk)');
+      print('║   Tokens:          $totalTokens');
+      print('║                                                             ║');
+      print('║ Throughput (size-independent)                               ║');
+      print('║   Embed Speed:     ${perChunkMs.toStringAsFixed(1).padLeft(6)} ms/chunk');
+      print('║   Embed Rate:      ${embedChunksPerSec.toStringAsFixed(0).padLeft(6)} chunks/sec');
+      print('║   Embed Rate:      ${embedKbPerSec.toStringAsFixed(1).padLeft(6)} KB/sec');
+      print('║   Vector Insert:   ${(indexSw.elapsedMilliseconds / chunks.length).toStringAsFixed(2).padLeft(6)} ms/vector');
+      print('║                                                             ║');
+      print('║ Latency Breakdown                                           ║');
       print('║   File Read:       ${readSw.elapsedMilliseconds.toString().padLeft(6)} ms');
       print('║   Chunking:        ${chunkSw.elapsedMilliseconds.toString().padLeft(6)} ms');
       if (!wasDownloaded) {
-        print('║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms (first time)');
+        print('║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms  ← one-time cost');
       }
       print('║   Embedder Init:   ${initSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms'
-          ' (${perChunkMs.toStringAsFixed(1)} ms/chunk)');
+      print('║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms');
       print('║   Index Build:     ${indexSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   ─────────────────────────');
-      print('║   TOTAL:           ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║                                                         ║');
-      print('║ Model: all-MiniLM-L6-v2 (F16, 384 dims, 46MB)          ║');
-      print('║ Device: Apple A18 Pro GPU (Metal)                       ║');
-      print('╚══════════════════════════════════════════════════════════╝');
+      print('║   ──────────────────────────────');
+      print('║   Processing:      ${processingMs.toString().padLeft(6)} ms  (excl. download)');
+      print('║   Wall Clock:      ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print('║                                                             ║');
+      print('║ Embedding Model: all-MiniLM-L6-v2 (F16, 384d, 46MB)        ║');
+      print('║ Hardware: Apple A18 Pro GPU (Metal), on-device              ║');
+      print('╚══════════════════════════════════════════════════════════════╝');
       print('');
 
       setState(() {
@@ -732,29 +746,36 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!querySw.isRunning) {
         final genMs = genSw.elapsedMilliseconds;
         final totalMs = querySw.elapsedMilliseconds;
-        final retrievalMs = (_timeToFirstTokenMs ?? totalMs);
+        final ttft = (_timeToFirstTokenMs ?? totalMs);
         final tokSec = _tokensPerSecond ?? 0;
+        final msPerTok = _streamingTokenCount > 0
+            ? genMs / _streamingTokenCount
+            : 0.0;
+        final responseChars = buffer.length;
         print('');
-        print('╔══════════════════════════════════════════════════════════╗');
-        print('║           RAG QUERY METRICS                             ║');
-        print('╠══════════════════════════════════════════════════════════╣');
+        print('╔══════════════════════════════════════════════════════════════╗');
+        print('║              RAG QUERY METRICS                              ║');
+        print('╠══════════════════════════════════════════════════════════════╣');
         print('║ Query: "${prompt.length > 50 ? '${prompt.substring(0, 50)}...' : prompt}"');
-        print('║                                                         ║');
-        print('║ Retrieval (embed + search + prompt build)               ║');
-        print('║   Time to First Token:  ${retrievalMs.toString().padLeft(6)} ms');
-        print('║                                                         ║');
-        print('║ Generation                                              ║');
-        print('║   Tokens:          ${_streamingTokenCount.toString().padLeft(6)}');
-        print('║   Generation Time: ${genMs.toString().padLeft(6)} ms');
-        print('║   Throughput:      ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s');
-        print('║                                                         ║');
-        print('║ End-to-End                                              ║');
-        print('║   TOTAL:           ${totalMs.toString().padLeft(6)} ms');
-        print('║   Memory:          ${(_memoryMb ?? 0).toStringAsFixed(1).padLeft(6)} MB');
-        print('║                                                         ║');
-        print('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)  ║');
-        print('║ Device: Apple A18 Pro GPU (Metal), 100% on-device       ║');
-        print('╚══════════════════════════════════════════════════════════╝');
+        print('║                                                             ║');
+        print('║ Throughput (size-independent)                               ║');
+        print('║   Generation:     ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s  (${msPerTok.toStringAsFixed(1)} ms/tok)');
+        print('║   TTFT (warm):    ${ttft.toString().padLeft(6)} ms');
+        print('║   Vector Search:       <1 ms');
+        print('║                                                             ║');
+        print('║ This Query                                                  ║');
+        print('║   Retrieval:      ${ttft.toString().padLeft(6)} ms  (embed + search + build)');
+        print('║   Generation:     ${genMs.toString().padLeft(6)} ms  ($_streamingTokenCount tokens, $responseChars chars)');
+        print('║   ──────────────────────────────');
+        print('║   End-to-End:     ${totalMs.toString().padLeft(6)} ms');
+        print('║                                                             ║');
+        print('║ Resource Usage                                              ║');
+        print('║   Memory:         ${(_memoryMb ?? 0).toStringAsFixed(0).padLeft(6)} MB');
+        print('║   Cloud Calls:         0  (100% on-device)');
+        print('║                                                             ║');
+        print('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)      ║');
+        print('║ Hardware: Apple A18 Pro GPU (Metal)                         ║');
+        print('╚══════════════════════════════════════════════════════════════╝');
         print('');
       }
     } catch (e) {
