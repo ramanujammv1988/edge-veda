@@ -144,6 +144,18 @@ typedef struct {
     /** Seed for random number generation (-1 = random) */
     int seed;
 
+    /** Flash attention type: -1=auto, 0=disabled, 1=enabled (default: -1)
+     *  Maps to llama_flash_attn_type enum in llama.h */
+    int flash_attn;
+
+    /** KV cache data type for keys: 1=F16(default), 8=Q8_0
+     *  Maps to ggml_type enum. Q8_0 halves KV cache memory. */
+    int kv_cache_type_k;
+
+    /** KV cache data type for values: 1=F16(default), 8=Q8_0
+     *  Maps to ggml_type enum. Q8_0 halves KV cache memory. */
+    int kv_cache_type_v;
+
     /** Reserved for future use - must be NULL */
     void* reserved;
 } ev_config;

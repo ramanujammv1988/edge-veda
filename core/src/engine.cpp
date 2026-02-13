@@ -255,6 +255,9 @@ void ev_config_default(ev_config* config) {
     config->use_mmap = true;
     config->use_mlock = false;
     config->seed = -1; // Random
+    config->flash_attn = -1; // AUTO (Metal enables automatically)
+    config->kv_cache_type_k = 1; // F16 (llama.cpp default -- Dart side overrides to Q8_0)
+    config->kv_cache_type_v = 1; // F16 (llama.cpp default -- Dart side overrides to Q8_0)
     config->reserved = nullptr;
 }
 
@@ -318,6 +321,19 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     ctx_params.n_batch = config->batch_size > 0 ? static_cast<uint32_t>(config->batch_size) : 512;
     ctx_params.n_threads = config->num_threads > 0 ? static_cast<uint32_t>(config->num_threads) : 4;
     ctx_params.n_threads_batch = ctx_params.n_threads;
+
+    // KV cache quantization (Q8_0 halves KV cache memory vs F16 default)
+    if (config->kv_cache_type_k > 0) {
+        ctx_params.type_k = static_cast<ggml_type>(config->kv_cache_type_k);
+    }
+    if (config->kv_cache_type_v > 0) {
+        ctx_params.type_v = static_cast<ggml_type>(config->kv_cache_type_v);
+    }
+
+    // Flash attention (AUTO lets llama.cpp enable when backend supports it)
+    if (config->flash_attn != 0) {
+        ctx_params.flash_attn_type = static_cast<llama_flash_attn_type>(config->flash_attn);
+    }
 
     // Create llama context (using new API: llama_init_from_model)
     ctx->llama_ctx = llama_init_from_model(ctx->model, ctx_params);
