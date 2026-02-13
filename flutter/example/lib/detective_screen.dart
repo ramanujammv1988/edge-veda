@@ -478,6 +478,29 @@ enum _DetectiveState {
 /// 45-second pipeline timeout.
 const _pipelineTimeout = Duration(seconds: 45);
 
+/// JSON schema for DetectiveReport — used with GBNF grammar-constrained
+/// generation to guarantee valid JSON from the LLM narration phase.
+const _detectiveReportSchema = {
+  'type': 'object',
+  'properties': {
+    'headline': {'type': 'string'},
+    'deductions': {
+      'type': 'array',
+      'items': {
+        'type': 'object',
+        'properties': {
+          'finding': {'type': 'string'},
+          'evidence': {'type': 'string'},
+        },
+        'required': ['finding', 'evidence'],
+      },
+    },
+    'surprising_fact': {'type': 'string'},
+    'privacy_statement': {'type': 'string'},
+  },
+  'required': ['headline', 'deductions', 'surprising_fact', 'privacy_statement'],
+};
+
 // ==============================================================================
 // DetectiveScreen Widget
 // ==============================================================================
@@ -493,7 +516,7 @@ const _pipelineTimeout = Duration(seconds: 45);
 /// 3. LLM narrates the pre-computed insights in noir detective style
 ///
 /// Hardened with:
-/// - 15-second pipeline timeout
+/// - 45-second pipeline timeout
 /// - LLM output self-checks (deduction count, number cross-reference)
 /// - <think> tag stripping for Qwen3 output
 /// - Fallback report from raw InsightCandidates
@@ -1113,6 +1136,8 @@ class _DetectiveScreenState extends State<DetectiveScreen>
 
   /// Phase 2: LLM narrates pre-computed insights in noir detective style.
   /// Uses a fresh ChatSession (no tools) for the narration.
+  /// Uses GBNF grammar-constrained generation (sendStructured) to guarantee
+  /// valid JSON output from the small on-device model.
   /// Includes /nothink to disable Qwen3 thinking mode.
   Future<DetectiveReport> _narrateInsights(
       List<InsightCandidate> insights) async {
@@ -1130,48 +1155,32 @@ Given the following computed deductions about a person's phone data, write a dra
 RULES:
 - You MUST use ONLY the provided deductions. Do not invent new findings.
 - Use the EXACT numbers from the evidence provided. Do not round, estimate, or fabricate any statistics.
-- Output ONLY valid JSON. Do not include markdown code fences, commentary, or any text before or after the JSON object.
+- Write exactly 3 deductions with dramatic findings and evidence using the exact numbers.
 
 DEDUCTIONS:
-$insightsJson
-
-Output ONLY this JSON (nothing else):
-{
-  "headline": "one catchy noir headline",
-  "deductions": [
-    {"finding": "dramatic finding 1", "evidence": "evidence from deduction 1 with exact numbers"},
-    {"finding": "dramatic finding 2", "evidence": "evidence from deduction 2 with exact numbers"},
-    {"finding": "dramatic finding 3", "evidence": "evidence from deduction 3 with exact numbers"}
-  ],
-  "surprising_fact": "one unexpected pattern observation using exact numbers",
-  "privacy_statement": "dramatic privacy punchline about everything being on-device"
-}''';
+$insightsJson''';
 
     final narrationSession = ChatSession(
       edgeVeda: _edgeVeda!,
       systemPrompt:
-          '/nothink\nYou are a spy thriller narrator. Write dramatic noir detective reports from provided data. Output ONLY valid JSON. Do not add commentary. Do not wrap in code fences. Use the exact numbers given to you.',
+          '/nothink\nYou are a spy thriller narrator. Write dramatic noir detective reports from provided data. Use the exact numbers given to you.',
       templateFormat: ChatTemplateFormat.qwen3,
       maxResponseTokens: 1024,
     );
 
-    final reply = await narrationSession.send(
+    // Use grammar-constrained generation to guarantee valid JSON structure
+    final parsed = await narrationSession.sendStructured(
       narrationPrompt,
+      schema: _detectiveReportSchema,
       options: const GenerateOptions(
-        maxTokens: 512,
-        temperature: 0.9,
-        topP: 0.95,
+        maxTokens: 768,
+        temperature: 0.7,
+        topP: 0.9,
       ),
     );
 
-    // Parse the JSON response
-    return _parseNarration(reply.content, insightsForNarration);
-  }
-
-  /// Strip Qwen3 <think>...</think> tags from LLM output.
-  static String _stripThinkTags(String text) {
-    // Remove <think>...</think> blocks (including multiline)
-    return text.replaceAll(RegExp(r'<think>[\s\S]*?</think>'), '').trim();
+    // Validate and build report from the guaranteed-valid JSON
+    return _buildReportFromParsed(parsed, insightsForNarration);
   }
 
   /// Extract all numbers from a string for cross-reference validation.
@@ -1179,139 +1188,117 @@ Output ONLY this JSON (nothing else):
     return RegExp(r'\d+\.?\d*').allMatches(text).map((m) => m.group(0)!).toSet();
   }
 
-  /// Parse LLM narration JSON into a DetectiveReport.
-  /// Falls back to constructing from raw InsightCandidates if JSON is invalid.
+  /// Build a DetectiveReport from grammar-constrained JSON output.
+  ///
+  /// The JSON structure is guaranteed valid by GBNF grammar, but we still
+  /// validate the *content* (fabrication detection, number cross-reference).
   ///
   /// Self-checks:
   /// 1. Deduction count is exactly 3 (pad from InsightCandidates or trim)
   /// 2. Each deduction evidence contains at least one number from original insights
   /// 3. No deduction references data fields not present in insight candidates
-  DetectiveReport _parseNarration(
-      String rawResponse, List<InsightCandidate> insights) {
-    try {
-      // Strip <think>...</think> tags from Qwen3 output
-      String cleaned = _stripThinkTags(rawResponse);
-
-      // Strip markdown code fences if present
-      cleaned = cleaned.replaceAll(RegExp(r'```json\s*'), '');
-      cleaned = cleaned.replaceAll(RegExp(r'```\s*'), '');
-      cleaned = cleaned.trim();
-
-      // Find the first { and last } for JSON extraction
-      final firstBrace = cleaned.indexOf('{');
-      final lastBrace = cleaned.lastIndexOf('}');
-      if (firstBrace < 0 || lastBrace <= firstBrace) {
-        debugPrint('Detective: No valid JSON braces found in LLM output');
-        return _fallbackReport(insights);
-      }
-      final jsonStr = cleaned.substring(firstBrace, lastBrace + 1);
-
-      final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
-
-      // Collect all numbers from original insight candidates for cross-reference
-      final insightNumbers = <String>{};
-      for (final insight in insights) {
-        insightNumbers.addAll(_extractNumbers(insight.evidence));
-      }
-
-      // Check insight types for field validation -- reject deductions referencing
-      // data fields that were not present in the computed insight candidates.
-      final hasLocationData =
-          insights.any((i) => i.evidence.contains('location') || i.evidence.contains('geotagged'));
-      final hasPhotoData =
-          insights.any((i) => i.type == 'photo_pattern' && !i.lowConfidence);
-      final hasCalendarData =
-          insights.any((i) => i.type == 'calendar_pattern' && !i.lowConfidence);
-
-      final deductionsList = parsed['deductions'] as List? ?? [];
-      final validatedDeductions = <Deduction>[];
-
-      for (final d in deductionsList.take(3)) {
-        final finding = (d['finding'] as String?) ?? '';
-        final evidence = (d['evidence'] as String?) ?? '';
-
-        // Self-check: reject deductions mentioning data fields not in insights
-        final findingLower = finding.toLowerCase();
-        final evidenceLower = evidence.toLowerCase();
-        if (!hasLocationData &&
-            (evidenceLower.contains('location') ||
-                evidenceLower.contains('places') ||
-                findingLower.contains('location'))) {
-          debugPrint(
-              'Detective: Rejected fabricated location deduction: $finding');
-          continue;
-        }
-        if (!hasPhotoData &&
-            (evidenceLower.contains('photo') ||
-                findingLower.contains('photo'))) {
-          debugPrint(
-              'Detective: Rejected fabricated photo deduction (no photo data): $finding');
-          continue;
-        }
-        if (!hasCalendarData &&
-            (evidenceLower.contains('meeting') ||
-                evidenceLower.contains('calendar') ||
-                evidenceLower.contains('event') ||
-                findingLower.contains('meeting') ||
-                findingLower.contains('calendar'))) {
-          debugPrint(
-              'Detective: Rejected fabricated calendar deduction (no calendar data): $finding');
-          continue;
-        }
-
-        // Self-check: evidence must contain at least one number from our insights
-        final evidenceNumbers = _extractNumbers(evidence);
-        final hasValidNumber =
-            evidenceNumbers.intersection(insightNumbers).isNotEmpty;
-
-        if (hasValidNumber) {
-          validatedDeductions.add(Deduction(
-            finding: finding.isNotEmpty ? finding : 'Finding',
-            evidence: evidence.isNotEmpty ? evidence : 'Evidence unavailable',
-          ));
-        } else {
-          debugPrint(
-              'Detective: Deduction evidence numbers $evidenceNumbers not found in insight numbers $insightNumbers -- replacing with raw insight');
-          // Replace with raw insight candidate at this position
-          final idx = validatedDeductions.length;
-          if (idx < insights.length) {
-            validatedDeductions.add(Deduction(
-              finding: insights[idx].headline,
-              evidence: insights[idx].evidence,
-            ));
-          }
-        }
-      }
-
-      // Pad to exactly 3 deductions from InsightCandidates
-      while (validatedDeductions.length < 3 &&
-          validatedDeductions.length < insights.length) {
-        final idx = validatedDeductions.length;
-        validatedDeductions.add(Deduction(
-          finding: insights[idx].headline,
-          evidence: insights[idx].evidence,
-        ));
-      }
-
-      // Trim to exactly 3
-      final finalDeductions = validatedDeductions.take(3).toList();
-
-      return DetectiveReport(
-        headline: (parsed['headline'] as String?) ?? 'Case File: Subject Analysis',
-        deductions: finalDeductions,
-        surprisingFact: (parsed['surprising_fact'] as String?) ??
-            insights
-                .where((i) => i.type == 'surprising')
-                .map((i) => i.headline)
-                .firstOrNull ??
-            'The subject remains unpredictable.',
-        privacyStatement: (parsed['privacy_statement'] as String?) ??
-            'Every byte of this analysis happened on your device. No data was uploaded, no servers were contacted.',
-      );
-    } catch (e) {
-      debugPrint('Detective: JSON parse failed, using fallback: $e');
-      return _fallbackReport(insights);
+  DetectiveReport _buildReportFromParsed(
+      Map<String, dynamic> parsed, List<InsightCandidate> insights) {
+    // Collect all numbers from original insight candidates for cross-reference
+    final insightNumbers = <String>{};
+    for (final insight in insights) {
+      insightNumbers.addAll(_extractNumbers(insight.evidence));
     }
+
+    // Check insight types for field validation -- reject deductions referencing
+    // data fields that were not present in the computed insight candidates.
+    final hasLocationData =
+        insights.any((i) => i.evidence.contains('location') || i.evidence.contains('geotagged'));
+    final hasPhotoData =
+        insights.any((i) => i.type == 'photo_pattern' && !i.lowConfidence);
+    final hasCalendarData =
+        insights.any((i) => i.type == 'calendar_pattern' && !i.lowConfidence);
+
+    final deductionsList = parsed['deductions'] as List? ?? [];
+    final validatedDeductions = <Deduction>[];
+
+    for (final d in deductionsList.take(3)) {
+      final finding = (d['finding'] as String?) ?? '';
+      final evidence = (d['evidence'] as String?) ?? '';
+
+      // Self-check: reject deductions mentioning data fields not in insights
+      final findingLower = finding.toLowerCase();
+      final evidenceLower = evidence.toLowerCase();
+      if (!hasLocationData &&
+          (evidenceLower.contains('location') ||
+              evidenceLower.contains('places') ||
+              findingLower.contains('location'))) {
+        debugPrint(
+            'Detective: Rejected fabricated location deduction: $finding');
+        continue;
+      }
+      if (!hasPhotoData &&
+          (evidenceLower.contains('photo') ||
+              findingLower.contains('photo'))) {
+        debugPrint(
+            'Detective: Rejected fabricated photo deduction (no photo data): $finding');
+        continue;
+      }
+      if (!hasCalendarData &&
+          (evidenceLower.contains('meeting') ||
+              evidenceLower.contains('calendar') ||
+              evidenceLower.contains('event') ||
+              findingLower.contains('meeting') ||
+              findingLower.contains('calendar'))) {
+        debugPrint(
+            'Detective: Rejected fabricated calendar deduction (no calendar data): $finding');
+        continue;
+      }
+
+      // Self-check: evidence must contain at least one number from our insights
+      final evidenceNumbers = _extractNumbers(evidence);
+      final hasValidNumber =
+          evidenceNumbers.intersection(insightNumbers).isNotEmpty;
+
+      if (hasValidNumber) {
+        validatedDeductions.add(Deduction(
+          finding: finding.isNotEmpty ? finding : 'Finding',
+          evidence: evidence.isNotEmpty ? evidence : 'Evidence unavailable',
+        ));
+      } else {
+        debugPrint(
+            'Detective: Deduction evidence numbers $evidenceNumbers not found in insight numbers $insightNumbers -- replacing with raw insight');
+        // Replace with raw insight candidate at this position
+        final idx = validatedDeductions.length;
+        if (idx < insights.length) {
+          validatedDeductions.add(Deduction(
+            finding: insights[idx].headline,
+            evidence: insights[idx].evidence,
+          ));
+        }
+      }
+    }
+
+    // Pad to exactly 3 deductions from InsightCandidates
+    while (validatedDeductions.length < 3 &&
+        validatedDeductions.length < insights.length) {
+      final idx = validatedDeductions.length;
+      validatedDeductions.add(Deduction(
+        finding: insights[idx].headline,
+        evidence: insights[idx].evidence,
+      ));
+    }
+
+    // Trim to exactly 3
+    final finalDeductions = validatedDeductions.take(3).toList();
+
+    return DetectiveReport(
+      headline: (parsed['headline'] as String?) ?? 'Case File: Subject Analysis',
+      deductions: finalDeductions,
+      surprisingFact: (parsed['surprising_fact'] as String?) ??
+          insights
+              .where((i) => i.type == 'surprising')
+              .map((i) => i.headline)
+              .firstOrNull ??
+          'The subject remains unpredictable.',
+      privacyStatement: (parsed['privacy_statement'] as String?) ??
+          'Every byte of this analysis happened on your device. No data was uploaded, no servers were contacted.',
+    );
   }
 
   String _dramaticHeadline(List<InsightCandidate> insights) {
