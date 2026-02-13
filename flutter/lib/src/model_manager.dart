@@ -476,6 +476,20 @@ class ModelRegistry {
     quantization: 'Q4_K_M',
   );
 
+  // === Tool Calling Models ===
+
+  /// Qwen3 0.6B (Q4_K_M) - Tool calling capable model
+  static final ModelInfo qwen3_06b = ModelInfo(
+    id: 'qwen3-0.6b-q4',
+    name: 'Qwen3 0.6B',
+    sizeBytes: 524 * 1024 * 1024, // ~524 MB Q4_K_M
+    description: 'Compact model with native tool calling support',
+    downloadUrl:
+        'https://huggingface.co/Mungert/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+  );
+
   // === Vision Language Models ===
 
   /// SmolVLM2-500M-Video-Instruct (Q8_0) - Vision Language Model
@@ -530,7 +544,7 @@ class ModelRegistry {
 
   /// Get all available text models
   static List<ModelInfo> getAllModels() {
-    return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama];
+    return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama, qwen3_06b];
   }
 
   /// Get all available vision models (model + mmproj pairs)
@@ -566,7 +580,7 @@ class ModelRegistry {
     sizeBytes: 46 * 1024 * 1024, // ~46 MB F16
     description: 'Lightweight sentence embedding model (384 dimensions)',
     downloadUrl:
-        'https://huggingface.co/Mungert/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2-F16.gguf',
+        'https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.F16.gguf',
     format: 'GGUF',
     quantization: 'F16',
   );
