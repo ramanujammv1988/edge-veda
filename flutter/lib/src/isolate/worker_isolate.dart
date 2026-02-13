@@ -21,6 +21,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 
 import '../ffi/bindings.dart';
+import '../types.dart' show MemoryStats;
 import 'worker_messages.dart';
 
 /// Worker isolate manager for streaming inference
@@ -192,6 +193,35 @@ class StreamingWorker {
     }
   }
 
+  /// Get memory stats from the active native context
+  ///
+  /// Returns memory usage statistics by querying the worker's
+  /// already-loaded context. No new model load occurs.
+  Future<MemoryStats> getMemoryStats() async {
+    _ensureActive();
+    final completer = Completer<MemoryStats>();
+
+    final subscription = responses.listen((response) {
+      if (response is MemoryStatsResponse) {
+        completer.complete(MemoryStats(
+          currentBytes: response.currentBytes,
+          peakBytes: response.peakBytes,
+          limitBytes: response.limitBytes,
+          modelBytes: response.modelBytes,
+          contextBytes: response.contextBytes,
+        ));
+      }
+    });
+
+    _commandPort!.send(GetMemoryStatsCommand());
+
+    try {
+      return await completer.future.timeout(const Duration(seconds: 5));
+    } finally {
+      await subscription.cancel();
+    }
+  }
+
   /// Cancel active stream
   void cancel() {
     if (!_isActive || _commandPort == null) return;
@@ -304,6 +334,15 @@ void _workerEntryPoint(SendPort mainSendPort) {
         currentStream = null;
       }
       responseSendPort.send(CancelledResponse());
+    } else if (message is GetMemoryStatsCommand) {
+      if (nativeContext == null || bindings == null) {
+        responseSendPort.send(MemoryStatsResponse(
+          currentBytes: 0, peakBytes: 0, limitBytes: 0,
+          modelBytes: 0, contextBytes: 0,
+        ));
+        return;
+      }
+      _handleGetMemoryStats(nativeContext!, bindings!, responseSendPort);
     } else if (message is DisposeWorkerCommand) {
       // Cleanup
       if (currentStream != null && bindings != null) {
@@ -447,5 +486,32 @@ void _handleNextToken(
     ));
   } finally {
     calloc.free(errorPtr);
+  }
+}
+
+void _handleGetMemoryStats(
+  ffi.Pointer<EvContextImpl> ctx,
+  EdgeVedaNativeBindings bindings,
+  SendPort responseSendPort,
+) {
+  final statsPtr = calloc<EvMemoryStats>();
+  try {
+    final result = bindings.evGetMemoryUsage(ctx, statsPtr);
+    if (result != 0) {
+      responseSendPort.send(MemoryStatsResponse(
+        currentBytes: 0, peakBytes: 0, limitBytes: 0,
+        modelBytes: 0, contextBytes: 0,
+      ));
+      return;
+    }
+    responseSendPort.send(MemoryStatsResponse(
+      currentBytes: statsPtr.ref.currentBytes,
+      peakBytes: statsPtr.ref.peakBytes,
+      limitBytes: statsPtr.ref.limitBytes,
+      modelBytes: statsPtr.ref.modelBytes,
+      contextBytes: statsPtr.ref.contextBytes,
+    ));
+  } finally {
+    calloc.free(statsPtr);
   }
 }

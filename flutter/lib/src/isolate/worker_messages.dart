@@ -74,6 +74,9 @@ class NextTokenCommand extends WorkerCommand {}
 /// Cancel active stream
 class CancelStreamCommand extends WorkerCommand {}
 
+/// Query memory stats from the active native context
+class GetMemoryStatsCommand extends WorkerCommand {}
+
 /// Dispose worker and free native resources
 class DisposeWorkerCommand extends WorkerCommand {}
 
@@ -151,6 +154,32 @@ class StreamErrorResponse extends WorkerResponse {
 
 /// Stream was cancelled
 class CancelledResponse extends WorkerResponse {}
+
+/// Memory stats from the native context
+class MemoryStatsResponse extends WorkerResponse {
+  /// Current total memory usage in bytes
+  final int currentBytes;
+
+  /// Peak memory usage in bytes
+  final int peakBytes;
+
+  /// Memory limit in bytes
+  final int limitBytes;
+
+  /// Memory used by the loaded model in bytes
+  final int modelBytes;
+
+  /// Memory used by inference context in bytes
+  final int contextBytes;
+
+  MemoryStatsResponse({
+    required this.currentBytes,
+    required this.peakBytes,
+    required this.limitBytes,
+    required this.modelBytes,
+    required this.contextBytes,
+  });
+}
 
 /// Worker disposed and ready to terminate
 class DisposedResponse extends WorkerResponse {}
