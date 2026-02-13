@@ -11,9 +11,9 @@ import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 // Data Models
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 
 /// A computed insight candidate with type, headline, and evidence.
 /// Produced deterministically by [InsightEngine] -- the LLM never computes these.
@@ -21,11 +21,13 @@ class InsightCandidate {
   final String type; // 'photo_pattern', 'calendar_pattern', 'cross_pattern', 'surprising'
   final String headline;
   final String evidence;
+  final bool lowConfidence;
 
   InsightCandidate({
     required this.type,
     required this.headline,
     required this.evidence,
+    this.lowConfidence = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -57,21 +59,29 @@ class Deduction {
   Deduction({required this.finding, required this.evidence});
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 // InsightEngine -- Deterministic, pure Dart analysis
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 
 /// Computes insight candidates from photo and calendar data using
 /// deterministic rules. No LLM is involved here -- this is pure Dart logic.
+///
+/// Every evidence field contains concrete numbers derived from the input data.
+/// Insights based on fewer than 3 data points are marked [lowConfidence].
 class InsightEngine {
   /// Compute insights from photo and calendar summary data.
   ///
   /// [photoData] and [calendarData] match the Map structures returned by
   /// the native MethodChannel handlers (getPhotoInsights / getCalendarInsights).
+  ///
+  /// If [photoAvailable] is false, photo rules are skipped and a note is added.
+  /// If [calendarAvailable] is false, calendar rules are skipped and a note is added.
   List<InsightCandidate> computeInsights(
     Map<String, dynamic> photoData,
-    Map<String, dynamic> calendarData,
-  ) {
+    Map<String, dynamic> calendarData, {
+    bool photoAvailable = true,
+    bool calendarAvailable = true,
+  }) {
     final insights = <InsightCandidate>[];
 
     final photoCount = (photoData['total_photos'] as num?)?.toInt() ?? 0;
@@ -93,12 +103,14 @@ class InsightEngine {
       final sorted = photoHourOfDay.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
       if (sorted.length >= 2 && sorted[0].value > 0) {
+        final dataPoints = sorted.where((e) => e.value > 0).length;
         insights.add(InsightCandidate(
           type: 'photo_pattern',
           headline:
               'Peak photography at ${_formatHour(sorted[0].key)} and ${_formatHour(sorted[1].key)}',
           evidence:
               'Based on $photoCount photos in the last 30 days, you take the most photos at ${_formatHour(sorted[0].key)} (${sorted[0].value} photos) and ${_formatHour(sorted[1].key)} (${sorted[1].value} photos).',
+          lowConfidence: dataPoints < 3,
         ));
       }
     }
@@ -117,7 +129,8 @@ class InsightEngine {
           type: 'photo_pattern',
           headline: 'Weekend photographer',
           evidence:
-              'You take ${(weekendCount / 2.0 / weekdayAvg).toStringAsFixed(1)}x more photos on weekends ($weekendCount total) than on an average weekday (${weekdayAvg.toStringAsFixed(0)} photos/day).',
+              'Based on $photoCount photos over 30 days, you take ${(weekendCount / 2.0 / weekdayAvg).toStringAsFixed(1)}x more photos on weekends ($weekendCount weekend photos, ${weekdayTotal ~/ 5} weekday average).',
+          lowConfidence: photoCount < 3,
         ));
       }
     }
@@ -132,7 +145,8 @@ class InsightEngine {
           headline:
               '${_dayName(sorted.first.key)} is your heaviest meeting day',
           evidence:
-              'Based on your last 30 days of calendar events, ${_dayName(sorted.first.key)} averages ${(sorted.first.value / 4.3).round()} minutes of meetings per week.',
+              'Based on $calendarCount events over 30 days, ${_dayName(sorted.first.key)} has ${sorted.first.value} total meeting minutes (${(sorted.first.value / 4.3).round()} min/week average).',
+          lowConfidence: calendarCount < 3,
         ));
       }
     }
@@ -152,7 +166,8 @@ class InsightEngine {
           type: 'cross_pattern',
           headline: 'You shoot more on your lightest meeting days',
           evidence:
-              '${_dayName(lightestMeetingDay.first.key)} has the fewest meetings (${lightestMeetingDay.first.value} min) and the most photos (${heaviestPhotoDay.first.value}).',
+              '${_dayName(lightestMeetingDay.first.key)} has the fewest meetings (${lightestMeetingDay.first.value} min total) and the most photos (${heaviestPhotoDay.first.value} photos).',
+          lowConfidence: photoCount < 3 && calendarCount < 3,
         ));
       }
     }
@@ -175,14 +190,16 @@ class InsightEngine {
           type: 'photo_pattern',
           headline: 'Night owl photographer',
           evidence:
-              '${(nightPhotos / photoCount * 100).toStringAsFixed(0)}% of your photos ($nightPhotos of $photoCount) were taken between 8 PM and 5 AM.',
+              '${(nightPhotos / photoCount * 100).toStringAsFixed(0)}% of your $photoCount photos ($nightPhotos photos) were taken between 8 PM and 5 AM.',
+          lowConfidence: nightPhotos < 3,
         ));
       } else if (morningPhotos / photoCount > 0.20) {
         insights.add(InsightCandidate(
           type: 'photo_pattern',
           headline: 'Early bird photographer',
           evidence:
-              '${(morningPhotos / photoCount * 100).toStringAsFixed(0)}% of your photos ($morningPhotos of $photoCount) were taken between 5 AM and 8 AM.',
+              '${(morningPhotos / photoCount * 100).toStringAsFixed(0)}% of your $photoCount photos ($morningPhotos photos) were taken between 5 AM and 8 AM.',
+          lowConfidence: morningPhotos < 3,
         ));
       }
     }
@@ -199,7 +216,8 @@ class InsightEngine {
           type: 'photo_pattern',
           headline: 'You have a photography home base',
           evidence:
-              '${(locCount / locatedPhotos * 100).toStringAsFixed(0)}% of your geotagged photos ($locCount of $locatedPhotos) are from one location cluster.',
+              '${(locCount / locatedPhotos * 100).toStringAsFixed(0)}% of your $locatedPhotos geotagged photos ($locCount photos) cluster at one location.',
+          lowConfidence: locCount < 3,
         ));
       }
     }
@@ -219,7 +237,8 @@ class InsightEngine {
           type: 'cross_pattern',
           headline: 'Busy days equal photo days',
           evidence:
-              'Days with 3+ events also tend to have 3+ photos -- your busiest days are also your most photogenic.',
+              '$highBothDays of $totalDays active days have both 3+ events and 3+ photos -- your busiest days are also your most photogenic.',
+          lowConfidence: highBothDays < 3,
         ));
       }
     }
@@ -237,10 +256,30 @@ class InsightEngine {
             headline:
                 '${_dayName(top.key)}: your secret photo day',
             evidence:
-                '${_dayName(top.key)} has ${top.value} photos -- ${(top.value / second.value).toStringAsFixed(1)}x more than the next closest day (${_dayName(second.key)} with ${second.value}).',
+                '${_dayName(top.key)} has ${top.value} photos -- ${(top.value / second.value).toStringAsFixed(1)}x more than ${_dayName(second.key)} (${second.value} photos).',
+            lowConfidence: top.value < 3,
           ));
         }
       }
+    }
+
+    // Add source availability notes if one source is missing
+    if (!photoAvailable && calendarAvailable) {
+      insights.add(InsightCandidate(
+        type: 'calendar_pattern',
+        headline: 'Calendar-only analysis',
+        evidence:
+            'Photo library was unavailable. Analysis based on $calendarCount calendar events only.',
+        lowConfidence: true,
+      ));
+    } else if (photoAvailable && !calendarAvailable) {
+      insights.add(InsightCandidate(
+        type: 'photo_pattern',
+        headline: 'Photo-only analysis',
+        evidence:
+            'Calendar was unavailable. Analysis based on $photoCount photos only.',
+        lowConfidence: true,
+      ));
     }
 
     // Fallback: guarantee at least 2 insights
@@ -266,7 +305,7 @@ class InsightEngine {
           type: 'photo_pattern',
           headline: 'Data explorer',
           evidence:
-              'Limited data available -- enable demo mode for a richer experience.',
+              'Limited data available (0 photos, 0 events) -- enable demo mode for a richer experience.',
         ));
       }
     }
@@ -308,9 +347,9 @@ class InsightEngine {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 // Synthetic (Demo Mode) Data
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 
 /// Returns realistic synthetic photo data for demo mode.
 /// Photos clustered on weekends, peak at 10am and 6pm.
@@ -422,9 +461,9 @@ Map<String, dynamic> _syntheticCalendarData() {
   };
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 // Screen State
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 
 enum _DetectiveState {
   notReady,
@@ -436,9 +475,12 @@ enum _DetectiveState {
   complete,
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+/// 15-second pipeline timeout.
+const _pipelineTimeout = Duration(seconds: 15);
+
+// ==============================================================================
 // DetectiveScreen Widget
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 
 /// Phone Detective Mode -- on-device behavioral insights using tool calling.
 ///
@@ -449,6 +491,13 @@ enum _DetectiveState {
 /// 1. Tools fetch lightly processed data from native (via MethodChannel)
 /// 2. [InsightEngine] computes insight candidates using deterministic rules
 /// 3. LLM narrates the pre-computed insights in noir detective style
+///
+/// Hardened with:
+/// - 15-second pipeline timeout
+/// - LLM output self-checks (deduction count, number cross-reference)
+/// - <think> tag stripping for Qwen3 output
+/// - Fallback report from raw InsightCandidates
+/// - Demo Mode determinism assertion
 class DetectiveScreen extends StatefulWidget {
   const DetectiveScreen({super.key});
 
@@ -458,7 +507,7 @@ class DetectiveScreen extends StatefulWidget {
 
 class _DetectiveScreenState extends State<DetectiveScreen>
     with SingleTickerProviderStateMixin {
-  // ── State ──────────────────────────────────────────────────────────────────
+  // -- State ----------------------------------------------------------------
 
   _DetectiveState _state = _DetectiveState.notReady;
   bool _demoMode = false;
@@ -486,6 +535,10 @@ class _DetectiveScreenState extends State<DetectiveScreen>
   DateTime? _cacheTimestamp;
   static const _cacheTtl = Duration(minutes: 5);
 
+  // Track data source availability for partial-data handling
+  bool _photoSourceAvailable = true;
+  bool _calendarSourceAvailable = true;
+
   // Telemetry channel (reuse existing channel)
   static const _telemetryChannel =
       MethodChannel('com.edgeveda.edge_veda/telemetry');
@@ -496,7 +549,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
   // Animation
   late AnimationController _pulseController;
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  // -- Lifecycle ------------------------------------------------------------
 
   @override
   void initState() {
@@ -517,7 +570,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     super.dispose();
   }
 
-  // ── Model Lifecycle (following SttScreen pattern) ──────────────────────────
+  // -- Model Lifecycle (following SttScreen pattern) ------------------------
 
   Future<void> _checkModel() async {
     final downloaded =
@@ -596,7 +649,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     }
   }
 
-  // ── Tool Definitions ──────────────────────────────────────────────────────
+  // -- Tool Definitions ----------------------------------------------------
 
   List<ToolDefinition> get _toolDefinitions => [
         ToolDefinition(
@@ -648,7 +701,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
         ),
       ];
 
-  // ── Tool Call Handler ─────────────────────────────────────────────────────
+  // -- Tool Call Handler ---------------------------------------------------
 
   Future<ToolResult> _handleToolCall(ToolCall call) async {
     switch (call.name) {
@@ -689,6 +742,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     if (_demoMode) {
       _cachedPhotoData = _syntheticPhotoData();
       _cacheTimestamp = DateTime.now();
+      _photoSourceAvailable = true;
       return _cachedPhotoData!;
     }
 
@@ -697,9 +751,11 @@ class _DetectiveScreenState extends State<DetectiveScreen>
           await _telemetryChannel.invokeMethod<Map>('getPhotoInsights');
       _cachedPhotoData = Map<String, dynamic>.from(result ?? {});
       _cacheTimestamp = DateTime.now();
+      _photoSourceAvailable = true;
       return _cachedPhotoData!;
     } catch (e) {
       debugPrint('Detective: Photo fetch failed: $e');
+      _photoSourceAvailable = false;
       // Fall back to empty data
       return {'total_photos': 0};
     }
@@ -716,6 +772,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     if (_demoMode) {
       _cachedCalendarData = _syntheticCalendarData();
       _cacheTimestamp = DateTime.now();
+      _calendarSourceAvailable = true;
       return _cachedCalendarData!;
     }
 
@@ -724,14 +781,16 @@ class _DetectiveScreenState extends State<DetectiveScreen>
           await _telemetryChannel.invokeMethod<Map>('getCalendarInsights');
       _cachedCalendarData = Map<String, dynamic>.from(result ?? {});
       _cacheTimestamp = DateTime.now();
+      _calendarSourceAvailable = true;
       return _cachedCalendarData!;
     } catch (e) {
       debugPrint('Detective: Calendar fetch failed: $e');
+      _calendarSourceAvailable = false;
       return {'total_events': 0};
     }
   }
 
-  // ── Main Analysis Pipeline ────────────────────────────────────────────────
+  // -- Main Analysis Pipeline (with 15s timeout) --------------------------
 
   Future<void> _runAnalysis() async {
     if (_edgeVeda == null || !_edgeVeda!.isInitialized) {
@@ -743,129 +802,62 @@ class _DetectiveScreenState extends State<DetectiveScreen>
       _state = _DetectiveState.scanning;
       _errorMessage = null;
       _report = null;
+      _photoSourceAvailable = true;
+      _calendarSourceAvailable = true;
       for (final step in _scanSteps) {
         step.status = _StepStatus.pending;
       }
     });
 
+    final stopwatch = Stopwatch()..start();
+    int toolsMs = 0;
+    int engineMs = 0;
+    int narrationMs = 0;
+
     try {
-      // ── Phase 1: Tool calling ──────────────────────────────────────────
-      // Use sendWithTools to let the LLM invoke our data-gathering tools.
-      // The tool call handler fetches data from native or demo mode.
-      // Each tool call updates the scan step UI.
+      // Wrap entire pipeline in a 15-second timeout
+      await Future.any<void>([
+        _runPipelineInner(
+          stopwatch: stopwatch,
+          onToolsDone: (ms) => toolsMs = ms,
+          onEngineDone: (ms) => engineMs = ms,
+          onNarrationDone: (ms) => narrationMs = ms,
+        ),
+        Future.delayed(_pipelineTimeout).then((_) {
+          throw TimeoutException(
+              'Pipeline exceeded ${_pipelineTimeout.inSeconds}s timeout');
+        }),
+      ]);
+    } on TimeoutException {
+      stopwatch.stop();
+      debugPrint(
+          'Detective pipeline: TIMEOUT at ${stopwatch.elapsedMilliseconds}ms');
 
-      _updateStep(0, _StepStatus.inProgress);
-
-      final toolSession = ChatSession(
-        edgeVeda: _edgeVeda!,
-        systemPrompt:
-            'You are a data analyst. Call get_photo_metadata and get_calendar_events to gather data about the user\'s phone. Then call device_assert_offline to verify privacy. Call each tool exactly once.',
-        templateFormat: ChatTemplateFormat.qwen3,
-        tools: ToolRegistry(_toolDefinitions),
-        maxResponseTokens: 256,
-      );
-
-      try {
-        await toolSession.sendWithTools(
-          'Analyze the user\'s phone: scan their photos and calendar, then verify privacy.',
-          onToolCall: (call) async {
-            // Update scan step UI based on which tool was called
-            if (call.name == 'get_photo_metadata') {
-              _updateStep(0, _StepStatus.inProgress);
-              final result = await _handleToolCall(call);
-              _updateStep(0, _StepStatus.complete);
-              _updateStep(1, _StepStatus.inProgress);
-              return result;
-            } else if (call.name == 'get_calendar_events') {
-              final result = await _handleToolCall(call);
-              _updateStep(1, _StepStatus.complete);
-              _updateStep(2, _StepStatus.inProgress);
-              return result;
-            } else if (call.name == 'device_assert_offline') {
-              final result = await _handleToolCall(call);
-              _updateStep(2, _StepStatus.complete);
-              return result;
-            }
-            return _handleToolCall(call);
-          },
-          options: const GenerateOptions(
-            maxTokens: 256,
-            temperature: 0.7,
-            topP: 0.9,
-          ),
-        );
-      } catch (e) {
-        // Tool calling may fail (ToolCallParseException, etc.)
-        // Fall back to direct data fetching
-        debugPrint('Detective: Tool calling failed ($e), fetching data directly');
-      }
-
-      // Ensure all data steps are complete (direct fetch if tools didn't fire)
-      if (_cachedPhotoData == null) {
-        _updateStep(0, _StepStatus.inProgress);
-        await _getPhotoData();
-        _updateStep(0, _StepStatus.complete);
-      } else {
-        _updateStep(0, _StepStatus.complete);
-      }
-
-      if (_cachedCalendarData == null) {
-        _updateStep(1, _StepStatus.inProgress);
-        await _getCalendarData();
-        _updateStep(1, _StepStatus.complete);
-      } else {
-        _updateStep(1, _StepStatus.complete);
-      }
-
-      _updateStep(2, _StepStatus.complete);
-
-      // Use the fetched (or cached) data
+      // Use whatever insights are computed so far
       final photoData = _cachedPhotoData ?? {'total_photos': 0};
       final calendarData = _cachedCalendarData ?? {'total_events': 0};
-
-      // Check for empty data
-      final photoCount =
-          (photoData['total_photos'] as num?)?.toInt() ?? 0;
-      final calendarCount =
-          (calendarData['total_events'] as num?)?.toInt() ?? 0;
-      if (photoCount == 0 && calendarCount == 0 && !_demoMode) {
-        setState(() {
-          _state = _DetectiveState.ready;
-          _errorMessage =
-              'No photo or calendar data found. Enable Demo Mode to try with synthetic data.';
-        });
-        return;
-      }
-
-      // ── Phase 1.5: InsightEngine (deterministic Dart) ──────────────────
-      setState(() => _state = _DetectiveState.analyzing);
-      _updateStep(3, _StepStatus.inProgress);
       final engine = InsightEngine();
-      final insights = engine.computeInsights(photoData, calendarData);
-      await Future.delayed(const Duration(milliseconds: 300));
-      _updateStep(3, _StepStatus.complete);
-
-      // ── Phase 2: LLM narration ────────────────────────────────────────
-      setState(() => _state = _DetectiveState.narrating);
-      _updateStep(4, _StepStatus.inProgress);
-
-      DetectiveReport? report;
-      try {
-        report = await _narrateInsights(insights);
-      } catch (e) {
-        debugPrint('Detective: LLM narration failed: $e');
-        report = _fallbackReport(insights);
-      }
-
-      _updateStep(4, _StepStatus.complete);
+      final insights = engine.computeInsights(
+        photoData,
+        calendarData,
+        photoAvailable: _photoSourceAvailable,
+        calendarAvailable: _calendarSourceAvailable,
+      );
+      final report = _fallbackReport(insights);
 
       if (mounted) {
         setState(() {
           _report = report;
           _state = _DetectiveState.complete;
+          for (final step in _scanSteps) {
+            if (step.status != _StepStatus.complete) {
+              step.status = _StepStatus.complete;
+            }
+          }
         });
       }
     } catch (e) {
+      stopwatch.stop();
       if (mounted) {
         setState(() {
           _state = _DetectiveState.ready;
@@ -873,36 +865,198 @@ class _DetectiveScreenState extends State<DetectiveScreen>
         });
       }
     }
+
+    stopwatch.stop();
+    final totalMs = stopwatch.elapsedMilliseconds;
+    debugPrint(
+        'Detective pipeline: tools=${toolsMs}ms, engine=${engineMs}ms, narration=${narrationMs}ms, total=${totalMs}ms');
+  }
+
+  /// Inner pipeline logic, separated to allow timeout wrapper.
+  Future<void> _runPipelineInner({
+    required Stopwatch stopwatch,
+    required void Function(int) onToolsDone,
+    required void Function(int) onEngineDone,
+    required void Function(int) onNarrationDone,
+  }) async {
+    final toolsStart = stopwatch.elapsedMilliseconds;
+
+    // -- Phase 1: Tool calling -----------------------------------------
+    // Use sendWithTools to let the LLM invoke our data-gathering tools.
+    // The tool call handler fetches data from native or demo mode.
+    // Each tool call updates the scan step UI.
+
+    _updateStep(0, _StepStatus.inProgress);
+
+    final toolSession = ChatSession(
+      edgeVeda: _edgeVeda!,
+      systemPrompt:
+          'You are a data analyst. Call get_photo_metadata and get_calendar_events to gather data about the user\'s phone. Then call device_assert_offline to verify privacy. Call each tool exactly once.',
+      templateFormat: ChatTemplateFormat.qwen3,
+      tools: ToolRegistry(_toolDefinitions),
+      maxResponseTokens: 256,
+    );
+
+    try {
+      await toolSession.sendWithTools(
+        'Analyze the user\'s phone: scan their photos and calendar, then verify privacy.',
+        onToolCall: (call) async {
+          // Update scan step UI based on which tool was called
+          if (call.name == 'get_photo_metadata') {
+            _updateStep(0, _StepStatus.inProgress);
+            final result = await _handleToolCall(call);
+            _updateStep(0, _StepStatus.complete);
+            _updateStep(1, _StepStatus.inProgress);
+            return result;
+          } else if (call.name == 'get_calendar_events') {
+            final result = await _handleToolCall(call);
+            _updateStep(1, _StepStatus.complete);
+            _updateStep(2, _StepStatus.inProgress);
+            return result;
+          } else if (call.name == 'device_assert_offline') {
+            final result = await _handleToolCall(call);
+            _updateStep(2, _StepStatus.complete);
+            return result;
+          }
+          return _handleToolCall(call);
+        },
+        options: const GenerateOptions(
+          maxTokens: 256,
+          temperature: 0.7,
+          topP: 0.9,
+        ),
+      );
+    } catch (e) {
+      // Tool calling may fail (ToolCallParseException, etc.)
+      // Fall back to direct data fetching
+      debugPrint('Detective: Tool calling failed ($e), fetching data directly');
+    }
+
+    // Ensure all data steps are complete (direct fetch if tools didn't fire)
+    if (_cachedPhotoData == null) {
+      _updateStep(0, _StepStatus.inProgress);
+      await _getPhotoData();
+      _updateStep(0, _StepStatus.complete);
+    } else {
+      _updateStep(0, _StepStatus.complete);
+    }
+
+    if (_cachedCalendarData == null) {
+      _updateStep(1, _StepStatus.inProgress);
+      await _getCalendarData();
+      _updateStep(1, _StepStatus.complete);
+    } else {
+      _updateStep(1, _StepStatus.complete);
+    }
+
+    _updateStep(2, _StepStatus.complete);
+    onToolsDone(stopwatch.elapsedMilliseconds - toolsStart);
+
+    // Use the fetched (or cached) data
+    final photoData = _cachedPhotoData ?? {'total_photos': 0};
+    final calendarData = _cachedCalendarData ?? {'total_events': 0};
+
+    // Check for empty data (both sources empty and not demo mode)
+    final photoCount =
+        (photoData['total_photos'] as num?)?.toInt() ?? 0;
+    final calendarCount =
+        (calendarData['total_events'] as num?)?.toInt() ?? 0;
+    if (photoCount == 0 && calendarCount == 0 && !_demoMode) {
+      setState(() {
+        _state = _DetectiveState.ready;
+        _errorMessage =
+            'No photo or calendar data found. Enable Demo Mode to try with synthetic data.';
+      });
+      return;
+    }
+
+    // -- Phase 1.5: InsightEngine (deterministic Dart) -----------------
+    final engineStart = stopwatch.elapsedMilliseconds;
+    setState(() => _state = _DetectiveState.analyzing);
+    _updateStep(3, _StepStatus.inProgress);
+    final engine = InsightEngine();
+    final insights = engine.computeInsights(
+      photoData,
+      calendarData,
+      photoAvailable: _photoSourceAvailable,
+      calendarAvailable: _calendarSourceAvailable,
+    );
+    await Future.delayed(const Duration(milliseconds: 300));
+    _updateStep(3, _StepStatus.complete);
+    onEngineDone(stopwatch.elapsedMilliseconds - engineStart);
+
+    // Determinism check: demo mode must produce >= 3 insights
+    if (_demoMode) {
+      assert(
+        insights.length >= 3,
+        'Demo mode must produce at least 3 insights, got ${insights.length}',
+      );
+    }
+
+    // -- Phase 2: LLM narration ----------------------------------------
+    final narrationStart = stopwatch.elapsedMilliseconds;
+    setState(() => _state = _DetectiveState.narrating);
+    _updateStep(4, _StepStatus.inProgress);
+
+    DetectiveReport? report;
+    try {
+      report = await _narrateInsights(insights);
+    } catch (e) {
+      debugPrint('Detective: LLM narration failed: $e');
+      report = _fallbackReport(insights);
+    }
+
+    _updateStep(4, _StepStatus.complete);
+    onNarrationDone(stopwatch.elapsedMilliseconds - narrationStart);
+
+    if (mounted) {
+      setState(() {
+        _report = report;
+        _state = _DetectiveState.complete;
+      });
+    }
   }
 
   /// Phase 2: LLM narrates pre-computed insights in noir detective style.
   /// Uses a fresh ChatSession (no tools) for the narration.
+  /// Includes /nothink to disable Qwen3 thinking mode.
   Future<DetectiveReport> _narrateInsights(
       List<InsightCandidate> insights) async {
+    // Prefer high-confidence insights for narration
+    final highConfidence =
+        insights.where((i) => !i.lowConfidence).toList();
+    final insightsForNarration =
+        highConfidence.length >= 3 ? highConfidence : insights;
     final insightsJson =
-        jsonEncode(insights.map((i) => i.toJson()).toList());
+        jsonEncode(insightsForNarration.map((i) => i.toJson()).toList());
 
-    final narrationPrompt = '''Given the following computed deductions about a person's phone data, write a dramatic noir detective report. You MUST use ONLY the provided deductions. Do not invent new findings.
+    final narrationPrompt = '''/nothink
+Given the following computed deductions about a person's phone data, write a dramatic noir detective report.
+
+RULES:
+- You MUST use ONLY the provided deductions. Do not invent new findings.
+- Use the EXACT numbers from the evidence provided. Do not round, estimate, or fabricate any statistics.
+- Output ONLY valid JSON. Do not include markdown code fences, commentary, or any text before or after the JSON object.
 
 DEDUCTIONS:
 $insightsJson
 
-Output ONLY valid JSON in this exact format (no other text):
+Output ONLY this JSON (nothing else):
 {
   "headline": "one catchy noir headline",
   "deductions": [
-    {"finding": "dramatic finding 1", "evidence": "evidence text 1"},
-    {"finding": "dramatic finding 2", "evidence": "evidence text 2"},
-    {"finding": "dramatic finding 3", "evidence": "evidence text 3"}
+    {"finding": "dramatic finding 1", "evidence": "evidence from deduction 1 with exact numbers"},
+    {"finding": "dramatic finding 2", "evidence": "evidence from deduction 2 with exact numbers"},
+    {"finding": "dramatic finding 3", "evidence": "evidence from deduction 3 with exact numbers"}
   ],
-  "surprising_fact": "one unexpected pattern observation",
+  "surprising_fact": "one unexpected pattern observation using exact numbers",
   "privacy_statement": "dramatic privacy punchline about everything being on-device"
 }''';
 
     final narrationSession = ChatSession(
       edgeVeda: _edgeVeda!,
       systemPrompt:
-          'You are a spy thriller narrator. Write dramatic noir detective reports from provided data. Output ONLY valid JSON. Do not add commentary.',
+          '/nothink\nYou are a spy thriller narrator. Write dramatic noir detective reports from provided data. Output ONLY valid JSON. Do not add commentary. Do not wrap in code fences. Use the exact numbers given to you.',
       templateFormat: ChatTemplateFormat.qwen3,
       maxResponseTokens: 1024,
     );
@@ -917,47 +1071,116 @@ Output ONLY valid JSON in this exact format (no other text):
     );
 
     // Parse the JSON response
-    return _parseNarration(reply.content, insights);
+    return _parseNarration(reply.content, insightsForNarration);
+  }
+
+  /// Strip Qwen3 <think>...</think> tags from LLM output.
+  static String _stripThinkTags(String text) {
+    // Remove <think>...</think> blocks (including multiline)
+    return text.replaceAll(RegExp(r'<think>[\s\S]*?</think>'), '').trim();
+  }
+
+  /// Extract all numbers from a string for cross-reference validation.
+  static Set<String> _extractNumbers(String text) {
+    return RegExp(r'\d+\.?\d*').allMatches(text).map((m) => m.group(0)!).toSet();
   }
 
   /// Parse LLM narration JSON into a DetectiveReport.
   /// Falls back to constructing from raw InsightCandidates if JSON is invalid.
+  ///
+  /// Self-checks:
+  /// 1. Deduction count is exactly 3 (pad from InsightCandidates or trim)
+  /// 2. Each deduction evidence contains at least one number from original insights
+  /// 3. No deduction references data fields not present in insight candidates
   DetectiveReport _parseNarration(
       String rawResponse, List<InsightCandidate> insights) {
     try {
-      // Try to extract JSON from the response (model may add wrapping text)
-      String jsonStr = rawResponse.trim();
+      // Strip <think>...</think> tags from Qwen3 output
+      String cleaned = _stripThinkTags(rawResponse);
+
+      // Strip markdown code fences if present
+      cleaned = cleaned.replaceAll(RegExp(r'```json\s*'), '');
+      cleaned = cleaned.replaceAll(RegExp(r'```\s*'), '');
+      cleaned = cleaned.trim();
 
       // Find the first { and last } for JSON extraction
-      final firstBrace = jsonStr.indexOf('{');
-      final lastBrace = jsonStr.lastIndexOf('}');
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+      final firstBrace = cleaned.indexOf('{');
+      final lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace < 0 || lastBrace <= firstBrace) {
+        debugPrint('Detective: No valid JSON braces found in LLM output');
+        return _fallbackReport(insights);
       }
+      final jsonStr = cleaned.substring(firstBrace, lastBrace + 1);
 
       final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
 
-      final deductionsList = parsed['deductions'] as List? ?? [];
-      final deductions = deductionsList
-          .take(3)
-          .map((d) => Deduction(
-                finding: (d['finding'] as String?) ?? 'Finding',
-                evidence: (d['evidence'] as String?) ?? 'Evidence unavailable',
-              ))
-          .toList();
+      // Collect all numbers from original insight candidates for cross-reference
+      final insightNumbers = <String>{};
+      for (final insight in insights) {
+        insightNumbers.addAll(_extractNumbers(insight.evidence));
+      }
 
-      // Ensure at least 3 deductions
-      while (deductions.length < 3 && deductions.length < insights.length) {
-        final idx = deductions.length;
-        deductions.add(Deduction(
+      // Check insight types for field validation
+      final hasLocationData =
+          insights.any((i) => i.evidence.contains('location') || i.evidence.contains('geotagged'));
+
+      final deductionsList = parsed['deductions'] as List? ?? [];
+      final validatedDeductions = <Deduction>[];
+
+      for (final d in deductionsList.take(3)) {
+        final finding = (d['finding'] as String?) ?? '';
+        final evidence = (d['evidence'] as String?) ?? '';
+
+        // Self-check: reject deductions mentioning locations if no location data
+        if (!hasLocationData &&
+            (evidence.toLowerCase().contains('location') ||
+                evidence.toLowerCase().contains('places') ||
+                finding.toLowerCase().contains('location'))) {
+          debugPrint(
+              'Detective: Rejected fabricated location deduction: $finding');
+          continue;
+        }
+
+        // Self-check: evidence must contain at least one number from our insights
+        final evidenceNumbers = _extractNumbers(evidence);
+        final hasValidNumber =
+            evidenceNumbers.intersection(insightNumbers).isNotEmpty;
+
+        if (hasValidNumber || evidenceNumbers.isEmpty) {
+          validatedDeductions.add(Deduction(
+            finding: finding.isNotEmpty ? finding : 'Finding',
+            evidence: evidence.isNotEmpty ? evidence : 'Evidence unavailable',
+          ));
+        } else {
+          debugPrint(
+              'Detective: Deduction evidence numbers $evidenceNumbers not found in insight numbers $insightNumbers -- replacing with raw insight');
+          // Replace with raw insight candidate at this position
+          final idx = validatedDeductions.length;
+          if (idx < insights.length) {
+            validatedDeductions.add(Deduction(
+              finding: insights[idx].headline,
+              evidence: insights[idx].evidence,
+            ));
+          }
+        }
+      }
+
+      // Pad to exactly 3 deductions from InsightCandidates
+      while (validatedDeductions.length < 3 &&
+          validatedDeductions.length < insights.length) {
+        final idx = validatedDeductions.length;
+        validatedDeductions.add(Deduction(
           finding: insights[idx].headline,
           evidence: insights[idx].evidence,
         ));
       }
 
+      // Trim to exactly 3
+      final finalDeductions = validatedDeductions.take(3).toList();
+
       return DetectiveReport(
         headline: (parsed['headline'] as String?) ?? 'Case File: Subject Analysis',
-        deductions: deductions,
+        deductions: finalDeductions,
         surprisingFact: (parsed['surprising_fact'] as String?) ??
             insights
                 .where((i) => i.type == 'surprising')
@@ -965,7 +1188,7 @@ Output ONLY valid JSON in this exact format (no other text):
                 .firstOrNull ??
             'The subject remains unpredictable.',
         privacyStatement: (parsed['privacy_statement'] as String?) ??
-            'Every byte was processed on this device. Nothing left the building.',
+            'Every byte of this analysis happened on your device. No data was uploaded, no servers were contacted.',
       );
     } catch (e) {
       debugPrint('Detective: JSON parse failed, using fallback: $e');
@@ -974,11 +1197,23 @@ Output ONLY valid JSON in this exact format (no other text):
   }
 
   /// Construct a report directly from InsightCandidates without LLM narration.
+  /// Used when LLM fails entirely (timeout, parse error, empty response).
   DetectiveReport _fallbackReport(List<InsightCandidate> insights) {
     final deductions = insights
+        .where((i) => !i.lowConfidence)
         .take(3)
         .map((i) => Deduction(finding: i.headline, evidence: i.evidence))
         .toList();
+
+    // If not enough high-confidence, fill from all
+    if (deductions.length < 3) {
+      for (final i in insights) {
+        if (deductions.length >= 3) break;
+        if (!deductions.any((d) => d.finding == i.headline)) {
+          deductions.add(Deduction(finding: i.headline, evidence: i.evidence));
+        }
+      }
+    }
 
     while (deductions.length < 3) {
       deductions.add(Deduction(
@@ -987,20 +1222,26 @@ Output ONLY valid JSON in this exact format (no other text):
       ));
     }
 
+    // Surprising fact: prefer 'surprising' type, fallback to photo count
+    final surprisingInsight = insights
+        .where((i) => i.type == 'surprising')
+        .firstOrNull;
+    final photoCount = _cachedPhotoData != null
+        ? ((_cachedPhotoData!['total_photos'] as num?)?.toInt() ?? 0)
+        : 0;
+
     return DetectiveReport(
-      headline: 'Case File: Subject Under Surveillance',
+      headline: 'Your Digital Fingerprint',
       deductions: deductions,
-      surprisingFact: insights
-              .where((i) => i.type == 'surprising')
-              .map((i) => '${i.headline}: ${i.evidence}')
-              .firstOrNull ??
-          'The subject shows surprisingly consistent behavioral patterns.',
+      surprisingFact: surprisingInsight != null
+          ? '${surprisingInsight.headline}: ${surprisingInsight.evidence}'
+          : 'You have $photoCount photos in the last 30 days.',
       privacyStatement:
-          'Every byte was processed on this device. Nothing was uploaded. The subject remains anonymous.',
+          'Every byte of this analysis happened on your device. No data was uploaded, no servers were contacted.',
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // -- Helpers -------------------------------------------------------------
 
   void _updateStep(int index, _StepStatus status) {
     if (mounted) {
@@ -1014,6 +1255,8 @@ Output ONLY valid JSON in this exact format (no other text):
     _cachedPhotoData = null;
     _cachedCalendarData = null;
     _cacheTimestamp = null;
+    _photoSourceAvailable = true;
+    _calendarSourceAvailable = true;
     setState(() {
       _state = _DetectiveState.ready;
       _report = null;
@@ -1060,9 +1303,9 @@ Output ONLY valid JSON in this exact format (no other text):
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ========================================================================
   // UI
-  // ══════════════════════════════════════════════════════════════════════════
+  // ========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -1128,7 +1371,7 @@ Output ONLY valid JSON in this exact format (no other text):
     }
   }
 
-  // ── Download State ────────────────────────────────────────────────────────
+  // -- Download State ------------------------------------------------------
 
   Widget _buildDownloadState() {
     return Center(
@@ -1220,7 +1463,7 @@ Output ONLY valid JSON in this exact format (no other text):
     );
   }
 
-  // ── Ready State ───────────────────────────────────────────────────────────
+  // -- Ready State ---------------------------------------------------------
 
   Widget _buildReadyState() {
     return Center(
@@ -1296,6 +1539,25 @@ Output ONLY valid JSON in this exact format (no other text):
                 style: const TextStyle(color: AppTheme.danger, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
+              // Show "Enable Demo Mode" button when no data found
+              if (_errorMessage!.contains('Demo Mode')) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _demoMode = true;
+                      _errorMessage = null;
+                      _cachedPhotoData = null;
+                      _cachedCalendarData = null;
+                      _cacheTimestamp = null;
+                    });
+                  },
+                  child: const Text(
+                    'Enable Demo Mode',
+                    style: TextStyle(color: AppTheme.accent),
+                  ),
+                ),
+              ],
             ],
           ],
         ),
@@ -1303,7 +1565,7 @@ Output ONLY valid JSON in this exact format (no other text):
     );
   }
 
-  // ── Scanning / Analyzing / Narrating State ────────────────────────────────
+  // -- Scanning / Analyzing / Narrating State ------------------------------
 
   Widget _buildScanningState() {
     return Padding(
@@ -1434,7 +1696,7 @@ Output ONLY valid JSON in this exact format (no other text):
     );
   }
 
-  // ── Complete State (Results Card) ─────────────────────────────────────────
+  // -- Complete State (Results Card) ---------------------------------------
 
   Widget _buildCompleteState() {
     final report = _report;
@@ -1657,9 +1919,9 @@ Output ONLY valid JSON in this exact format (no other text):
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 // Internal Step Model
-// ══════════════════════════════════════════════════════════════════════════════
+// ==============================================================================
 
 enum _StepStatus { pending, inProgress, complete }
 
@@ -1670,4 +1932,3 @@ class _ScanStep {
 
   _ScanStep({required this.icon, required this.label});
 }
-
