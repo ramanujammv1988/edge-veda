@@ -4,7 +4,7 @@
 
 `~21,300 LOC | 40 C API functions | 31 Dart SDK files | 0 cloud dependencies`
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/ramanujammv1988/edge-veda)
+[![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 

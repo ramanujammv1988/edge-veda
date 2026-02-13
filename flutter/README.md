@@ -41,7 +41,7 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^1.3.0
+  edge_veda: ^2.0.0
 ```
 
 ---
@@ -320,21 +320,50 @@ Escalation is immediate. Restoration requires cooldown (60s per level) to preven
 
 ---
 
-## Performance (Vision Soak Test)
+## Performance
 
-Validated on physical iPhone, continuous vision inference:
+All numbers measured on a physical iPhone (A16 Bionic, 6 GB RAM, iOS 26.2.1) with Metal GPU. Release mode, LTO enabled. See [BENCHMARKS.md](https://github.com/ramanujammv1988/edge-veda/blob/main/BENCHMARKS.md) for full details.
+
+### Text Generation
+
+| Metric | Value |
+|--------|-------|
+| Throughput | 42–43 tok/s |
+| TTFT | <500 ms |
+| Steady-state memory | 400–550 MB |
+| Multi-turn stability | No degradation over 10+ turns |
+
+### RAG (Retrieval-Augmented Generation)
+
+| Metric | Value |
+|--------|-------|
+| Generation speed | 42–43 tok/s |
+| Vector search | <1 ms |
+| End-to-end retrieval | 305–865 ms |
+
+### Vision (Soak Test)
 
 | Metric | Value |
 |--------|-------|
 | Sustained runtime | 12.6 minutes |
 | Frames processed | 254 |
-| p50 latency | 1,412 ms |
-| p95 latency | 2,283 ms |
-| p99 latency | 2,597 ms |
-| Model reloads | 0 |
-| Crashes | 0 |
-| Memory stability | No growth over session |
-| Thermal handling | Graceful pause and resume |
+| p50 / p95 / p99 latency | 1,412 / 2,283 / 2,597 ms |
+| Crashes / model reloads | 0 / 0 |
+
+### Speech-to-Text
+
+| Metric | Value |
+|--------|-------|
+| Transcription latency (p50) | ~670 ms per 3s chunk |
+| Model size | 77 MB (whisper-tiny.en) |
+| Streaming | Real-time segments |
+
+### Memory Optimization
+
+| Metric | Before | After |
+|--------|--------|-------|
+| KV cache | ~64 MB (F16) | ~32 MB (Q8_0) |
+| Steady-state memory | ~1,200 MB peak | 400–550 MB |
 
 ---
 

@@ -330,7 +330,7 @@ See [LICENSE](../../LICENSE) file in the repository root.
 
 ---
 
-**SDK Version:** 1.0.0
+**SDK Version:** 2.0.0
 **Flutter Version:** 3.16.0+
 **iOS Version:** 13.0+
-**Last Updated:** 2026-02-04
+**Last Updated:** 2026-02-13
