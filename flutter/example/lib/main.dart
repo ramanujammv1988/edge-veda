@@ -420,6 +420,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Pick a text file, chunk it, embed each chunk, build RAG pipeline.
   Future<void> _pickAndIndexDocument() async {
+    final pipelineSw = Stopwatch()..start();
+
     // Step 1: Pick file
     final result = await FilePicker.platform.pickFiles(
       type: FileType.any,
@@ -429,7 +431,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final filePath = result.files.single.path!;
     final fileName = result.files.single.name;
     final fileSize = result.files.single.size;
-    debugPrint('RAG: picked file=$fileName path=$filePath size=$fileSize');
 
     setState(() {
       _isIndexingDocument = true;
@@ -440,23 +441,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     try {
       // Step 2: Read file as text (try UTF-8, fall back to Latin-1)
-      debugPrint('RAG: reading file...');
+      final readSw = Stopwatch()..start();
       String text;
+      String encoding = 'UTF-8';
       try {
         text = await File(filePath).readAsString();
       } catch (_) {
         try {
           final bytes = await File(filePath).readAsBytes();
           text = latin1.decode(bytes);
-          debugPrint('RAG: decoded as Latin-1 (${text.length} chars)');
+          encoding = 'Latin-1';
         } catch (e) {
-          debugPrint('RAG: read failed: $e');
           _showError('Cannot read file — only text-based files are supported');
           setState(() => _isIndexingDocument = false);
           return;
         }
       }
-      debugPrint('RAG: read ${text.length} chars');
+      readSw.stop();
       if (text.trim().isEmpty) {
         _showError('Document is empty');
         setState(() => _isIndexingDocument = false);
@@ -464,13 +465,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
 
       // Step 3: Chunk text
+      final chunkSw = Stopwatch()..start();
       final chunks = _chunkText(text);
-      debugPrint('RAG: ${chunks.length} chunks from ${text.length} chars');
+      chunkSw.stop();
       if (chunks.isEmpty) {
         _showError('Could not extract text chunks from document');
         setState(() => _isIndexingDocument = false);
         return;
       }
+      final avgChunkSize = text.length ~/ chunks.length;
 
       setState(() {
         _indexingTotal = chunks.length;
@@ -478,48 +481,47 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
 
       // Step 4: Ensure embedding model is downloaded
+      final downloadSw = Stopwatch()..start();
+      bool wasDownloaded = true;
       if (_embeddingModelPath == null) {
         final embModel = ModelRegistry.allMiniLmL6V2;
         final isDownloaded = await _modelManager.isModelDownloaded(embModel.id);
-        debugPrint('RAG: embedding model downloaded=$isDownloaded');
+        wasDownloaded = isDownloaded;
         if (!isDownloaded) {
           _embeddingModelPath = await _modelManager.downloadModel(embModel);
         } else {
           _embeddingModelPath = await _modelManager.getModelPath(embModel.id);
         }
       }
-      debugPrint('RAG: embedding model at $_embeddingModelPath');
+      downloadSw.stop();
 
-      setState(() {
-        _statusMessage = 'Initializing embedding model...';
-      });
+      setState(() => _statusMessage = 'Initializing embedding model...');
 
       // Step 5: Create embedder instance
+      final initSw = Stopwatch()..start();
       _ragEmbedder?.dispose();
       _ragEmbedder = EdgeVeda();
-      debugPrint('RAG: calling embedder init...');
       await _ragEmbedder!.init(EdgeVedaConfig(
         modelPath: _embeddingModelPath!,
         useGpu: true,
         numThreads: 4,
-        contextLength: 512, // Embedding models use small context
+        contextLength: 512,
         maxMemoryMb: 256,
         verbose: false,
       ));
-      debugPrint('RAG: embedder init complete');
+      initSw.stop();
 
       // Step 6: Batch-embed all chunks (single model load)
-      setState(() {
-        _statusMessage = 'Embedding ${chunks.length} chunks...';
-      });
+      setState(() =>
+          _statusMessage = 'Embedding ${chunks.length} chunks...');
 
-      debugPrint('RAG: starting embedBatch for ${chunks.length} chunks...');
-      final sw = Stopwatch()..start();
+      final embedSw = Stopwatch()..start();
       final embeddings = await _ragEmbedder!.embedBatch(chunks);
-      sw.stop();
-      debugPrint('RAG: embedBatch done in ${sw.elapsedMilliseconds}ms');
+      embedSw.stop();
 
-      _vectorIndex = VectorIndex(dimensions: 384); // all-MiniLM output dim
+      // Step 7: Build vector index
+      final indexSw = Stopwatch()..start();
+      _vectorIndex = VectorIndex(dimensions: 384);
       for (int i = 0; i < chunks.length; i++) {
         _vectorIndex!.add(
           'chunk_$i',
@@ -527,22 +529,51 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           metadata: {'text': chunks[i]},
         );
       }
+      indexSw.stop();
 
       setState(() {
         _indexingProgress = chunks.length;
         _indexingTotal = chunks.length;
       });
 
-      // Step 7: Create RAG pipeline with separate embedder and generator.
-      // IMPORTANT: Keep _ragEmbedder alive -- queryStream() calls embed() on
-      // every user query to find relevant chunks. The embedder (all-MiniLM-L6-v2,
-      // 384-dim) MUST match what was used for document indexing. Using the
-      // generative model here would produce wrong-dimension embeddings.
+      // Step 8: Create RAG pipeline
       _ragPipeline = RagPipeline.withModels(
-        embedder: _ragEmbedder!, // all-MiniLM-L6-v2 for query embedding
-        generator: _edgeVeda, // Llama 3.2 for answer generation
+        embedder: _ragEmbedder!,
+        generator: _edgeVeda,
         index: _vectorIndex!,
       );
+
+      pipelineSw.stop();
+
+      // ── INDEXING METRICS ──────────────────────────────────────────
+      final perChunkMs = embedSw.elapsedMilliseconds / chunks.length;
+      print('');
+      print('╔══════════════════════════════════════════════════════════╗');
+      print('║           RAG INDEXING METRICS                          ║');
+      print('╠══════════════════════════════════════════════════════════╣');
+      print('║ Document                                                ║');
+      print('║   File:        $fileName');
+      print('║   Size:        ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)');
+      print('║   Text:        ${text.length} chars');
+      print('║   Chunks:      ${chunks.length} (avg ${avgChunkSize} chars/chunk)');
+      print('║                                                         ║');
+      print('║ Timing Breakdown                                        ║');
+      print('║   File Read:       ${readSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print('║   Chunking:        ${chunkSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      if (!wasDownloaded) {
+        print('║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms (first time)');
+      }
+      print('║   Embedder Init:   ${initSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print('║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms'
+          ' (${perChunkMs.toStringAsFixed(1)} ms/chunk)');
+      print('║   Index Build:     ${indexSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print('║   ─────────────────────────');
+      print('║   TOTAL:           ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print('║                                                         ║');
+      print('║ Model: all-MiniLM-L6-v2 (F16, 384 dims, 46MB)          ║');
+      print('║ Device: Apple A18 Pro GPU (Metal)                       ║');
+      print('╚══════════════════════════════════════════════════════════╝');
+      print('');
 
       setState(() {
         _attachedDocName = fileName;
@@ -596,6 +627,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Send a query via RAG pipeline (streaming) using the attached document context.
   Future<void> _sendWithRag(String prompt) async {
+    final querySw = Stopwatch()..start();
+
     setState(() {
       _isStreaming = true;
       _isLoading = true;
@@ -616,7 +649,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     ));
 
     final buffer = StringBuffer();
-    final stopwatch = Stopwatch()..start();
+    final genSw = Stopwatch();
     bool receivedFirstToken = false;
 
     try {
@@ -643,9 +676,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
 
         if (chunk.isFinal) {
-          stopwatch.stop();
+          genSw.stop();
+          querySw.stop();
           _tokensPerSecond = _streamingTokenCount > 0
-              ? _streamingTokenCount / (stopwatch.elapsedMilliseconds / 1000)
+              ? _streamingTokenCount / (genSw.elapsedMilliseconds / 1000)
               : 0;
           setState(() {
             _statusMessage =
@@ -657,7 +691,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if (chunk.token.isEmpty) continue;
 
         if (!receivedFirstToken) {
-          _timeToFirstTokenMs = stopwatch.elapsedMilliseconds;
+          _timeToFirstTokenMs = querySw.elapsedMilliseconds;
+          genSw.start(); // Start generation timer from first token
           receivedFirstToken = true;
         }
 
@@ -693,10 +728,37 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final memStats = await _edgeVeda.getMemoryStats();
       _memoryMb = memStats.currentBytes / (1024 * 1024);
 
-      debugPrint(
-          'EdgeVeda: RAG streaming complete - $_streamingTokenCount tokens');
+      // ── QUERY METRICS ───────────────────────────────────────────
+      if (!querySw.isRunning) {
+        final genMs = genSw.elapsedMilliseconds;
+        final totalMs = querySw.elapsedMilliseconds;
+        final retrievalMs = (_timeToFirstTokenMs ?? totalMs);
+        final tokSec = _tokensPerSecond ?? 0;
+        print('');
+        print('╔══════════════════════════════════════════════════════════╗');
+        print('║           RAG QUERY METRICS                             ║');
+        print('╠══════════════════════════════════════════════════════════╣');
+        print('║ Query: "${prompt.length > 50 ? '${prompt.substring(0, 50)}...' : prompt}"');
+        print('║                                                         ║');
+        print('║ Retrieval (embed + search + prompt build)               ║');
+        print('║   Time to First Token:  ${retrievalMs.toString().padLeft(6)} ms');
+        print('║                                                         ║');
+        print('║ Generation                                              ║');
+        print('║   Tokens:          ${_streamingTokenCount.toString().padLeft(6)}');
+        print('║   Generation Time: ${genMs.toString().padLeft(6)} ms');
+        print('║   Throughput:      ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s');
+        print('║                                                         ║');
+        print('║ End-to-End                                              ║');
+        print('║   TOTAL:           ${totalMs.toString().padLeft(6)} ms');
+        print('║   Memory:          ${(_memoryMb ?? 0).toStringAsFixed(1).padLeft(6)} MB');
+        print('║                                                         ║');
+        print('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)  ║');
+        print('║ Device: Apple A18 Pro GPU (Metal), 100% on-device       ║');
+        print('╚══════════════════════════════════════════════════════════╝');
+        print('');
+      }
     } catch (e) {
-      stopwatch.stop();
+      querySw.stop();
       setState(() {
         _statusMessage = 'RAG query error';
         _streamingText = '';

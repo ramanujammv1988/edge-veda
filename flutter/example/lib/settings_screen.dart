@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'detective_screen.dart';
 import 'soak_test_screen.dart';
 
 /// Settings tab with generation controls, storage overview, model management,
@@ -259,6 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ModelRegistry.llama32_1b,
       ModelRegistry.smolvlm2_500m,
       ModelRegistry.smolvlm2_500m_mmproj,
+      ModelRegistry.qwen3_06b,
     ];
     final totalBytes = models.fold<int>(0, (sum, m) => sum + m.sizeBytes);
     final totalGb = totalBytes / (1024 * 1024 * 1024);
@@ -348,6 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ModelRegistry.llama32_1b,
       ModelRegistry.smolvlm2_500m,
       ModelRegistry.smolvlm2_500m_mmproj,
+      ModelRegistry.qwen3_06b,
     ];
 
     return Column(
@@ -382,27 +385,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         _buildSectionHeader('Developer'),
         _buildCard(
-          child: ListTile(
-            leading: const Icon(Icons.science, color: AppTheme.accent),
-            title: const Text(
-              'Soak Test',
-              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-            ),
-            subtitle: const Text(
-              '15-min sustained vision benchmark',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-              color: AppTheme.textTertiary,
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SoakTestScreen(),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.science, color: AppTheme.accent),
+                title: const Text(
+                  'Soak Test',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 ),
-              );
-            },
+                subtitle: const Text(
+                  '15-min sustained vision benchmark',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.textTertiary,
+                ),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SoakTestScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              ListTile(
+                leading: const Icon(Icons.policy, color: AppTheme.accent),
+                title: const Text(
+                  'Phone Detective',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                ),
+                subtitle: const Text(
+                  'On-device behavioral insights with Qwen3',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.textTertiary,
+                ),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DetectiveScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ],
