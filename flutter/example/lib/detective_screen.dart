@@ -731,6 +731,90 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     }
   }
 
+  /// Request photo + calendar permissions if not yet determined.
+  /// Returns true if at least one source is available.
+  Future<bool> _ensurePermissions() async {
+    try {
+      final status = await _telemetryChannel
+          .invokeMethod<Map>('checkDetectivePermissions');
+      final photosStatus = status?['photos'] as String? ?? 'notDetermined';
+      final calendarStatus = status?['calendar'] as String? ?? 'notDetermined';
+
+      // If either is not yet determined, request permissions
+      if (photosStatus == 'notDetermined' || calendarStatus == 'notDetermined') {
+        final result = await _telemetryChannel
+            .invokeMethod<Map>('requestDetectivePermissions');
+        final photosResult = result?['photos'] as String? ?? 'denied';
+        final calendarResult = result?['calendar'] as String? ?? 'denied';
+        _photoSourceAvailable =
+            photosResult == 'granted' || photosResult == 'limited';
+        _calendarSourceAvailable = calendarResult == 'granted';
+      } else {
+        _photoSourceAvailable =
+            photosStatus == 'granted' || photosStatus == 'limited';
+        _calendarSourceAvailable = calendarStatus == 'granted';
+      }
+
+      return _photoSourceAvailable || _calendarSourceAvailable;
+    } catch (e) {
+      debugPrint('Detective: Permission check failed: $e');
+      return false;
+    }
+  }
+
+  /// Day name (from native) → day-of-week number (InsightEngine format).
+  /// NSCalendar weekday: 1=Sunday, 2=Monday, ..., 7=Saturday.
+  static const _dayNameToNumber = {
+    'Sun': '1', 'Mon': '2', 'Tue': '3', 'Wed': '4',
+    'Thu': '5', 'Fri': '6', 'Sat': '7',
+  };
+
+  /// Convert native camelCase photo response to snake_case format expected by InsightEngine.
+  Map<String, dynamic> _normalizePhotoData(Map raw) {
+    // Convert dayOfWeekCounts: {"Sun": 5, "Mon": 3} → {"1": 5, "2": 3}
+    final nativeDow = raw['dayOfWeekCounts'] as Map? ?? {};
+    final normalizedDow = <String, dynamic>{};
+    for (final entry in nativeDow.entries) {
+      final num = _dayNameToNumber[entry.key.toString()];
+      if (num != null) normalizedDow[num] = entry.value;
+    }
+
+    return {
+      'total_photos': raw['totalPhotos'] ?? 0,
+      'photos_with_location': raw['photosWithLocation'] ?? 0,
+      'day_of_week_counts': normalizedDow,
+      'hour_of_day_counts': raw['hourOfDayCounts'] ?? {},
+      'top_locations': raw['topLocations'] ?? [],
+      'sample_photos': raw['samplePhotos'] ?? [],
+    };
+  }
+
+  /// Convert native camelCase calendar response to snake_case format expected by InsightEngine.
+  Map<String, dynamic> _normalizeCalendarData(Map raw) {
+    final nativeDow = raw['dayOfWeekCounts'] as Map? ?? {};
+    final normalizedDow = <String, dynamic>{};
+    for (final entry in nativeDow.entries) {
+      final num = _dayNameToNumber[entry.key.toString()];
+      if (num != null) normalizedDow[num] = entry.value;
+    }
+
+    final nativeMinutes = raw['meetingMinutesPerWeekday'] as Map? ?? {};
+    final normalizedMinutes = <String, dynamic>{};
+    for (final entry in nativeMinutes.entries) {
+      final num = _dayNameToNumber[entry.key.toString()];
+      if (num != null) normalizedMinutes[num] = entry.value;
+    }
+
+    return {
+      'total_events': raw['totalEvents'] ?? 0,
+      'day_of_week_counts': normalizedDow,
+      'hour_of_day_counts': raw['hourOfDayCounts'] ?? {},
+      'meeting_minutes_per_day': normalizedMinutes,
+      'avg_event_duration_minutes': raw['averageDurationMinutes'] ?? 0,
+      'sample_events': raw['sampleEvents'] ?? [],
+    };
+  }
+
   Future<Map<String, dynamic>> _getPhotoData() async {
     // Check cache
     if (_cachedPhotoData != null &&
@@ -749,7 +833,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     try {
       final result =
           await _telemetryChannel.invokeMethod<Map>('getPhotoInsights');
-      _cachedPhotoData = Map<String, dynamic>.from(result ?? {});
+      _cachedPhotoData = _normalizePhotoData(result ?? {});
       _cacheTimestamp = DateTime.now();
       _photoSourceAvailable = true;
       return _cachedPhotoData!;
@@ -779,7 +863,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     try {
       final result =
           await _telemetryChannel.invokeMethod<Map>('getCalendarInsights');
-      _cachedCalendarData = Map<String, dynamic>.from(result ?? {});
+      _cachedCalendarData = _normalizeCalendarData(result ?? {});
       _cacheTimestamp = DateTime.now();
       _calendarSourceAvailable = true;
       return _cachedCalendarData!;
@@ -798,12 +882,22 @@ class _DetectiveScreenState extends State<DetectiveScreen>
       return;
     }
 
+    // Request photo + calendar permissions before fetching data
+    if (!_demoMode) {
+      final hasAnySource = await _ensurePermissions();
+      if (!hasAnySource && mounted) {
+        setState(() {
+          _errorMessage =
+              'Photo and calendar access denied. Enable Demo Mode to try with synthetic data, or grant permissions in Settings.';
+        });
+        return;
+      }
+    }
+
     setState(() {
       _state = _DetectiveState.scanning;
       _errorMessage = null;
       _report = null;
-      _photoSourceAvailable = true;
-      _calendarSourceAvailable = true;
       for (final step in _scanSteps) {
         step.status = _StepStatus.pending;
       }
