@@ -482,10 +482,10 @@ class ModelRegistry {
   static final ModelInfo qwen3_06b = ModelInfo(
     id: 'qwen3-0.6b-q4',
     name: 'Qwen3 0.6B',
-    sizeBytes: 524 * 1024 * 1024, // ~524 MB Q4_K_M
+    sizeBytes: 397 * 1024 * 1024, // ~397 MB Q4_K_M
     description: 'Compact model with native tool calling support',
     downloadUrl:
-        'https://huggingface.co/Mungert/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+        'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
   );
