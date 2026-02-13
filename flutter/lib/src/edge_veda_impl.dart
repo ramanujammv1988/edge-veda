@@ -27,6 +27,8 @@ import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:isolate';
+
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -39,7 +41,6 @@ import 'types.dart' show
     GenerateOptions,
     GenerateResponse,
     MemoryStats,
-    MemoryException,
     NativeErrorCode,
     InitializationException,
     ModelLoadException,
@@ -438,16 +439,16 @@ class EdgeVeda {
     // Create and spawn worker if needed
     _worker ??= StreamingWorker();
     if (!_worker!.isActive) {
-      print('EdgeVeda: [1/4] Spawning streaming worker...');
+      debugPrint('EdgeVeda: [1/4] Spawning streaming worker...');
       try {
         await _worker!.spawn();
-        print('EdgeVeda: [2/4] Worker spawned successfully');
+        debugPrint('EdgeVeda: [2/4] Worker spawned successfully');
       } catch (e) {
-        print('EdgeVeda: Worker spawn FAILED: $e');
+        debugPrint('EdgeVeda: Worker spawn FAILED: $e');
         throw GenerationException('Worker spawn failed: $e');
       }
 
-      print('EdgeVeda: [3/4] Loading model in worker (this takes 30-60 seconds)...');
+      debugPrint('EdgeVeda: [3/4] Loading model in worker (this takes 30-60 seconds)...');
       try {
         await _worker!.init(
           modelPath: _config!.modelPath,
@@ -456,13 +457,13 @@ class EdgeVeda {
           useGpu: _config!.useGpu,
           memoryLimitBytes: _config!.maxMemoryMb * 1024 * 1024,
         );
-        print('EdgeVeda: [4/4] Worker ready!');
+        debugPrint('EdgeVeda: [4/4] Worker ready!');
       } catch (e) {
-        print('EdgeVeda: Worker init FAILED: $e');
+        debugPrint('EdgeVeda: Worker init FAILED: $e');
         throw GenerationException('Worker init failed: $e');
       }
     } else {
-      print('EdgeVeda: Worker already active, reusing');
+      debugPrint('EdgeVeda: Worker already active, reusing');
     }
 
     _isStreaming = true;
@@ -479,7 +480,7 @@ class EdgeVeda {
 
     try {
       // Start the stream
-      print('EdgeVeda: Starting stream with prompt: "${prompt.substring(0, prompt.length > 50 ? 50 : prompt.length)}..."');
+      debugPrint('EdgeVeda: Starting stream with prompt: "${prompt.substring(0, prompt.length > 50 ? 50 : prompt.length)}..."');
       await _worker!.startStream(
         prompt: prompt,
         maxTokens: options.maxTokens,
@@ -488,7 +489,7 @@ class EdgeVeda {
         topK: options.topK,
         repeatPenalty: options.repeatPenalty,
       );
-      print('EdgeVeda: Stream started, beginning token loop');
+      debugPrint('EdgeVeda: Stream started, beginning token loop');
 
       // Yield tokens until stream ends
       while (true) {
@@ -981,9 +982,12 @@ class EdgeVeda {
 
   /// Get current memory statistics from native layer
   ///
-  /// Polls the native memory usage stats by creating a temporary context.
-  /// This is the v1 approach for memory monitoring - real-time callbacks
-  /// will be added in v2 with a long-lived worker isolate.
+  /// Routes through the active StreamingWorker isolate to query the
+  /// already-loaded model context. This avoids loading a second model
+  /// (~600MB) just to read memory stats.
+  ///
+  /// Returns zero-valued stats when no worker is active (no crash,
+  /// no model load).
   ///
   /// Example:
   /// ```dart
@@ -996,72 +1000,21 @@ class EdgeVeda {
   Future<MemoryStats> getMemoryStats() async {
     _ensureInitialized();
 
-    // Capture config values as primitives for isolate transfer
-    final modelPath = _config!.modelPath;
-    final numThreads = _config!.numThreads;
-    final contextSize = _config!.contextLength;
-    final useGpu = _config!.useGpu;
-    final maxMemoryBytes = _config!.maxMemoryMb * 1024 * 1024;
+    // Route through active worker to avoid loading a second model context
+    // (the old implementation loaded a full ~600MB model just to read stats)
+    if (_worker != null && _worker!.isActive) {
+      return _worker!.getMemoryStats();
+    }
 
-    // Run in background isolate (Pitfall 3 - Critical: no FFI on main)
-    return Isolate.run<MemoryStats>(() {
-      final bindings = EdgeVedaNativeBindings.instance;
-
-      // Allocate config struct
-      final configPtr = calloc<EvConfig>();
-      final modelPathPtr = modelPath.toNativeUtf8();
-      final errorPtr = calloc<ffi.Int32>();
-      final statsPtr = calloc<EvMemoryStats>();
-
-      ffi.Pointer<EvContextImpl>? ctx;
-      try {
-        // Populate config
-        configPtr.ref.modelPath = modelPathPtr;
-        configPtr.ref.backend = useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
-        configPtr.ref.numThreads = numThreads;
-        configPtr.ref.contextSize = contextSize;
-        configPtr.ref.batchSize = 512;
-        configPtr.ref.memoryLimitBytes = maxMemoryBytes;
-        configPtr.ref.autoUnloadOnMemoryPressure = true;
-        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
-        configPtr.ref.useMmap = true;
-        configPtr.ref.useMlock = false;
-        configPtr.ref.seed = -1;
-        configPtr.ref.reserved = ffi.nullptr;
-
-        ctx = bindings.evInit(configPtr, errorPtr);
-        if (ctx == ffi.nullptr) {
-          final errorCode = NativeErrorCode.fromCode(errorPtr.value);
-          final exception = errorCode.toException('Failed to get memory stats');
-          throw exception ?? MemoryException('Failed to get memory stats');
-        }
-
-        // Get memory stats
-        final result = bindings.evGetMemoryUsage(ctx, statsPtr);
-        if (result != 0) {
-          final errorCode = NativeErrorCode.fromCode(result);
-          final exception = errorCode.toException('Memory stats query failed');
-          throw exception ?? MemoryException('Memory stats query failed');
-        }
-
-        // Extract values before freeing
-        return MemoryStats(
-          currentBytes: statsPtr.ref.currentBytes,
-          peakBytes: statsPtr.ref.peakBytes,
-          limitBytes: statsPtr.ref.limitBytes,
-          modelBytes: statsPtr.ref.modelBytes,
-          contextBytes: statsPtr.ref.contextBytes,
-        );
-      } finally {
-        if (ctx != null && ctx != ffi.nullptr) {
-          bindings.evFree(ctx);
-        }
-        calloc.free(statsPtr);
-        calloc.free(modelPathPtr);
-        calloc.free(configPtr);
-        calloc.free(errorPtr);
-      }
-    });
+    // No active worker -- return zero stats without loading a model.
+    // When the model isn't loaded, memory usage IS effectively zero.
+    return MemoryStats(
+      currentBytes: 0,
+      peakBytes: 0,
+      limitBytes: _config!.maxMemoryMb * 1024 * 1024,
+      modelBytes: 0,
+      contextBytes: 0,
+    );
   }
 
   /// Check if memory usage is above threshold
