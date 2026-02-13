@@ -1,6 +1,8 @@
 #import "EdgeVedaPlugin.h"
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <Photos/Photos.h>
+#import <EventKit/EventKit.h>
 #import <mach/mach.h>
 #import <os/proc.h>
 
@@ -246,6 +248,14 @@
         [self handleRequestMicrophonePermission:result];
     } else if ([@"shareFile" isEqualToString:call.method]) {
         [self handleShareFile:call result:result];
+    } else if ([@"checkDetectivePermissions" isEqualToString:call.method]) {
+        [self handleCheckDetectivePermissions:result];
+    } else if ([@"requestDetectivePermissions" isEqualToString:call.method]) {
+        [self handleRequestDetectivePermissions:result];
+    } else if ([@"getPhotoInsights" isEqualToString:call.method]) {
+        [self handleGetPhotoInsights:call result:result];
+    } else if ([@"getCalendarInsights" isEqualToString:call.method]) {
+        [self handleGetCalendarInsights:call result:result];
     } else {
         result(FlutterMethodNotImplemented);
     }
@@ -361,6 +371,374 @@
                                        message:@"No root view controller"
                                        details:nil]);
         }
+    });
+}
+
+#pragma mark - Detective Permissions
+
+/// Check current photo and calendar permission status without prompting.
+- (void)handleCheckDetectivePermissions:(FlutterResult)result {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // Check Photos permission
+        NSString *photosStatus;
+        if (@available(iOS 14, *)) {
+            PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+            switch (status) {
+                case PHAuthorizationStatusAuthorized: photosStatus = @"granted"; break;
+                case PHAuthorizationStatusLimited: photosStatus = @"limited"; break;
+                case PHAuthorizationStatusDenied: photosStatus = @"denied"; break;
+                case PHAuthorizationStatusRestricted: photosStatus = @"denied"; break;
+                case PHAuthorizationStatusNotDetermined: photosStatus = @"notDetermined"; break;
+                default: photosStatus = @"notDetermined"; break;
+            }
+        } else {
+            PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatus];
+            switch (status) {
+                case PHAuthorizationStatusAuthorized: photosStatus = @"granted"; break;
+                case PHAuthorizationStatusDenied: photosStatus = @"denied"; break;
+                case PHAuthorizationStatusRestricted: photosStatus = @"denied"; break;
+                case PHAuthorizationStatusNotDetermined: photosStatus = @"notDetermined"; break;
+                default: photosStatus = @"notDetermined"; break;
+            }
+        }
+
+        // Check Calendar permission
+        NSString *calendarStatus;
+        EKAuthorizationStatus ekStatus = [EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent];
+        switch (ekStatus) {
+            case EKAuthorizationStatusAuthorized: calendarStatus = @"granted"; break;
+            case EKAuthorizationStatusDenied: calendarStatus = @"denied"; break;
+            case EKAuthorizationStatusRestricted: calendarStatus = @"denied"; break;
+            case EKAuthorizationStatusNotDetermined: calendarStatus = @"notDetermined"; break;
+            default: calendarStatus = @"notDetermined"; break;
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            result(@{@"photos": photosStatus, @"calendar": calendarStatus});
+        });
+    });
+}
+
+/// Request photo and calendar permissions sequentially (photos first, then calendar).
+- (void)handleRequestDetectivePermissions:(FlutterResult)result {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // Step 1: Request Photos permission
+        dispatch_semaphore_t photoSem = dispatch_semaphore_create(0);
+        __block NSString *photosStatus = @"denied";
+
+        if (@available(iOS 14, *)) {
+            [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus status) {
+                switch (status) {
+                    case PHAuthorizationStatusAuthorized: photosStatus = @"granted"; break;
+                    case PHAuthorizationStatusLimited: photosStatus = @"limited"; break;
+                    default: photosStatus = @"denied"; break;
+                }
+                dispatch_semaphore_signal(photoSem);
+            }];
+        } else {
+            [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+                photosStatus = (status == PHAuthorizationStatusAuthorized) ? @"granted" : @"denied";
+                dispatch_semaphore_signal(photoSem);
+            }];
+        }
+        dispatch_semaphore_wait(photoSem, DISPATCH_TIME_FOREVER);
+
+        // Step 2: Request Calendar permission
+        dispatch_semaphore_t calSem = dispatch_semaphore_create(0);
+        __block NSString *calendarStatus = @"denied";
+        EKEventStore *eventStore = [[EKEventStore alloc] init];
+
+        if (@available(iOS 17.0, *)) {
+            [eventStore requestFullAccessToEventsWithCompletion:^(BOOL granted, NSError *error) {
+                calendarStatus = granted ? @"granted" : @"denied";
+                dispatch_semaphore_signal(calSem);
+            }];
+        } else {
+            [eventStore requestAccessToEntityType:EKEntityTypeEvent completion:^(BOOL granted, NSError *error) {
+                calendarStatus = granted ? @"granted" : @"denied";
+                dispatch_semaphore_signal(calSem);
+            }];
+        }
+        dispatch_semaphore_wait(calSem, DISPATCH_TIME_FOREVER);
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            result(@{@"photos": photosStatus, @"calendar": calendarStatus});
+        });
+    });
+}
+
+#pragma mark - Photo Insights
+
+/// Helper: Convert NSDate weekday to day name string.
+static NSString* dayNameFromWeekday(NSInteger weekday) {
+    // NSCalendar weekday: 1=Sunday, 2=Monday, ..., 7=Saturday
+    static NSArray *dayNames;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dayNames = @[@"Sun", @"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat"];
+    });
+    if (weekday >= 1 && weekday <= 7) return dayNames[weekday - 1];
+    return @"Unknown";
+}
+
+/// Fetch photo metadata and return lightly processed summaries.
+- (void)handleGetPhotoInsights:(FlutterMethodCall *)call result:(FlutterResult)result {
+    NSDictionary *args = call.arguments;
+    int limit = args[@"limit"] ? [args[@"limit"] intValue] : 500;
+    int sinceDays = args[@"sinceDays"] ? [args[@"sinceDays"] intValue] : 30;
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // Check permission
+        BOOL hasAccess = NO;
+        if (@available(iOS 14, *)) {
+            PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+            hasAccess = (status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited);
+        } else {
+            hasAccess = ([PHPhotoLibrary authorizationStatus] == PHAuthorizationStatusAuthorized);
+        }
+
+        if (!hasAccess) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                result(@{
+                    @"totalPhotos": @(0),
+                    @"dayOfWeekCounts": @{},
+                    @"hourOfDayCounts": @{},
+                    @"topLocations": @[],
+                    @"photosWithLocation": @(0),
+                    @"samplePhotos": @[]
+                });
+            });
+            return;
+        }
+
+        // Fetch PHAssets
+        PHFetchOptions *options = [[PHFetchOptions alloc] init];
+        NSDate *sinceDate = [NSDate dateWithTimeIntervalSinceNow:-(sinceDays * 86400.0)];
+        options.predicate = [NSPredicate predicateWithFormat:@"mediaType == %d AND creationDate >= %@",
+                            PHAssetMediaTypeImage, sinceDate];
+        options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
+        options.fetchLimit = limit;
+
+        PHFetchResult<PHAsset *> *assets = [PHAsset fetchAssetsWithOptions:options];
+
+        // Process
+        NSCalendar *calendar = [NSCalendar currentCalendar];
+        NSMutableDictionary<NSString *, NSNumber *> *dayOfWeekCounts = [NSMutableDictionary dictionary];
+        NSMutableDictionary<NSString *, NSNumber *> *hourOfDayCounts = [NSMutableDictionary dictionary];
+        NSMutableDictionary<NSString *, NSNumber *> *locationGrid = [NSMutableDictionary dictionary]; // "lat,lon" -> count
+        NSMutableDictionary<NSString *, NSArray *> *locationCoords = [NSMutableDictionary dictionary]; // "lat,lon" -> @[lat, lon]
+        NSInteger totalPhotos = assets.count;
+        __block NSInteger photosWithLocation = 0;
+
+        // Collect all asset data
+        NSMutableArray<NSDictionary *> *allAssetData = [NSMutableArray array];
+
+        [assets enumerateObjectsUsingBlock:^(PHAsset *asset, NSUInteger idx, BOOL *stop) {
+            NSDate *date = asset.creationDate;
+            if (!date) return;
+
+            // Day of week
+            NSDateComponents *comps = [calendar components:(NSCalendarUnitWeekday | NSCalendarUnitHour) fromDate:date];
+            NSString *dayName = dayNameFromWeekday(comps.weekday);
+            dayOfWeekCounts[dayName] = @(dayOfWeekCounts[dayName].integerValue + 1);
+
+            // Hour of day
+            NSString *hourKey = [NSString stringWithFormat:@"%ld", (long)comps.hour];
+            hourOfDayCounts[hourKey] = @(hourOfDayCounts[hourKey].integerValue + 1);
+
+            // Location
+            CLLocation *loc = asset.location;
+            BOOL hasLoc = (loc != nil);
+            if (hasLoc) {
+                photosWithLocation++;
+                // Grid cell: round to 2 decimal places (~1km)
+                double gridLat = round(loc.coordinate.latitude * 100.0) / 100.0;
+                double gridLon = round(loc.coordinate.longitude * 100.0) / 100.0;
+                NSString *gridKey = [NSString stringWithFormat:@"%.2f,%.2f", gridLat, gridLon];
+                locationGrid[gridKey] = @(locationGrid[gridKey].integerValue + 1);
+                locationCoords[gridKey] = @[@(gridLat), @(gridLon)];
+            }
+
+            // Store for sampling
+            NSMutableDictionary *assetDict = [NSMutableDictionary dictionary];
+            assetDict[@"timestamp"] = @((long long)([date timeIntervalSince1970] * 1000.0));
+            assetDict[@"hasLocation"] = @(hasLoc);
+            if (hasLoc) {
+                assetDict[@"lat"] = @(loc.coordinate.latitude);
+                assetDict[@"lon"] = @(loc.coordinate.longitude);
+            } else {
+                assetDict[@"lat"] = [NSNull null];
+                assetDict[@"lon"] = [NSNull null];
+            }
+            [allAssetData addObject:assetDict];
+        }];
+
+        // Top 5 location grid cells
+        NSArray<NSString *> *sortedGridKeys = [locationGrid keysSortedByValueUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
+            return [b compare:a]; // Descending
+        }];
+        NSMutableArray<NSDictionary *> *topLocations = [NSMutableArray array];
+        for (NSUInteger i = 0; i < MIN(5, sortedGridKeys.count); i++) {
+            NSString *key = sortedGridKeys[i];
+            NSArray *coords = locationCoords[key];
+            [topLocations addObject:@{
+                @"lat": coords[0],
+                @"lon": coords[1],
+                @"count": locationGrid[key]
+            }];
+        }
+
+        // Sample photos: up to 10 representative (every Nth)
+        NSMutableArray<NSDictionary *> *samplePhotos = [NSMutableArray array];
+        if (allAssetData.count > 0) {
+            NSUInteger step = MAX(1, allAssetData.count / 10);
+            for (NSUInteger i = 0; i < allAssetData.count && samplePhotos.count < 10; i += step) {
+                [samplePhotos addObject:allAssetData[i]];
+            }
+        }
+
+        NSDictionary *response = @{
+            @"totalPhotos": @(totalPhotos),
+            @"dayOfWeekCounts": dayOfWeekCounts,
+            @"hourOfDayCounts": hourOfDayCounts,
+            @"topLocations": topLocations,
+            @"photosWithLocation": @(photosWithLocation),
+            @"samplePhotos": samplePhotos
+        };
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            result(response);
+        });
+    });
+}
+
+#pragma mark - Calendar Insights
+
+/// Fetch calendar events and return lightly processed summaries.
+- (void)handleGetCalendarInsights:(FlutterMethodCall *)call result:(FlutterResult)result {
+    NSDictionary *args = call.arguments;
+    int sinceDays = args[@"sinceDays"] ? [args[@"sinceDays"] intValue] : 30;
+    int untilDays = args[@"untilDays"] ? [args[@"untilDays"] intValue] : 0;
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        EKEventStore *store = [[EKEventStore alloc] init];
+
+        // Check permission
+        EKAuthorizationStatus ekStatus = [EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent];
+        BOOL hasAccess = NO;
+        if (@available(iOS 17.0, *)) {
+            hasAccess = (ekStatus == EKAuthorizationStatusFullAccess);
+        } else {
+            hasAccess = (ekStatus == EKAuthorizationStatusAuthorized);
+        }
+
+        if (!hasAccess) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                result(@{
+                    @"totalEvents": @(0),
+                    @"dayOfWeekCounts": @{},
+                    @"hourOfDayCounts": @{},
+                    @"meetingMinutesPerWeekday": @{},
+                    @"averageDurationMinutes": @(0),
+                    @"sampleEvents": @[]
+                });
+            });
+            return;
+        }
+
+        // Date range
+        NSDate *startDate = [NSDate dateWithTimeIntervalSinceNow:-(sinceDays * 86400.0)];
+        NSDate *endDate;
+        if (untilDays > 0) {
+            endDate = [NSDate dateWithTimeIntervalSinceNow:(untilDays * 86400.0)];
+        } else {
+            endDate = [NSDate date];
+        }
+
+        NSPredicate *predicate = [store predicateForEventsWithStartDate:startDate endDate:endDate calendars:nil];
+        NSArray<EKEvent *> *events = [store eventsMatchingPredicate:predicate];
+
+        if (!events || events.count == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                result(@{
+                    @"totalEvents": @(0),
+                    @"dayOfWeekCounts": @{},
+                    @"hourOfDayCounts": @{},
+                    @"meetingMinutesPerWeekday": @{},
+                    @"averageDurationMinutes": @(0),
+                    @"sampleEvents": @[]
+                });
+            });
+            return;
+        }
+
+        NSCalendar *calendar = [NSCalendar currentCalendar];
+        NSMutableDictionary<NSString *, NSNumber *> *dayOfWeekCounts = [NSMutableDictionary dictionary];
+        NSMutableDictionary<NSString *, NSNumber *> *hourOfDayCounts = [NSMutableDictionary dictionary];
+        NSMutableDictionary<NSString *, NSNumber *> *meetingMinutesPerWeekday = [NSMutableDictionary dictionary];
+        double totalDurationMinutes = 0.0;
+        NSInteger totalEvents = events.count;
+
+        NSMutableArray<NSDictionary *> *allEventData = [NSMutableArray array];
+
+        for (EKEvent *event in events) {
+            if (!event.startDate || !event.endDate) continue;
+
+            NSDateComponents *comps = [calendar components:(NSCalendarUnitWeekday | NSCalendarUnitHour) fromDate:event.startDate];
+            NSString *dayName = dayNameFromWeekday(comps.weekday);
+
+            // Day of week count
+            dayOfWeekCounts[dayName] = @(dayOfWeekCounts[dayName].integerValue + 1);
+
+            // Hour of day count
+            NSString *hourKey = [NSString stringWithFormat:@"%ld", (long)comps.hour];
+            hourOfDayCounts[hourKey] = @(hourOfDayCounts[hourKey].integerValue + 1);
+
+            // Duration in minutes
+            double durationMinutes = [event.endDate timeIntervalSinceDate:event.startDate] / 60.0;
+            if (durationMinutes < 0) durationMinutes = 0;
+            totalDurationMinutes += durationMinutes;
+
+            // Meeting minutes per weekday
+            meetingMinutesPerWeekday[dayName] = @(meetingMinutesPerWeekday[dayName].doubleValue + durationMinutes);
+
+            // Truncate title to 50 chars for privacy
+            NSString *title = event.title ?: @"(No title)";
+            if (title.length > 50) {
+                title = [[title substringToIndex:50] stringByAppendingString:@"..."];
+            }
+
+            [allEventData addObject:@{
+                @"startTimestamp": @((long long)([event.startDate timeIntervalSince1970] * 1000.0)),
+                @"endTimestamp": @((long long)([event.endDate timeIntervalSince1970] * 1000.0)),
+                @"title": title,
+                @"durationMinutes": @((int)round(durationMinutes))
+            }];
+        }
+
+        double averageDuration = totalEvents > 0 ? totalDurationMinutes / totalEvents : 0;
+
+        // Sample events: up to 10 representative (every Nth)
+        NSMutableArray<NSDictionary *> *sampleEvents = [NSMutableArray array];
+        if (allEventData.count > 0) {
+            NSUInteger step = MAX(1, allEventData.count / 10);
+            for (NSUInteger i = 0; i < allEventData.count && sampleEvents.count < 10; i += step) {
+                [sampleEvents addObject:allEventData[i]];
+            }
+        }
+
+        NSDictionary *response = @{
+            @"totalEvents": @(totalEvents),
+            @"dayOfWeekCounts": dayOfWeekCounts,
+            @"hourOfDayCounts": hourOfDayCounts,
+            @"meetingMinutesPerWeekday": meetingMinutesPerWeekday,
+            @"averageDurationMinutes": @((int)round(averageDuration)),
+            @"sampleEvents": sampleEvents
+        };
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            result(response);
+        });
     });
 }
 
