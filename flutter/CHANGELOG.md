@@ -5,6 +5,28 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-02-13
+
+### Added
+- **RAG Demo Apps:** Document Q&A with two-model pipeline (embedder + generator), detective investigation screen
+- **Tool Calling Demo:** Native iOS data providers (contacts, calendar, location), detective reasoning screen
+- **Performance Benchmarks:** `BENCHMARKS.md` with normalized device metrics across all modalities
+
+### Changed
+- **Memory Optimization:** KV cache Q8_0 halves cache memory (~64 MB → ~32 MB), flash attention wired through config
+- **getMemoryStats() Fix:** Routed through StreamingWorker — eliminates ~600 MB spike from double model load
+- **Pub.dev Metadata:** Added SPDX license identifier, topics for discoverability, updated description
+
+### Fixed
+- **Batched Prompt Evaluation:** Conversations exceeding 512 tokens no longer crash — prompt eval now chunks in n_batch-sized batches
+- **Streaming Response Persistence:** Assistant messages reliably saved after streaming completes (async* generator cancellation fix)
+
+### Performance
+- Text generation: 42–43 tok/s sustained (Llama 3.2 1B, Metal GPU)
+- Vector search: <1 ms (HNSW, cosine similarity)
+- Steady-state memory: 400–550 MB (down from ~1,200 MB peaks)
+- Vision soak test: 12.6 min, 254 frames, 0 crashes
+
 ## [1.3.1] - 2026-02-12
 
 ### Fixed
