@@ -1120,9 +1120,14 @@ Output ONLY this JSON (nothing else):
         insightNumbers.addAll(_extractNumbers(insight.evidence));
       }
 
-      // Check insight types for field validation
+      // Check insight types for field validation -- reject deductions referencing
+      // data fields that were not present in the computed insight candidates.
       final hasLocationData =
           insights.any((i) => i.evidence.contains('location') || i.evidence.contains('geotagged'));
+      final hasPhotoData =
+          insights.any((i) => i.type == 'photo_pattern' && !i.lowConfidence);
+      final hasCalendarData =
+          insights.any((i) => i.type == 'calendar_pattern' && !i.lowConfidence);
 
       final deductionsList = parsed['deductions'] as List? ?? [];
       final validatedDeductions = <Deduction>[];
@@ -1131,13 +1136,32 @@ Output ONLY this JSON (nothing else):
         final finding = (d['finding'] as String?) ?? '';
         final evidence = (d['evidence'] as String?) ?? '';
 
-        // Self-check: reject deductions mentioning locations if no location data
+        // Self-check: reject deductions mentioning data fields not in insights
+        final findingLower = finding.toLowerCase();
+        final evidenceLower = evidence.toLowerCase();
         if (!hasLocationData &&
-            (evidence.toLowerCase().contains('location') ||
-                evidence.toLowerCase().contains('places') ||
-                finding.toLowerCase().contains('location'))) {
+            (evidenceLower.contains('location') ||
+                evidenceLower.contains('places') ||
+                findingLower.contains('location'))) {
           debugPrint(
               'Detective: Rejected fabricated location deduction: $finding');
+          continue;
+        }
+        if (!hasPhotoData &&
+            (evidenceLower.contains('photo') ||
+                findingLower.contains('photo'))) {
+          debugPrint(
+              'Detective: Rejected fabricated photo deduction (no photo data): $finding');
+          continue;
+        }
+        if (!hasCalendarData &&
+            (evidenceLower.contains('meeting') ||
+                evidenceLower.contains('calendar') ||
+                evidenceLower.contains('event') ||
+                findingLower.contains('meeting') ||
+                findingLower.contains('calendar'))) {
+          debugPrint(
+              'Detective: Rejected fabricated calendar deduction (no calendar data): $finding');
           continue;
         }
 
@@ -1146,7 +1170,7 @@ Output ONLY this JSON (nothing else):
         final hasValidNumber =
             evidenceNumbers.intersection(insightNumbers).isNotEmpty;
 
-        if (hasValidNumber || evidenceNumbers.isEmpty) {
+        if (hasValidNumber) {
           validatedDeductions.add(Deduction(
             finding: finding.isNotEmpty ? finding : 'Finding',
             evidence: evidence.isNotEmpty ? evidence : 'Evidence unavailable',
