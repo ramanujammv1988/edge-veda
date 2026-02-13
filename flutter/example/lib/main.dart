@@ -404,15 +404,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (breakPoint <= start) {
         // Try sentence boundary
         breakPoint = text.lastIndexOf('. ', end);
-        if (breakPoint > start) breakPoint += 2; // Include the period and space
+        if (breakPoint > start) breakPoint += 2;
       }
       if (breakPoint <= start) {
         breakPoint = end;
       }
       final chunk = text.substring(start, breakPoint).trim();
       if (chunk.isNotEmpty) chunks.add(chunk);
-      start = breakPoint - overlap;
-      if (start < 0) start = 0;
+      // Always advance forward — overlap only if we advanced enough
+      final nextStart = breakPoint - overlap;
+      start = nextStart > start ? nextStart : breakPoint;
     }
     return chunks;
   }
@@ -427,6 +428,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final filePath = result.files.single.path!;
     final fileName = result.files.single.name;
+    final fileSize = result.files.single.size;
+    debugPrint('RAG: picked file=$fileName path=$filePath size=$fileSize');
 
     setState(() {
       _isIndexingDocument = true;
@@ -436,15 +439,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
 
     try {
-      // Step 2: Read file as text
+      // Step 2: Read file as text (try UTF-8, fall back to Latin-1)
+      debugPrint('RAG: reading file...');
       String text;
       try {
         text = await File(filePath).readAsString();
       } catch (_) {
-        _showError('Cannot read file — only text-based files are supported');
-        setState(() => _isIndexingDocument = false);
-        return;
+        try {
+          final bytes = await File(filePath).readAsBytes();
+          text = latin1.decode(bytes);
+          debugPrint('RAG: decoded as Latin-1 (${text.length} chars)');
+        } catch (e) {
+          debugPrint('RAG: read failed: $e');
+          _showError('Cannot read file — only text-based files are supported');
+          setState(() => _isIndexingDocument = false);
+          return;
+        }
       }
+      debugPrint('RAG: read ${text.length} chars');
       if (text.trim().isEmpty) {
         _showError('Document is empty');
         setState(() => _isIndexingDocument = false);
