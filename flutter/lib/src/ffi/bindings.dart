@@ -151,6 +151,18 @@ final class EvConfig extends Struct {
   @Int32()
   external int seed;
 
+  /// Flash attention type (-1=auto, 0=disabled, 1=enabled)
+  @Int32()
+  external int flashAttn;
+
+  /// KV cache data type for keys (ggml_type enum: 1=F16, 8=Q8_0)
+  @Int32()
+  external int kvCacheTypeK;
+
+  /// KV cache data type for values (ggml_type enum: 1=F16, 8=Q8_0)
+  @Int32()
+  external int kvCacheTypeV;
+
   /// Reserved for future use - must be NULL
   external Pointer<Void> reserved;
 }

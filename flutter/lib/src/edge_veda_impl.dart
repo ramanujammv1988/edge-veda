@@ -116,6 +116,9 @@ class EdgeVeda {
     final numThreads = config.numThreads;
     final contextSize = config.contextLength;
     final useGpu = config.useGpu;
+    final flashAttn = config.flashAttn;
+    final kvCacheTypeK = config.kvCacheTypeK;
+    final kvCacheTypeV = config.kvCacheTypeV;
 
     // Test initialization in background isolate to verify model loads
     // Pass only primitive data - no Pointers!
@@ -141,6 +144,9 @@ class EdgeVeda {
           configPtr.ref.useMmap = true;
           configPtr.ref.useMlock = false;
           configPtr.ref.seed = -1;
+          configPtr.ref.flashAttn = flashAttn;
+          configPtr.ref.kvCacheTypeK = kvCacheTypeK;
+          configPtr.ref.kvCacheTypeV = kvCacheTypeV;
           configPtr.ref.reserved = ffi.nullptr;
 
           final ctx = bindings.evInit(configPtr, errorPtr);
@@ -266,6 +272,9 @@ class EdgeVeda {
     final numThreads = _config!.numThreads;
     final contextSize = _config!.contextLength;
     final useGpu = _config!.useGpu;
+    final flashAttn = _config!.flashAttn;
+    final kvCacheTypeK = _config!.kvCacheTypeK;
+    final kvCacheTypeV = _config!.kvCacheTypeV;
 
     // Capture generation options as primitives
     final maxTokens = options.maxTokens;
@@ -299,6 +308,9 @@ class EdgeVeda {
         configPtr.ref.useMmap = true;
         configPtr.ref.useMlock = false;
         configPtr.ref.seed = -1;
+        configPtr.ref.flashAttn = flashAttn;
+        configPtr.ref.kvCacheTypeK = kvCacheTypeK;
+        configPtr.ref.kvCacheTypeV = kvCacheTypeV;
         configPtr.ref.reserved = ffi.nullptr;
 
         ctx = bindings.evInit(configPtr, errorPtr);
@@ -456,6 +468,9 @@ class EdgeVeda {
           contextSize: _config!.contextLength,
           useGpu: _config!.useGpu,
           memoryLimitBytes: _config!.maxMemoryMb * 1024 * 1024,
+          flashAttn: _config!.flashAttn,
+          kvCacheTypeK: _config!.kvCacheTypeK,
+          kvCacheTypeV: _config!.kvCacheTypeV,
         );
         debugPrint('EdgeVeda: [4/4] Worker ready!');
       } catch (e) {
@@ -555,6 +570,9 @@ class EdgeVeda {
     final numThreads = _config!.numThreads;
     final contextSize = _config!.contextLength;
     final useGpu = _config!.useGpu;
+    final flashAttn = _config!.flashAttn;
+    final kvCacheTypeK = _config!.kvCacheTypeK;
+    final kvCacheTypeV = _config!.kvCacheTypeV;
 
     return await Isolate.run(() {
       final bindings = EdgeVedaNativeBindings.instance;
@@ -576,6 +594,9 @@ class EdgeVeda {
         configPtr.ref.useMmap = true;
         configPtr.ref.useMlock = false;
         configPtr.ref.seed = -1;
+        configPtr.ref.flashAttn = flashAttn;
+        configPtr.ref.kvCacheTypeK = kvCacheTypeK;
+        configPtr.ref.kvCacheTypeV = kvCacheTypeV;
         configPtr.ref.reserved = ffi.nullptr;
 
         final ctx = bindings.evInit(configPtr, errorPtr);
@@ -647,6 +668,9 @@ class EdgeVeda {
     final numThreads = _config!.numThreads;
     final contextSize = _config!.contextLength;
     final useGpu = _config!.useGpu;
+    final flashAttn = _config!.flashAttn;
+    final kvCacheTypeK = _config!.kvCacheTypeK;
+    final kvCacheTypeV = _config!.kvCacheTypeV;
 
     // Run all embeddings in a single isolate with one model load
     return await Isolate.run(() {
@@ -669,6 +693,9 @@ class EdgeVeda {
         configPtr.ref.useMmap = true;
         configPtr.ref.useMlock = false;
         configPtr.ref.seed = -1;
+        configPtr.ref.flashAttn = flashAttn;
+        configPtr.ref.kvCacheTypeK = kvCacheTypeK;
+        configPtr.ref.kvCacheTypeV = kvCacheTypeV;
         configPtr.ref.reserved = ffi.nullptr;
 
         final ctx = bindings.evInit(configPtr, errorPtr);

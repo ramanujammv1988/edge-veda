@@ -21,6 +21,24 @@ class EdgeVedaConfig {
   /// Enable verbose logging for debugging
   final bool verbose;
 
+  /// Flash attention type: -1=auto (recommended), 0=disabled, 1=enabled
+  ///
+  /// AUTO lets llama.cpp enable flash attention when the backend supports it
+  /// (Metal on iOS does). This improves memory access patterns during attention.
+  final int flashAttn;
+
+  /// KV cache quantization type for keys (1=F16, 8=Q8_0)
+  ///
+  /// Q8_0 halves KV cache memory with negligible quality loss.
+  /// Default is Q8_0 (8) for mobile memory optimization.
+  final int kvCacheTypeK;
+
+  /// KV cache quantization type for values (1=F16, 8=Q8_0)
+  ///
+  /// Q8_0 halves KV cache memory with negligible quality loss.
+  /// Default is Q8_0 (8) for mobile memory optimization.
+  final int kvCacheTypeV;
+
   const EdgeVedaConfig({
     required this.modelPath,
     this.numThreads = 4,
@@ -28,6 +46,9 @@ class EdgeVedaConfig {
     this.useGpu = true,
     this.maxMemoryMb = 1536,
     this.verbose = false,
+    this.flashAttn = -1,
+    this.kvCacheTypeK = 8,
+    this.kvCacheTypeV = 8,
   });
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +58,9 @@ class EdgeVedaConfig {
         'useGpu': useGpu,
         'maxMemoryMb': maxMemoryMb,
         'verbose': verbose,
+        'flashAttn': flashAttn,
+        'kvCacheTypeK': kvCacheTypeK,
+        'kvCacheTypeV': kvCacheTypeV,
       };
 
   @override

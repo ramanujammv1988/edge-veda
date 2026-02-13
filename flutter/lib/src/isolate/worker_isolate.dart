@@ -101,6 +101,9 @@ class StreamingWorker {
     required int contextSize,
     required bool useGpu,
     int memoryLimitBytes = 0,
+    int flashAttn = -1,
+    int kvCacheTypeK = 8,
+    int kvCacheTypeV = 8,
   }) async {
     _ensureActive();
 
@@ -120,6 +123,9 @@ class StreamingWorker {
       contextSize: contextSize,
       useGpu: useGpu,
       memoryLimitBytes: memoryLimitBytes,
+      flashAttn: flashAttn,
+      kvCacheTypeK: kvCacheTypeK,
+      kvCacheTypeV: kvCacheTypeV,
     ));
 
     try {
@@ -383,6 +389,9 @@ void _handleInit(
     configPtr.ref.useMmap = true;
     configPtr.ref.useMlock = false;
     configPtr.ref.seed = -1;
+    configPtr.ref.flashAttn = cmd.flashAttn;
+    configPtr.ref.kvCacheTypeK = cmd.kvCacheTypeK;
+    configPtr.ref.kvCacheTypeV = cmd.kvCacheTypeV;
     configPtr.ref.reserved = ffi.nullptr;
 
     final ctx = bindings.evInit(configPtr, errorPtr);
