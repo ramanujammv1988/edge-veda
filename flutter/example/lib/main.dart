@@ -946,7 +946,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           setState(() {
             _statusMessage = 'Complete (${_streamingTokenCount} tokens, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s)';
           });
-          break;
+          // Don't break here - let the stream close naturally so
+          // ChatSession.sendStream() can add the assistant message to history.
+          // Falls through to 'if (chunk.token.isEmpty) continue;' below.
         }
 
         // Skip empty tokens

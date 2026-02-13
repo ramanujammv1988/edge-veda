@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -551,13 +552,17 @@ ev_error_t ev_generate(
         return EV_ERROR_INFERENCE_FAILED;
     }
 
-    // Create batch for prompt processing
-    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
+    // Evaluate prompt in batches of n_batch
+    const int n_prompt = static_cast<int>(tokens.size());
+    const int n_batch = static_cast<int>(llama_n_batch(ctx->llama_ctx));
 
-    // Evaluate prompt
-    if (llama_decode(ctx->llama_ctx, batch) != 0) {
-        ctx->last_error = "Failed to evaluate prompt";
-        return EV_ERROR_INFERENCE_FAILED;
+    for (int i = 0; i < n_prompt; i += n_batch) {
+        const int n_eval = std::min(n_batch, n_prompt - i);
+        llama_batch batch = llama_batch_get_one(tokens.data() + i, n_eval);
+        if (llama_decode(ctx->llama_ctx, batch) != 0) {
+            ctx->last_error = "Failed to evaluate prompt";
+            return EV_ERROR_INFERENCE_FAILED;
+        }
     }
 
     // Create sampler (pass vocab for grammar support)
@@ -588,10 +593,10 @@ ev_error_t ev_generate(
         }
 
         // Prepare next batch
-        batch = llama_batch_get_one(&new_token, 1);
+        llama_batch next_batch = llama_batch_get_one(&new_token, 1);
 
         // Evaluate
-        if (llama_decode(ctx->llama_ctx, batch) != 0) {
+        if (llama_decode(ctx->llama_ctx, next_batch) != 0) {
             llama_sampler_free(sampler);
             ctx->last_error = "Failed during generation";
             return EV_ERROR_INFERENCE_FAILED;
@@ -707,18 +712,22 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
         // Clear KV cache for fresh generation
         llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
 
-        // Evaluate prompt tokens
-        llama_batch batch = llama_batch_get_one(
-            stream->prompt_tokens.data(),
-            static_cast<int32_t>(stream->prompt_tokens.size())
-        );
-        if (llama_decode(ctx->llama_ctx, batch) != 0) {
-            stream->ended = true;
-            if (error) *error = EV_ERROR_INFERENCE_FAILED;
-            return nullptr;
+        // Evaluate prompt tokens in batches of n_batch
+        const int n_prompt = static_cast<int>(stream->prompt_tokens.size());
+        const int n_batch = static_cast<int>(llama_n_batch(ctx->llama_ctx));
+
+        for (int i = 0; i < n_prompt; i += n_batch) {
+            const int n_eval = std::min(n_batch, n_prompt - i);
+            llama_batch batch = llama_batch_get_one(
+                stream->prompt_tokens.data() + i, n_eval);
+            if (llama_decode(ctx->llama_ctx, batch) != 0) {
+                stream->ended = true;
+                if (error) *error = EV_ERROR_INFERENCE_FAILED;
+                return nullptr;
+            }
         }
 
-        stream->n_cur = static_cast<int>(stream->prompt_tokens.size());
+        stream->n_cur = n_prompt;
         stream->prompt_evaluated = true;
     }
 
