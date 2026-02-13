@@ -160,20 +160,14 @@ class RagPipeline {
     GenerateOptions? options,
     CancelToken? cancelToken,
   }) async* {
-    final totalSw = Stopwatch()..start();
-
     // Step 1: Embed the query
-    final embedSw = Stopwatch()..start();
     final queryEmbedding = await _embedder.embed(queryText);
-    embedSw.stop();
 
     // Step 2: Search the vector index
-    final searchSw = Stopwatch()..start();
     final results = _index.query(
       queryEmbedding.embedding,
       k: config.topK,
     );
-    searchSw.stop();
 
     // Step 3: Build context
     final contextParts = <String>[];
@@ -188,22 +182,10 @@ class RagPipeline {
 
     final context = contextParts.join('\n\n');
 
-    // Log retrieval metrics
-    print('[RAG-RETRIEVAL] Query Embed: ${embedSw.elapsedMilliseconds}ms | '
-        'Search: ${searchSw.elapsedMilliseconds}ms | '
-        '${matchedDocs.length}/${results.length} hits | '
-        'Context: ${contextParts.length} chunks, ${context.length} chars');
-    for (int i = 0; i < matchedDocs.length; i++) {
-      print('[RAG-RETRIEVAL]   #${i + 1} ${matchedDocs[i].id} '
-          'sim=${matchedDocs[i].score.toStringAsFixed(3)}');
-    }
-
     // Step 4: Build augmented prompt
     final augmentedPrompt = config.promptTemplate
         .replaceAll('{context}', context)
         .replaceAll('{query}', queryText);
-
-    print('[RAG-METRICS] Augmented prompt: ${augmentedPrompt.length} chars');
 
     // Step 5: Stream response
     yield* _generator.generateStream(

@@ -738,9 +738,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ));
       }
 
-      // Get memory stats
-      final memStats = await _edgeVeda.getMemoryStats();
-      _memoryMb = memStats.currentBytes / (1024 * 1024);
+      // NOTE: Deliberately skip getMemoryStats() here. It creates a full
+      // model context in a new isolate (~600MB spike) just to read stats,
+      // which doubles memory temporarily and triggers iOS jetsam crashes.
 
       // ── QUERY METRICS ───────────────────────────────────────────
       if (!querySw.isRunning) {
@@ -768,10 +768,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         print('║   Generation:     ${genMs.toString().padLeft(6)} ms  ($_streamingTokenCount tokens, $responseChars chars)');
         print('║   ──────────────────────────────');
         print('║   End-to-End:     ${totalMs.toString().padLeft(6)} ms');
-        print('║                                                             ║');
-        print('║ Resource Usage                                              ║');
-        print('║   Memory:         ${(_memoryMb ?? 0).toStringAsFixed(0).padLeft(6)} MB');
-        print('║   Cloud Calls:         0  (100% on-device)');
         print('║                                                             ║');
         print('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)      ║');
         print('║ Hardware: Apple A18 Pro GPU (Metal)                         ║');

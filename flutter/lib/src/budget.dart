@@ -55,6 +55,9 @@ enum WorkloadId {
 
   /// Tool/function calling inference.
   toolCall,
+
+  /// RAG pipeline inference (embedding + generation).
+  rag,
 }
 
 /// Adaptive budget profile expressing intent as multipliers on measured device baseline.
