@@ -32,6 +32,10 @@
 	<string>Camera access is needed for real-time vision inference</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Veda needs microphone access for on-device speech-to-text transcription. Audio is processed entirely on your device and never sent to any server.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Veda analyzes photo timestamps and locations to discover patterns about your daily life. No images are accessed or uploaded -- only metadata like when and where photos were taken.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Veda analyzes your calendar schedule to discover patterns in your daily routine. Event details stay on your device and are never uploaded.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

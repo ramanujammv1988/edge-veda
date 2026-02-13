@@ -27,7 +27,7 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
   s.public_header_files = 'Classes/**/*.h'
 
   # Frameworks
-  s.frameworks       = 'Metal', 'MetalPerformanceShaders', 'Accelerate', 'AVFoundation'
+  s.frameworks       = 'Metal', 'MetalPerformanceShaders', 'Accelerate', 'AVFoundation', 'Photos', 'EventKit'
 
   # Dependencies
   s.dependency 'Flutter'
