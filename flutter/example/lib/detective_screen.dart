@@ -475,8 +475,8 @@ enum _DetectiveState {
   complete,
 }
 
-/// 15-second pipeline timeout.
-const _pipelineTimeout = Duration(seconds: 15);
+/// 45-second pipeline timeout.
+const _pipelineTimeout = Duration(seconds: 45);
 
 // ==============================================================================
 // DetectiveScreen Widget
@@ -909,7 +909,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     int narrationMs = 0;
 
     try {
-      // Wrap entire pipeline in a 15-second timeout
+      // Wrap entire pipeline in a 45-second timeout
       await Future.any<void>([
         _runPipelineInner(
           stopwatch: stopwatch,
@@ -1314,48 +1314,115 @@ Output ONLY this JSON (nothing else):
     }
   }
 
+  String _dramaticHeadline(List<InsightCandidate> insights) {
+    final hasNightOwl = insights.any((i) => i.headline.contains('Night owl'));
+    final hasEarlyBird = insights.any((i) => i.headline.contains('Early bird'));
+    final hasWeekend = insights.any((i) => i.headline.contains('Weekend'));
+    final hasHomeBase = insights.any((i) => i.headline.contains('home base'));
+    final hasCrossPattern = insights.any((i) => i.type == 'cross_pattern');
+    final hasHeavyMeetings =
+        insights.any((i) => i.headline.contains('heaviest meeting'));
+
+    if (hasNightOwl) return 'Case File: The Midnight Operator';
+    if (hasEarlyBird) return 'Case File: The Dawn Patrol';
+    if (hasWeekend && hasHomeBase) return 'Case File: The Weekend Regular';
+    if (hasWeekend) return 'Case File: The Saturday Suspect';
+    if (hasHomeBase) return 'Case File: The Creature of Habit';
+    if (hasCrossPattern) return 'Case File: The Double Life';
+    if (hasHeavyMeetings) return 'Case File: The Corporate Ghost';
+    return 'Case File: Subject Under Surveillance';
+  }
+
+  String _dramaticFinding(InsightCandidate insight) {
+    final h = insight.headline.toLowerCase();
+    if (h.contains('night owl')) return 'The subject operates under cover of darkness';
+    if (h.contains('early bird')) return 'Subject rises before the city wakes';
+    if (h.contains('peak photography')) {
+      return 'Surveillance patterns reveal preferred operating hours';
+    }
+    if (h.contains('weekend photographer')) {
+      return 'The subject leads a double life on weekends';
+    }
+    if (h.contains('home base')) return 'A single location keeps pulling them back';
+    if (h.contains('heaviest meeting')) {
+      return 'One day a week, they vanish into back-to-back meetings';
+    }
+    if (h.contains('lightest meeting')) {
+      return 'When the calendar clears, the camera comes out';
+    }
+    if (h.contains('busy days equal photo days')) {
+      return 'The busier the day, the more evidence they leave behind';
+    }
+    if (h.contains('secret photo day')) {
+      return 'One day stands out in the surveillance logs';
+    }
+    if (h.contains('only analysis')) {
+      return 'Limited intel available -- partial dossier compiled';
+    }
+    return 'A pattern emerges from the digital trail';
+  }
+
   /// Construct a report directly from InsightCandidates without LLM narration.
   /// Used when LLM fails entirely (timeout, parse error, empty response).
   DetectiveReport _fallbackReport(List<InsightCandidate> insights) {
     final deductions = insights
         .where((i) => !i.lowConfidence)
         .take(3)
-        .map((i) => Deduction(finding: i.headline, evidence: i.evidence))
+        .map((i) => Deduction(
+              finding: _dramaticFinding(i),
+              evidence: i.evidence,
+            ))
         .toList();
 
     // If not enough high-confidence, fill from all
     if (deductions.length < 3) {
       for (final i in insights) {
         if (deductions.length >= 3) break;
-        if (!deductions.any((d) => d.finding == i.headline)) {
-          deductions.add(Deduction(finding: i.headline, evidence: i.evidence));
+        if (!deductions.any((d) => d.evidence == i.evidence)) {
+          deductions.add(Deduction(
+            finding: _dramaticFinding(i),
+            evidence: i.evidence,
+          ));
         }
       }
     }
 
     while (deductions.length < 3) {
       deductions.add(Deduction(
-        finding: 'Pattern detected',
-        evidence: 'Further investigation required.',
+        finding: 'The trail goes cold here',
+        evidence: 'Further surveillance required to complete the dossier.',
       ));
     }
 
-    // Surprising fact: prefer 'surprising' type, fallback to photo count
+    // Surprising fact: prefer 'surprising' type, then cross_pattern, then any high-confidence
     final surprisingInsight = insights
         .where((i) => i.type == 'surprising')
         .firstOrNull;
-    final photoCount = _cachedPhotoData != null
-        ? ((_cachedPhotoData!['total_photos'] as num?)?.toInt() ?? 0)
-        : 0;
+    final crossInsight = insights
+        .where((i) => i.type == 'cross_pattern')
+        .firstOrNull;
+    final bestSurprise = surprisingInsight ??
+        crossInsight ??
+        insights.where((i) => !i.lowConfidence).firstOrNull;
+
+    String surprisingFact;
+    if (bestSurprise != null) {
+      surprisingFact =
+          'What the subject doesn\'t realize: ${bestSurprise.evidence}';
+    } else {
+      final photoCount = _cachedPhotoData != null
+          ? ((_cachedPhotoData!['total_photos'] as num?)?.toInt() ?? 0)
+          : 0;
+      surprisingFact =
+          'The subject left $photoCount digital breadcrumbs in 30 days -- and never once looked over their shoulder.';
+    }
 
     return DetectiveReport(
-      headline: 'Your Digital Fingerprint',
+      headline: _dramaticHeadline(insights),
       deductions: deductions,
-      surprisingFact: surprisingInsight != null
-          ? '${surprisingInsight.headline}: ${surprisingInsight.evidence}'
-          : 'You have $photoCount photos in the last 30 days.',
+      surprisingFact: surprisingFact,
       privacyStatement:
-          'Every byte of this analysis happened on your device. No data was uploaded, no servers were contacted.',
+          'Every byte of this dossier was compiled on-device. No dead drops, no server contacts, no third parties. Your secrets stayed yours.',
     );
   }
 
