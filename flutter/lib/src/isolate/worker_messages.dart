@@ -29,12 +29,24 @@ class InitWorkerCommand extends WorkerCommand {
   /// Memory limit in bytes (0 = no limit)
   final int memoryLimitBytes;
 
+  /// Flash attention type (-1=auto, 0=disabled, 1=enabled)
+  final int flashAttn;
+
+  /// KV cache type for keys (1=F16, 8=Q8_0)
+  final int kvCacheTypeK;
+
+  /// KV cache type for values (1=F16, 8=Q8_0)
+  final int kvCacheTypeV;
+
   InitWorkerCommand({
     required this.modelPath,
     required this.numThreads,
     required this.contextSize,
     required this.useGpu,
     this.memoryLimitBytes = 0,
+    this.flashAttn = -1,
+    this.kvCacheTypeK = 8,
+    this.kvCacheTypeV = 8,
   });
 }
 

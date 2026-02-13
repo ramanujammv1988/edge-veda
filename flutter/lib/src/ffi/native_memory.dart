@@ -154,6 +154,15 @@ class EdgeVedaConfig {
   /// Random seed (-1 = random)
   final int seed;
 
+  /// Flash attention type (-1=auto, 0=disabled, 1=enabled)
+  final int flashAttn;
+
+  /// KV cache type for keys (1=F16, 8=Q8_0)
+  final int kvCacheTypeK;
+
+  /// KV cache type for values (1=F16, 8=Q8_0)
+  final int kvCacheTypeV;
+
   const EdgeVedaConfig({
     required this.modelPath,
     this.backend = EvBackend.auto_,
@@ -166,6 +175,9 @@ class EdgeVedaConfig {
     this.useMmap = true,
     this.useMlock = false,
     this.seed = -1,
+    this.flashAttn = -1,
+    this.kvCacheTypeK = 8,
+    this.kvCacheTypeV = 8,
   });
 }
 
@@ -209,6 +221,9 @@ class NativeConfigScope {
     ptr.ref.useMmap = config.useMmap;
     ptr.ref.useMlock = config.useMlock;
     ptr.ref.seed = config.seed;
+    ptr.ref.flashAttn = config.flashAttn;
+    ptr.ref.kvCacheTypeK = config.kvCacheTypeK;
+    ptr.ref.kvCacheTypeV = config.kvCacheTypeV;
     ptr.ref.reserved = nullptr;
   }
 
