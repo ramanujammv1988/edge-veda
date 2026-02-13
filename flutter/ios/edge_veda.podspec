@@ -3,17 +3,17 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'edge_veda'
-  s.version          = '1.3.1'
+  s.version          = '2.0.0'
   s.summary          = 'Edge Veda SDK - On-device AI inference for Flutter'
   s.description      = <<-DESC
 Edge Veda SDK enables running Large Language Models, Speech-to-Text, and
 Text-to-Speech directly on iOS devices with hardware acceleration via Metal.
 Features sub-200ms latency, 100% privacy, and zero server costs.
                        DESC
-  s.homepage         = 'https://github.com/edgeveda/edge-veda-sdk'
-  s.license          = { :type => 'MIT', :file => '../LICENSE' }
+  s.homepage         = 'https://github.com/ramanujammv1988/edge-veda'
+  s.license          = { :type => 'Apache-2.0', :file => '../LICENSE' }
   s.author           = { 'Edge Veda' => 'contact@edgeveda.com' }
-  s.source           = { :git => 'https://github.com/edgeveda/edge-veda-sdk.git', :tag => s.version.to_s }
+  s.source           = { :git => 'https://github.com/ramanujammv1988/edge-veda.git', :tag => s.version.to_s }
 
   # Platform support
   s.platform         = :ios, '13.0'
