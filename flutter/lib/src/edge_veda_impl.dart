@@ -670,7 +670,6 @@ class EdgeVeda {
         configPtr.ref.seed = -1;
         configPtr.ref.reserved = ffi.nullptr;
 
-        print('embedBatch: loading model...');
         final ctx = bindings.evInit(configPtr, errorPtr);
         if (ctx == ffi.nullptr) {
           final errorCode = NativeErrorCode.fromCode(errorPtr.value);
@@ -678,8 +677,6 @@ class EdgeVeda {
           throw exception ??
               ModelLoadException('Failed to load model for embedding');
         }
-        print('embedBatch: model loaded, embedding ${texts.length} texts...');
-
         try {
           final results = <EmbeddingResult>[];
           for (int idx = 0; idx < texts.length; idx++) {
@@ -700,7 +697,6 @@ class EdgeVeda {
                 (i) => floatPtr[i].toDouble(),
               );
               bindings.evFreeEmbeddings(result);
-              print('embedBatch: ${idx + 1}/${texts.length} done (dims=$dims)');
               results.add(EmbeddingResult(
                 embedding: embedding,
                 tokenCount: tokenCount,

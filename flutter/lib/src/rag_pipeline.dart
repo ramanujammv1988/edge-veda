@@ -160,19 +160,26 @@ class RagPipeline {
     GenerateOptions? options,
     CancelToken? cancelToken,
   }) async* {
+    final totalSw = Stopwatch()..start();
+
     // Step 1: Embed the query
+    final embedSw = Stopwatch()..start();
     final queryEmbedding = await _embedder.embed(queryText);
+    embedSw.stop();
 
     // Step 2: Search the vector index
+    final searchSw = Stopwatch()..start();
     final results = _index.query(
       queryEmbedding.embedding,
       k: config.topK,
     );
+    searchSw.stop();
 
     // Step 3: Build context
     final contextParts = <String>[];
     int totalLength = 0;
-    for (final doc in results.where((r) => r.score >= config.minScore)) {
+    final matchedDocs = results.where((r) => r.score >= config.minScore).toList();
+    for (final doc in matchedDocs) {
       final text = doc.metadata['text'] as String? ?? '';
       if (totalLength + text.length > config.maxContextLength) break;
       contextParts.add(text);
@@ -181,10 +188,25 @@ class RagPipeline {
 
     final context = contextParts.join('\n\n');
 
+    // Log retrieval metrics
+    print('[RAG-METRICS] Query Embedding: ${embedSw.elapsedMilliseconds}ms');
+    print('[RAG-METRICS] Vector Search: ${searchSw.elapsedMilliseconds}ms '
+        '(${results.length} raw results, ${matchedDocs.length} after filter)');
+    for (int i = 0; i < results.length; i++) {
+      print('[RAG-METRICS]   #${i + 1} ${results[i].id} '
+          'score=${results[i].score.toStringAsFixed(4)}');
+    }
+    print('[RAG-METRICS] Context: ${contextParts.length} chunks, '
+        '${context.length} chars injected');
+    print('[RAG-METRICS] Retrieval Total: '
+        '${embedSw.elapsedMilliseconds + searchSw.elapsedMilliseconds}ms');
+
     // Step 4: Build augmented prompt
     final augmentedPrompt = config.promptTemplate
         .replaceAll('{context}', context)
         .replaceAll('{query}', queryText);
+
+    print('[RAG-METRICS] Augmented prompt: ${augmentedPrompt.length} chars');
 
     // Step 5: Stream response
     yield* _generator.generateStream(
