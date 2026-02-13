@@ -5,7 +5,7 @@ description: >-
   Gemma, SmolVLM, and Whisper models locally with Metal GPU acceleration.
   Compute budget contracts enforce p95 latency, battery, thermal, and memory
   guarantees. Private by default — zero cloud dependencies during inference.
-version: 2.0.0
+version: 2.0.1
 homepage: https://github.com/ramanujammv1988/edge-veda
 repository: https://github.com/ramanujammv1988/edge-veda
 issue_tracker: https://github.com/ramanujammv1988/edge-veda/issues
