@@ -1,0 +1,150 @@
+CONFIDENTIAL — PATIENT MEDICAL DIAGNOSTIC REPORT
+══════════════════════════════════════════════════
+St. Meridian Regional Medical Center
+Department of Internal Medicine & Cardiology
+Report Date: January 28, 2026
+Attending Physician: Dr. Elena Vasquez, MD, FACC
+
+PATIENT INFORMATION
+───────────────────
+Name: Jonathan R. Whitfield
+Date of Birth: March 14, 1971 (Age 54)
+Medical Record Number: MRN-2026-048271
+Insurance: BlueCross Premier PPO (ID: BCX-991-40227)
+Emergency Contact: Sarah Whitfield (Spouse) — (555) 482-9130
+Primary Care: Dr. Raymond Chen, Oakwood Family Practice
+
+CHIEF COMPLAINT & HISTORY OF PRESENT ILLNESS
+─────────────────────────────────────────────
+The patient presents with a 6-week history of progressive exertional dyspnea, now occurring after walking approximately 200 meters on flat ground. He reports associated substernal chest pressure, rated 5/10 in severity, that radiates to the left arm and jaw. Symptoms are relieved by rest within 5-10 minutes. He denies syncope but reports two episodes of presyncope in the past week. He also notes bilateral lower extremity edema that has worsened over the past 3 weeks, requiring him to sleep with two pillows (orthopnea). He reports a 4 kg unintentional weight gain over the past month attributed to fluid retention.
+
+PAST MEDICAL HISTORY
+────────────────────
+1. Type 2 Diabetes Mellitus — diagnosed 2014, currently on metformin 1000mg BID and empagliflozin 25mg daily. Last HbA1c 7.8% (November 2025).
+2. Hypertension — diagnosed 2009, on lisinopril 20mg daily and amlodipine 10mg daily. Home BP readings averaging 148/92 mmHg despite medication.
+3. Hyperlipidemia — on atorvastatin 40mg daily. Last LDL 142 mg/dL (above target of <70 for high-risk patients).
+4. Obesity — BMI 33.2 (height 178 cm, weight 105 kg).
+5. Former smoker — 22 pack-year history, quit in 2019.
+6. Family history: Father deceased at age 62 from myocardial infarction. Mother living with heart failure and atrial fibrillation.
+
+CURRENT MEDICATIONS
+───────────────────
+- Metformin 1000mg twice daily
+- Empagliflozin 25mg once daily
+- Lisinopril 20mg once daily
+- Amlodipine 10mg once daily
+- Atorvastatin 40mg once daily
+- Aspirin 81mg once daily
+- Pantoprazole 40mg once daily
+
+ALLERGIES
+─────────
+- Penicillin (anaphylaxis — documented 2003)
+- Sulfonamides (rash)
+
+PHYSICAL EXAMINATION
+────────────────────
+Vital Signs: BP 156/98 mmHg, HR 94 bpm (irregular), RR 22/min, SpO2 93% on room air, Temp 36.8°C
+General: Alert, oriented, mildly dyspneic at rest, appears older than stated age
+HEENT: JVP elevated to 10 cm H2O (normal <4 cm)
+Cardiovascular: Irregular rhythm, S3 gallop present, Grade II/VI systolic murmur at apex radiating to axilla, no S4
+Respiratory: Bibasilar crackles extending to mid-lung fields bilaterally, no wheezing
+Abdomen: Soft, non-tender, hepatomegaly with liver edge palpable 3 cm below costal margin
+Extremities: 2+ pitting edema bilateral lower extremities to mid-shin, peripheral pulses diminished
+
+LABORATORY RESULTS (January 28, 2026)
+──────────────────────────────────────
+Complete Blood Count:
+  WBC 8.2 x10³/µL (normal), Hemoglobin 11.8 g/dL (LOW), Platelets 198 x10³/µL (normal)
+
+Comprehensive Metabolic Panel:
+  Sodium 131 mEq/L (LOW — hyponatremia), Potassium 5.1 mEq/L (HIGH), Creatinine 1.9 mg/dL (HIGH — elevated from baseline 1.2), BUN 38 mg/dL (HIGH), eGFR 42 mL/min/1.73m² (Stage 3b CKD), Glucose 198 mg/dL (HIGH)
+
+Cardiac Biomarkers:
+  Troponin-I 0.08 ng/mL (ELEVATED — normal <0.04), BNP 1,847 pg/mL (CRITICALLY ELEVATED — normal <100, heart failure threshold >400)
+
+Lipid Panel:
+  Total Cholesterol 248 mg/dL (HIGH), LDL 142 mg/dL (HIGH), HDL 34 mg/dL (LOW), Triglycerides 312 mg/dL (HIGH)
+
+HbA1c: 7.8% (above target)
+TSH: 2.4 mIU/L (normal)
+Urinalysis: Proteinuria 2+ (indicates kidney damage)
+
+DIAGNOSTIC IMAGING
+──────────────────
+Chest X-Ray (January 28, 2026):
+Cardiomegaly with cardiothoracic ratio 0.62 (normal <0.50). Bilateral pleural effusions, small to moderate. Cephalization of pulmonary vasculature consistent with pulmonary venous congestion. Kerley B lines present. No focal consolidation or pneumothorax.
+
+Transthoracic Echocardiogram (January 28, 2026):
+Left ventricular ejection fraction (LVEF) 28% (SEVERELY REDUCED — normal >55%). Left ventricular end-diastolic diameter 6.2 cm (dilated). Moderate mitral regurgitation. Left atrial enlargement (4.8 cm). Estimated pulmonary artery systolic pressure 52 mmHg (elevated, suggesting pulmonary hypertension). Right ventricle mildly dilated with reduced systolic function (TAPSE 14 mm). Grade II diastolic dysfunction. No pericardial effusion. No intracardiac thrombus visualized.
+
+12-Lead Electrocardiogram (January 28, 2026):
+Atrial fibrillation with rapid ventricular response, rate 94 bpm. Left axis deviation. Poor R-wave progression V1-V4 (possible prior anterior MI). Left ventricular hypertrophy by voltage criteria. Non-specific ST-T wave changes in lateral leads. QTc 468 ms (borderline prolonged).
+
+ASSESSMENT & DIAGNOSIS
+──────────────────────
+1. NEW-ONSET HEART FAILURE WITH REDUCED EJECTION FRACTION (HFrEF), NYHA Class III
+   — LVEF 28%, likely ischemic cardiomyopathy given risk factor profile and ECG findings suggesting prior MI
+   — Currently decompensated with volume overload (elevated BNP, pleural effusions, peripheral edema)
+
+2. ATRIAL FIBRILLATION WITH RAPID VENTRICULAR RESPONSE (New diagnosis)
+   — CHA₂DS₂-VASc score: 5 (hypertension, diabetes, age, heart failure, vascular disease) — HIGH STROKE RISK
+   — Requires anticoagulation
+
+3. ACUTE KIDNEY INJURY superimposed on CHRONIC KIDNEY DISEASE Stage 3b
+   — Creatinine elevated to 1.9 from baseline 1.2, likely cardiorenal syndrome Type 1
+   — Hyperkalemia (K+ 5.1) complicating ACE inhibitor therapy
+
+4. POORLY CONTROLLED TYPE 2 DIABETES with end-organ complications
+   — HbA1c 7.8%, proteinuria suggesting diabetic nephropathy
+
+5. UNCONTROLLED HYPERTENSION AND DYSLIPIDEMIA
+   — BP 156/98 despite dual therapy, LDL 142 well above high-risk target of <70
+
+TREATMENT PLAN
+──────────────
+Acute Management (Hospital Admission — Cardiac Telemetry Unit):
+- IV furosemide 40mg BID for diuresis with strict I/O monitoring and daily weights
+- Target net negative fluid balance 1-2 liters per day
+- Fluid restriction 1.5 liters/day, sodium restriction <2g/day
+- Hold amlodipine (contributes to peripheral edema in HF setting)
+- Initiate carvedilol 3.125mg BID (beta-blocker for HFrEF + rate control for AFib)
+- Initiate sacubitril/valsartan 24/97mg BID (replace lisinopril — superior outcomes in HFrEF, PARADIGM-HF trial)
+- Initiate apixaban 5mg BID for stroke prevention (CHA₂DS₂-VASc ≥2)
+- Increase atorvastatin to 80mg daily (high-intensity statin for very high CV risk)
+- Monitor renal function and electrolytes every 12 hours during diuresis
+- Continuous telemetry for arrhythmia monitoring
+- Cardiology consultation for consideration of cardiac catheterization to evaluate coronary anatomy
+
+Outpatient Plan (Post-Discharge):
+- Cardiac rehabilitation referral (12-week supervised program)
+- Titrate carvedilol to target dose 25mg BID as tolerated
+- Titrate sacubitril/valsartan to target 97/103mg BID
+- Consider spironolactone 25mg daily once potassium normalizes (RALES trial benefit in HFrEF)
+- Endocrinology referral for diabetes optimization — consider GLP-1 receptor agonist (semaglutide) for cardiovascular and renal benefit
+- Nephrology referral for CKD management and proteinuria evaluation
+- Repeat echocardiogram in 3 months to reassess LVEF on optimal medical therapy
+- If LVEF remains ≤35% after 3 months of guideline-directed medical therapy, evaluate for ICD implantation (primary prevention of sudden cardiac death per ACC/AHA guidelines)
+- Heart failure clinic enrollment for close outpatient monitoring (nurse practitioner follow-up within 7 days of discharge)
+
+RISK STRATIFICATION
+───────────────────
+This patient carries a HIGH RISK profile:
+- MAGGIC Heart Failure Risk Score: estimated 1-year mortality 22-28%
+- High burden of comorbidities: diabetes, CKD, atrial fibrillation, obesity
+- Late presentation with NYHA Class III symptoms and severely reduced EF
+- Potential for improvement with guideline-directed medical therapy — goal is reverse remodeling
+
+PATIENT EDUCATION PROVIDED
+──────────────────────────
+Discussed diagnosis of heart failure with patient and spouse. Explained that the heart is pumping at approximately half the expected capacity. Reviewed importance of daily weight monitoring (report gain >1 kg/day or >2 kg/week), sodium and fluid restriction, medication adherence, and recognizing worsening symptoms. Provided printed materials on living with heart failure. Patient expressed understanding and willingness to make lifestyle changes. Smoking cessation maintained since 2019 — reinforced continuation.
+
+──────────────────────────
+Electronically signed by:
+Dr. Elena Vasquez, MD, FACC
+Board Certified, Cardiovascular Disease
+St. Meridian Regional Medical Center
+License: CA-MD-2004-18294
+
+This document contains Protected Health Information (PHI) governed by HIPAA.
+Unauthorized disclosure is prohibited and subject to penalties under federal law.
