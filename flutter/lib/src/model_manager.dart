@@ -438,6 +438,10 @@ class ModelRegistry {
         'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
+    parametersB: 1.24,
+    maxContextLength: 131072,
+    capabilities: ['chat', 'instruct'],
+    family: 'llama3',
   );
 
   /// Phi-3.5 Mini Instruct (Q4_K_M quantization) - Reasoning model
@@ -450,6 +454,10 @@ class ModelRegistry {
         'https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
+    parametersB: 3.82,
+    maxContextLength: 131072,
+    capabilities: ['chat', 'instruct', 'reasoning'],
+    family: 'phi3',
   );
 
   /// Gemma 2 2B Instruct (Q4_K_M quantization)
@@ -462,6 +470,10 @@ class ModelRegistry {
         'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
+    parametersB: 2.61,
+    maxContextLength: 8192,
+    capabilities: ['chat', 'instruct'],
+    family: 'gemma2',
   );
 
   /// TinyLlama 1.1B Chat (Q4_K_M quantization) - Smallest option
@@ -474,6 +486,10 @@ class ModelRegistry {
         'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
+    parametersB: 1.10,
+    maxContextLength: 2048,
+    capabilities: ['chat'],
+    family: 'tinyllama',
   );
 
   // === Tool Calling Models ===
@@ -488,6 +504,10 @@ class ModelRegistry {
         'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
     format: 'GGUF',
     quantization: 'Q4_K_M',
+    parametersB: 0.60,
+    maxContextLength: 32768,
+    capabilities: ['chat', 'tool-calling'],
+    family: 'qwen3',
   );
 
   // === Vision Language Models ===
@@ -502,6 +522,10 @@ class ModelRegistry {
         'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
     format: 'GGUF',
     quantization: 'Q8_0',
+    parametersB: 0.50,
+    maxContextLength: 4096,
+    capabilities: ['vision'],
+    family: 'smolvlm',
   );
 
   /// SmolVLM2-500M mmproj (F16) - Multimodal projector for SmolVLM2
@@ -514,6 +538,8 @@ class ModelRegistry {
         'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-f16.gguf',
     format: 'GGUF',
     quantization: 'F16',
+    capabilities: ['vision-projector'],
+    family: 'smolvlm',
   );
 
   // === Whisper Speech-to-Text Models ===
@@ -528,6 +554,9 @@ class ModelRegistry {
         'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
     format: 'GGML',
     quantization: null,
+    parametersB: 0.04,
+    capabilities: ['stt'],
+    family: 'whisper',
   );
 
   /// Whisper Base English - Better accuracy (~148MB)
@@ -540,6 +569,9 @@ class ModelRegistry {
         'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
     format: 'GGML',
     quantization: null,
+    parametersB: 0.07,
+    capabilities: ['stt'],
+    family: 'whisper',
   );
 
   /// Get all available text models
@@ -583,6 +615,10 @@ class ModelRegistry {
         'https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.F16.gguf',
     format: 'GGUF',
     quantization: 'F16',
+    parametersB: 0.02,
+    maxContextLength: 512,
+    capabilities: ['embedding'],
+    family: 'minilm',
   );
 
   /// Get all available embedding models

@@ -330,6 +330,18 @@ class ModelInfo {
   /// Quantization level (e.g., "Q4_K_M")
   final String? quantization;
 
+  /// Billions of parameters (e.g., 1.24 for Llama 3.2 1B)
+  final double? parametersB;
+
+  /// Maximum supported context length in tokens
+  final int? maxContextLength;
+
+  /// Model capabilities (e.g., ['chat', 'instruct', 'reasoning'])
+  final List<String>? capabilities;
+
+  /// Model family identifier (e.g., 'llama3', 'phi3', 'gemma2')
+  final String? family;
+
   const ModelInfo({
     required this.id,
     required this.name,
@@ -339,6 +351,10 @@ class ModelInfo {
     this.checksum,
     this.format = 'GGUF',
     this.quantization,
+    this.parametersB,
+    this.maxContextLength,
+    this.capabilities,
+    this.family,
   });
 
   factory ModelInfo.fromJson(Map<String, dynamic> json) {
@@ -351,6 +367,10 @@ class ModelInfo {
       checksum: json['checksum'] as String?,
       format: json['format'] as String? ?? 'GGUF',
       quantization: json['quantization'] as String?,
+      parametersB: (json['parametersB'] as num?)?.toDouble(),
+      maxContextLength: json['maxContextLength'] as int?,
+      capabilities: (json['capabilities'] as List<dynamic>?)?.cast<String>(),
+      family: json['family'] as String?,
     );
   }
 
@@ -363,6 +383,10 @@ class ModelInfo {
         'checksum': checksum,
         'format': format,
         'quantization': quantization,
+        'parametersB': parametersB,
+        'maxContextLength': maxContextLength,
+        'capabilities': capabilities,
+        'family': family,
       };
 
   @override
