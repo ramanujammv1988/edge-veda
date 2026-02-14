@@ -121,6 +121,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isDownloading = false;
   bool _runningBenchmark = false;
   bool _toolsEnabled = false;
+  bool _isSwitchingModel = false;
+  String? _qwenModelPath; // Cached path for Qwen3 model
 
   // Streaming state
   bool _isStreaming = false;
@@ -152,17 +154,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   List<ToolDefinition> get _demoTools => [
     ToolDefinition(
       name: 'get_time',
-      description: 'Get the current date and time',
+      description:
+          'Get the current date and time for a location. Pass the city or region name exactly as the user said it.',
       parameters: {
         'type': 'object',
         'properties': {
-          'timezone': {
+          'location': {
             'type': 'string',
-            'description': 'Timezone name (e.g., UTC, EST, PST)',
-            'enum': ['UTC', 'EST', 'PST', 'JST'],
+            'description':
+                'City or region name (e.g., "San Francisco", "London", "Tokyo", "Bali", "New York")',
           },
         },
-        'required': ['timezone'],
+        'required': ['location'],
       },
     ),
     ToolDefinition(
@@ -359,13 +362,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ));
 
       // Create ChatSession after successful initialization
+      // Always use Llama 3.2 Instruct at init time. Tools toggle handles Qwen3 model switch.
       _session = ChatSession(
         edgeVeda: _edgeVeda,
         preset: _selectedPreset,
-        templateFormat: _toolsEnabled
-            ? ChatTemplateFormat.qwen3
-            : ChatTemplateFormat.llama3Instruct,
-        tools: _toolsEnabled ? ToolRegistry(_demoTools) : null,
+        templateFormat: ChatTemplateFormat.llama3Instruct,
       );
 
       setState(() {
@@ -1066,6 +1067,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _session = ChatSession(
         edgeVeda: _edgeVeda,
         preset: preset,
+        templateFormat: _toolsEnabled
+            ? ChatTemplateFormat.qwen3
+            : ChatTemplateFormat.llama3Instruct,
+        tools: _toolsEnabled ? ToolRegistry(_demoTools) : null,
       );
       setState(() {
         _streamingText = '';
@@ -1074,26 +1079,163 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Toggle tool calling mode on/off
-  void _toggleTools() {
+  /// Toggle tool calling mode on/off, switching between Qwen3 and Llama 3.2 models.
+  ///
+  /// EdgeVeda.init() throws if already initialized, so we must dispose() before
+  /// re-initializing with a different model. Only one model can be loaded at a time.
+  Future<void> _toggleTools() async {
+    if (!_isInitialized || _isSwitchingModel) return;
+
+    final enablingTools = !_toolsEnabled;
+
     setState(() {
-      _toolsEnabled = !_toolsEnabled;
+      _isSwitchingModel = true;
+      _isLoading = true;
+      _statusMessage = enablingTools
+          ? 'Checking Qwen3 model...'
+          : 'Switching to Llama 3.2...';
     });
-    if (_isInitialized) {
-      _session = ChatSession(
-        edgeVeda: _edgeVeda,
-        preset: _selectedPreset,
-        templateFormat: _toolsEnabled
-            ? ChatTemplateFormat.qwen3
-            : ChatTemplateFormat.llama3Instruct,
-        tools: _toolsEnabled ? ToolRegistry(_demoTools) : null,
-      );
+
+    try {
+      if (enablingTools) {
+        // --- Enabling tools: switch to Qwen3 ---
+
+        // Check if Qwen3 is downloaded
+        if (_qwenModelPath == null) {
+          final isDownloaded = await _modelManager
+              .isModelDownloaded(ModelRegistry.qwen3_06b.id);
+
+          if (!isDownloaded) {
+            setState(() {
+              _statusMessage = 'Downloading Qwen3 model (~397 MB)...';
+            });
+
+            // Listen to download progress
+            final sub = _modelManager.downloadProgress.listen((progress) {
+              if (mounted) {
+                setState(() {
+                  _downloadProgress = progress.progress;
+                  _statusMessage =
+                      'Downloading Qwen3: ${progress.progressPercent}% (${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)})';
+                });
+              }
+            });
+
+            try {
+              await _modelManager.downloadModel(ModelRegistry.qwen3_06b);
+            } finally {
+              await sub.cancel();
+            }
+          }
+
+          _qwenModelPath =
+              await _modelManager.getModelPath(ModelRegistry.qwen3_06b.id);
+        }
+
+        setState(() {
+          _statusMessage = 'Loading Qwen3 model...';
+        });
+
+        // Dispose current Llama model and re-init with Qwen3
+        await _edgeVeda.dispose();
+        await _edgeVeda.init(EdgeVedaConfig(
+          modelPath: _qwenModelPath!,
+          useGpu: true,
+          numThreads: 4,
+          contextLength: 2048,
+          maxMemoryMb: 1536,
+          verbose: true,
+        ));
+
+        // Create new ChatSession with Qwen3 template and tools
+        _session = ChatSession(
+          edgeVeda: _edgeVeda,
+          preset: _selectedPreset,
+          templateFormat: ChatTemplateFormat.qwen3,
+          tools: ToolRegistry(_demoTools),
+        );
+
+        setState(() {
+          _toolsEnabled = true;
+          _isInitialized = true;
+          _isSwitchingModel = false;
+          _isLoading = false;
+          _streamingText = '';
+          _statusMessage = 'Tools enabled (Qwen3 -- get_time, calculate)';
+        });
+      } else {
+        // --- Disabling tools: switch back to Llama 3.2 ---
+
+        // Dispose current Qwen3 model and re-init with Llama
+        await _edgeVeda.dispose();
+        await _edgeVeda.init(EdgeVedaConfig(
+          modelPath: _modelPath!,
+          useGpu: true,
+          numThreads: 4,
+          contextLength: 2048,
+          maxMemoryMb: 1536,
+          verbose: true,
+        ));
+
+        // Create new ChatSession with Llama template, no tools
+        _session = ChatSession(
+          edgeVeda: _edgeVeda,
+          preset: _selectedPreset,
+          templateFormat: ChatTemplateFormat.llama3Instruct,
+        );
+
+        setState(() {
+          _toolsEnabled = false;
+          _isInitialized = true;
+          _isSwitchingModel = false;
+          _isLoading = false;
+          _streamingText = '';
+          _statusMessage = 'Ready to chat!';
+        });
+      }
+    } catch (e) {
+      // Try to restore previous model state
       setState(() {
-        _streamingText = '';
-        _statusMessage = _toolsEnabled
-            ? 'Tools enabled (get_time, calculate)'
-            : 'Ready to chat!';
+        _isSwitchingModel = false;
+        _isLoading = false;
+        _statusMessage = 'Model switch failed: ${e.toString()}';
       });
+      _showError('Failed to switch model: ${e.toString()}');
+      print('EdgeVeda: Model switch error: $e');
+
+      // Attempt to restore the model that was loaded before the switch
+      try {
+        final restorePath = enablingTools ? _modelPath : _qwenModelPath;
+        if (restorePath != null) {
+          await _edgeVeda.dispose();
+          await _edgeVeda.init(EdgeVedaConfig(
+            modelPath: restorePath,
+            useGpu: true,
+            numThreads: 4,
+            contextLength: 2048,
+            maxMemoryMb: 1536,
+            verbose: true,
+          ));
+          _session = ChatSession(
+            edgeVeda: _edgeVeda,
+            preset: _selectedPreset,
+            templateFormat: enablingTools
+                ? ChatTemplateFormat.llama3Instruct
+                : ChatTemplateFormat.qwen3,
+            tools: enablingTools ? null : ToolRegistry(_demoTools),
+          );
+          setState(() {
+            _isInitialized = true;
+            _statusMessage = 'Restored previous model';
+          });
+        }
+      } catch (restoreError) {
+        print('EdgeVeda: Failed to restore model: $restoreError');
+        setState(() {
+          _isInitialized = false;
+          _statusMessage = 'Model unloaded -- tap Initialize to restart';
+        });
+      }
     }
   }
 
@@ -1101,12 +1243,70 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<ToolResult> _handleToolCall(ToolCall call) async {
     switch (call.name) {
       case 'get_time':
-        final tz = call.arguments['timezone'] as String? ?? 'UTC';
+        final location =
+            (call.arguments['location'] as String? ?? 'UTC').toLowerCase();
+        // Map location keywords to UTC offset hours
+        const locationOffsets = <String, double>{
+          // Americas
+          'new york': -5, 'nyc': -5, 'boston': -5, 'miami': -5,
+          'washington': -5, 'atlanta': -5, 'est': -5,
+          'chicago': -6, 'houston': -6, 'dallas': -6, 'cst': -6,
+          'denver': -7, 'phoenix': -7, 'mst': -7,
+          'san francisco': -8, 'los angeles': -8, 'la': -8,
+          'seattle': -8, 'portland': -8, 'pst': -8,
+          'anchorage': -9, 'hawaii': -10, 'honolulu': -10,
+          'sao paulo': -3, 'rio': -3, 'buenos aires': -3,
+          'mexico city': -6, 'bogota': -5, 'lima': -5,
+          // Europe
+          'london': 0, 'uk': 0, 'dublin': 0, 'lisbon': 0, 'gmt': 0,
+          'paris': 1, 'berlin': 1, 'rome': 1, 'madrid': 1,
+          'amsterdam': 1, 'brussels': 1, 'vienna': 1, 'cet': 1,
+          'athens': 2, 'istanbul': 3, 'moscow': 3,
+          'helsinki': 2, 'warsaw': 1, 'prague': 1,
+          // Asia
+          'dubai': 4, 'abu dhabi': 4,
+          'mumbai': 5.5, 'delhi': 5.5, 'india': 5.5, 'bangalore': 5.5,
+          'colombo': 5.5, 'kathmandu': 5.75,
+          'dhaka': 6, 'bangkok': 7, 'jakarta': 7,
+          'singapore': 8, 'kuala lumpur': 8, 'hong kong': 8,
+          'beijing': 8, 'shanghai': 8, 'taipei': 8,
+          'bali': 8, 'denpasar': 8,
+          'tokyo': 9, 'osaka': 9, 'seoul': 9,
+          // Oceania
+          'sydney': 11, 'melbourne': 11, 'brisbane': 10,
+          'perth': 8, 'auckland': 13, 'wellington': 13,
+          // Africa
+          'cairo': 2, 'johannesburg': 2, 'nairobi': 3, 'lagos': 1,
+          // Default
+          'utc': 0,
+        };
+        // Find matching location by substring
+        double offset = 0;
+        String matched = 'UTC';
+        for (final entry in locationOffsets.entries) {
+          if (location.contains(entry.key)) {
+            offset = entry.value;
+            matched = entry.key;
+            break;
+          }
+        }
+        final utcNow = DateTime.now().toUtc();
+        final local =
+            utcNow.add(Duration(minutes: (offset * 60).round()));
+        final hours = local.hour;
+        final minutes = local.minute;
+        final ampm = hours >= 12 ? 'PM' : 'AM';
+        final h12 = hours == 0 ? 12 : (hours > 12 ? hours - 12 : hours);
+        final sign = offset >= 0 ? '+' : '';
         return ToolResult.success(
           toolCallId: call.id,
           data: {
-            'time': DateTime.now().toUtc().toIso8601String(),
-            'timezone': tz,
+            'local_time':
+                '${h12.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')} $ampm',
+            'date':
+                '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}',
+            'location': matched,
+            'utc_offset': '${sign}${offset}',
           },
         );
       case 'calculate':
@@ -1790,7 +1990,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 color: _toolsEnabled ? AppTheme.accent : AppTheme.textSecondary,
               ),
               tooltip: _toolsEnabled ? 'Disable Tools' : 'Enable Tools',
-              onPressed: (!_isStreaming && !_isLoading) ? _toggleTools : null,
+              onPressed: (!_isStreaming && !_isLoading && !_isSwitchingModel)
+                  ? _toggleTools
+                  : null,
             ),
           IconButton(
             icon: const Icon(Icons.layers_outlined, color: AppTheme.textSecondary),
