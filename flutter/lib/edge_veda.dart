@@ -177,3 +177,14 @@ export 'src/vector_index.dart' show VectorIndex, SearchResult;
 
 // RAG pipeline
 export 'src/rag_pipeline.dart' show RagPipeline, RagConfig;
+
+// Model advisor
+export 'src/model_advisor.dart' show
+    DeviceProfile,
+    DeviceTier,
+    MemoryEstimate,
+    MemoryEstimator,
+    ModelScore,
+    ModelRecommendation,
+    ModelAdvisor,
+    UseCase;
