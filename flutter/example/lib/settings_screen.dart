@@ -26,6 +26,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _temperature = 0.7;
   double _maxTokens = 256;
 
+  // Model recommendation use case selector
+  UseCase _selectedUseCase = UseCase.chat;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,6 +43,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.only(top: 8),
         children: [
           _buildDeviceStatusSection(),
+          const SizedBox(height: 24),
+          _buildRecommendationsSection(),
           const SizedBox(height: 24),
           _buildGenerationSection(),
           const SizedBox(height: 24),
@@ -150,11 +155,127 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              _buildTierBadgeRow(),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildTierBadgeRow() {
+    final device = DeviceProfile.detect();
+    final tierLabel = device.tier.name[0].toUpperCase() + device.tier.name.substring(1);
+    final tierColor = switch (device.tier) {
+      DeviceTier.minimum => AppTheme.danger,
+      DeviceTier.low => AppTheme.warning,
+      DeviceTier.medium => AppTheme.textSecondary,
+      DeviceTier.high => AppTheme.success,
+      DeviceTier.ultra => AppTheme.accent,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          const Icon(Icons.speed, color: AppTheme.accent, size: 22),
+          const SizedBox(width: 12),
+          const Text('Capability Tier',
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: tierColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tierColor.withValues(alpha: 0.4)),
+            ),
+            child: Text(tierLabel,
+              style: TextStyle(color: tierColor, fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Section 0.5: Recommended Models ─────────────────────────────────────
+
+  Widget _buildRecommendationsSection() {
+    final device = DeviceProfile.detect();
+    final recommendation = ModelAdvisor.recommend(
+      device: device,
+      useCase: _selectedUseCase,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Recommended Models'),
+        // Use-case selector chips
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final uc in [UseCase.chat, UseCase.reasoning, UseCase.vision, UseCase.stt, UseCase.fast])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(_useCaseLabel(uc)),
+                      selected: _selectedUseCase == uc,
+                      onSelected: (sel) {
+                        if (sel) setState(() => _selectedUseCase = uc);
+                      },
+                      selectedColor: AppTheme.accent.withValues(alpha: 0.2),
+                      backgroundColor: AppTheme.surface,
+                      labelStyle: TextStyle(
+                        color: _selectedUseCase == uc ? AppTheme.accent : AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: _selectedUseCase == uc ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      side: BorderSide(
+                        color: _selectedUseCase == uc ? AppTheme.accent : AppTheme.border,
+                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      showCheckmark: false,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Model recommendation cards
+        _buildCard(
+          child: Column(
+            children: [
+              for (int i = 0; i < recommendation.ranked.length; i++) ...[
+                _RecommendationRow(
+                  score: recommendation.ranked[i],
+                  isBest: recommendation.ranked[i] == recommendation.bestMatch,
+                ),
+                if (i < recommendation.ranked.length - 1)
+                  const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _useCaseLabel(UseCase uc) {
+    return switch (uc) {
+      UseCase.chat => 'Chat',
+      UseCase.reasoning => 'Reasoning',
+      UseCase.toolCalling => 'Tool Calling',
+      UseCase.vision => 'Vision',
+      UseCase.stt => 'Speech',
+      UseCase.embedding => 'Embedding',
+      UseCase.fast => 'Fast',
+    };
   }
 
   // ── Section 1: Generation Settings ──────────────────────────────────────
@@ -709,6 +830,116 @@ class _ModelRowState extends State<_ModelRow> {
         );
       },
     );
+  }
+}
+
+// ── Recommendation Row Widget ─────────────────────────────────────────────
+
+class _RecommendationRow extends StatelessWidget {
+  final ModelScore score;
+  final bool isBest;
+  const _RecommendationRow({required this.score, required this.isBest});
+
+  @override
+  Widget build(BuildContext context) {
+    final dimmed = !score.fits;
+    final textColor = dimmed ? AppTheme.textTertiary : AppTheme.textPrimary;
+    final subColor = dimmed ? AppTheme.textTertiary : AppTheme.textSecondary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: Model name + overall score + fits badge
+          Row(
+            children: [
+              if (isBest)
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: Icon(Icons.star, color: AppTheme.accent, size: 16),
+                ),
+              Expanded(
+                child: Text(score.model.name,
+                  style: TextStyle(color: textColor, fontSize: 14,
+                    fontWeight: isBest ? FontWeight.w600 : FontWeight.normal)),
+              ),
+              // Fits badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: score.fits
+                    ? AppTheme.success.withValues(alpha: 0.15)
+                    : AppTheme.danger.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  score.fits ? 'Fits' : 'Too Large',
+                  style: TextStyle(
+                    color: score.fits ? AppTheme.success : AppTheme.danger,
+                    fontSize: 10, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Score number
+              Text('${score.finalScore}',
+                style: TextStyle(color: dimmed ? AppTheme.textTertiary : AppTheme.accent,
+                  fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Row 2: Score bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 4,
+              child: Stack(
+                children: [
+                  Container(color: AppTheme.surfaceVariant),
+                  FractionallySizedBox(
+                    widthFactor: score.finalScore / 100.0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: dimmed ? AppTheme.textTertiary : AppTheme.accent,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Row 3: Dimension breakdown
+          Row(
+            children: [
+              _dimensionChip('FIT', score.fitScore, subColor),
+              const SizedBox(width: 8),
+              _dimensionChip('QUAL', score.qualityScore, subColor),
+              const SizedBox(width: 8),
+              _dimensionChip('SPEED', score.speedScore, subColor),
+              const SizedBox(width: 8),
+              _dimensionChip('CTX', score.contextScore, subColor),
+              const Spacer(),
+              Text('~${score.memoryEstimate.totalMB} MB',
+                style: TextStyle(color: subColor, fontSize: 11)),
+            ],
+          ),
+          // Warning text
+          if (score.warning != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(score.warning!,
+                style: const TextStyle(color: AppTheme.warning, fontSize: 11)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dimensionChip(String label, int value, Color color) {
+    return Text('$label:$value',
+      style: TextStyle(color: color, fontSize: 10, fontFamily: 'monospace'));
   }
 }
 
