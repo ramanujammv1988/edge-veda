@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-02-15
+
+### Added
+- **Smart Model Advisor:** Device-aware model recommendations with 4D scoring (fit, quality, speed, context)
+- **DeviceProfile:** Detects iPhone model, RAM, chip, tier via sysctl FFI (27-entry device DB)
+- **MemoryEstimator:** Calibrated bytes-per-parameter formulas (Q4_K_M=0.58, Q8_0=1.05) with KV cache + overhead
+- **ModelAdvisor.recommend():** Ranked model list with per-model optimal EdgeVedaConfig
+- **ModelAdvisor.canRun():** Quick fit check before download
+- **Storage availability check:** getFreeDiskSpace() via MethodChannel
+- **Qwen3 0.6B** added to ModelRegistry (tool-calling capable, Q4_K_M, 397 MB)
+- **All MiniLM L6 v2** added to ModelRegistry (embedding model, F16, 46 MB)
+- **RAG demo** in Chat tab — paperclip attach, chunk, embed, streaming RAG answers
+- **Phone Detective Mode** — tool calling showcase scanning photo/calendar metadata with noir LLM narration
+
+### Changed
+- KV cache quantization: Q8_0 by default (halves KV cache from ~64MB to ~32MB)
+- Flash attention AUTO enabled by default (Metal enables automatically)
+- getMemoryStats() routed through existing StreamingWorker (eliminates ~600MB memory spike)
+- Tool calling demo loads Qwen3-0.6B (not Llama 3.2) for correct model/template match
+
+### Fixed
+- Batched prompt evaluation: chunk tokens in n_batch-sized batches (fixes assertion on 3rd+ multi-turn message)
+- Streaming persistence: assistant message saved after stream completes naturally (fixes break-on-cancel losing messages)
+- GBNF grammar-constrained generation for detective narration JSON
+
 ## [1.1.1] - 2026-02-09
 
 ### Fixed
