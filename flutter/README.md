@@ -2,7 +2,7 @@
 
 **A managed on-device AI runtime for Flutter — text generation, vision, speech-to-text, embeddings, RAG, and function calling, all running locally with zero cloud dependencies.**
 
-`~14,000 LOC | 43 C API functions | 31 Dart SDK files | 0 cloud dependencies`
+`~22,700 LOC | 50 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
@@ -41,7 +41,7 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^2.0.0
+  edge_veda: ^2.1.0
 ```
 
 ---
@@ -320,6 +320,34 @@ Escalation is immediate. Restoration requires cooldown (60s per level) to preven
 
 ---
 
+## Smart Model Advisor
+
+Device-aware model recommendations with 4D scoring:
+
+```dart
+final device = await DeviceProfile.detect();
+final recommendations = ModelAdvisor.recommend(device, UseCase.chat);
+
+for (final rec in recommendations) {
+  print('${rec.model.name}: ${rec.score}/100 (${rec.fit})');
+  // Llama 3.2 1B: 82/100 (comfortable)
+  // Qwen3 0.6B: 78/100 (comfortable)
+  // Phi 3.5 Mini: 45/100 (tight)
+}
+
+// Quick fit check before download
+if (ModelAdvisor.canRun(model, device)) {
+  final config = rec.optimalConfig; // Pre-tuned EdgeVedaConfig
+}
+```
+
+- **DeviceProfile** detects iPhone model, RAM, chip, tier (low/medium/high/ultra)
+- **MemoryEstimator** predicts total memory per model+context with calibrated formulas
+- **ModelAdvisor** scores 0–100 across fit, quality, speed, and context dimensions
+- Each recommendation includes optimal `EdgeVedaConfig` for the model+device pair
+
+---
+
 ## Performance
 
 All numbers measured on a physical iPhone (A16 Bionic, 6 GB RAM, iOS 26.2.1) with Metal GPU. Release mode, LTO enabled. See [BENCHMARKS.md](https://github.com/ramanujammv1988/edge-veda/blob/main/BENCHMARKS.md) for full details.
@@ -375,6 +403,7 @@ Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 | Model | Size | Quantization | Use Case |
 |-------|------|-------------|----------|
 | Llama 3.2 1B Instruct | 668 MB | Q4_K_M | General chat, instruction following |
+| Qwen3 0.6B | 397 MB | Q4_K_M | Tool/function calling |
 | Phi 3.5 Mini Instruct | 2.3 GB | Q4_K_M | Reasoning, longer context |
 | Gemma 2 2B Instruct | 1.6 GB | Q4_K_M | General purpose |
 | TinyLlama 1.1B Chat | 669 MB | Q4_K_M | Lightweight, fast inference |
@@ -393,7 +422,7 @@ Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 ### Embeddings
 | Model | Size | Quantization | Use Case |
 |-------|------|-------------|----------|
-| nomic-embed-text v1.5 | ~70 MB | Q4_K_M | Semantic search, RAG (768 dimensions) |
+| All MiniLM L6 v2 | 46 MB | F16 | Document embeddings for RAG (384 dimensions) |
 
 Any GGUF model compatible with llama.cpp or whisper.cpp can be loaded by file path.
 

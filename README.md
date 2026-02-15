@@ -2,7 +2,7 @@
 
 **A managed on-device AI runtime for Flutter — text, vision, speech, and RAG running sustainably on real phones under real constraints. Private by default.**
 
-`~21,300 LOC | 40 C API functions | 31 Dart SDK files | 0 cloud dependencies`
+`~22,700 LOC | 50 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
@@ -88,6 +88,14 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - Structured **performance tracing** (JSONL) with offline analysis tooling
 - Long-session stability validated on-device (12+ minutes, 0 crashes, 0 model reloads)
 
+### Smart Model Advisor
+- **DeviceProfile** detects iPhone model, RAM, chip generation, and device tier (low/medium/high/ultra)
+- **MemoryEstimator** with calibrated bytes-per-parameter formulas for accurate fit prediction
+- **ModelAdvisor** scores models 0–100 across fit, quality, speed, and context dimensions
+- Use-case weighted recommendations (chat, reasoning, vision, speech, fast)
+- **Optimal EdgeVedaConfig** generated per model+device pair (context length, threads, memory limit)
+- `canRun()` for quick fit check before download, `checkStorageAvailability()` for disk space
+
 ---
 
 ## Architecture
@@ -112,8 +120,11 @@ Flutter App (Dart)
     +-- TelemetryService ----- iOS thermal, battery, memory polling
     +-- FrameQueue ----------- Drop-newest backpressure for camera frames
     +-- PerfTrace ------------ JSONL flight recorder for offline analysis
+    +-- ModelAdvisor --------- Device-aware model recommendations + 4D scoring
+    +-- DeviceProfile -------- iPhone model/RAM/chip detection via sysctl
+    +-- MemoryEstimator ------ Calibrated model memory prediction
     |
-    +-- FFI Bindings --------- 40 C functions via DynamicLibrary.process()
+    +-- FFI Bindings --------- 50 C functions via DynamicLibrary.process()
          |
     XCFramework (libedge_veda_full.a)
     +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
@@ -135,7 +146,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^2.0.0
+  edge_veda: ^2.1.0
 ```
 
 ### Text Generation
@@ -410,11 +421,14 @@ Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 | Model | Size | Type | Use Case |
 |-------|------|------|----------|
 | Llama 3.2 1B Instruct | 668 MB | Text (Q4_K_M) | General chat, instruction following |
+| Qwen3 0.6B | 397 MB | Text (Q4_K_M) | Tool/function calling |
 | Phi 3.5 Mini Instruct | 2.3 GB | Text (Q4_K_M) | Reasoning, longer context |
 | Gemma 2 2B Instruct | 1.6 GB | Text (Q4_K_M) | General purpose |
 | TinyLlama 1.1B Chat | 669 MB | Text (Q4_K_M) | Lightweight, fast inference |
 | SmolVLM2 500M | 417 MB + 190 MB | Vision (Q8_0 + F16) | Image description |
+| All MiniLM L6 v2 | 46 MB | Embedding (F16) | Document embeddings for RAG |
 | Whisper Tiny English | 77 MB | Speech (F16) | Speech-to-text transcription |
+| Whisper Base English | 142 MB | Speech (F16) | Higher-accuracy transcription |
 
 Any GGUF model compatible with llama.cpp can be loaded by file path.
 
@@ -436,7 +450,7 @@ Any GGUF model compatible with llama.cpp can be loaded by file path.
 ```
 edge-veda/
 +-- core/
-|   +-- include/edge_veda.h       C API (40 functions, 846 LOC)
+|   +-- include/edge_veda.h       C API (50 functions, 858 LOC)
 |   +-- src/engine.cpp            Text inference + embeddings (1,173 LOC)
 |   +-- src/vision_engine.cpp     Vision inference (484 LOC)
 |   +-- src/whisper_engine.cpp    Speech-to-text (290 LOC)
@@ -444,10 +458,10 @@ edge-veda/
 |   +-- third_party/llama.cpp/    llama.cpp b7952 (git submodule)
 |   +-- third_party/whisper.cpp/  whisper.cpp v1.8.3 (git submodule)
 +-- flutter/
-|   +-- lib/                      Dart SDK (31 files, 10,590 LOC)
+|   +-- lib/                      Dart SDK (32 files, 11,750 LOC)
 |   +-- ios/                      Podspec + XCFramework
 |   +-- android/                  Android plugin (scaffolded)
-|   +-- example/                  Demo app (8 files, 5,153 LOC)
+|   +-- example/                  Demo app (10 files, 8,383 LOC)
 |   +-- test/                     Unit tests (253 LOC, 14 tests)
 +-- scripts/
 |   +-- build-ios.sh              XCFramework build pipeline (406 LOC)
@@ -487,11 +501,11 @@ The demo app includes Chat (multi-turn with tool calling), Vision (continuous ca
 ## Roadmap (Directional)
 
 - Android sustained runtime validation (CPU + Vulkan GPU)
-- Long-horizon memory management
+- Text-to-speech integration
 - Semantic perception APIs (event-driven vision)
 - Observability dashboard (localhost trace viewer)
-- Text-to-speech integration
-- Embedding model registry and on-device RAG demo
+- NPU/CoreML backend support
+- Model conversion toolchain
 
 ---
 

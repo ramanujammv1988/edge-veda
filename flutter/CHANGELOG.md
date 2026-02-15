@@ -5,6 +5,28 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-02-15
+
+### Added
+- **Smart Model Advisor:** Device-aware model recommendations with 4D scoring (fit, quality, speed, context)
+- **DeviceProfile:** iPhone model, RAM, chip, tier detection via sysctl FFI
+- **MemoryEstimator:** Calibrated bytes-per-parameter formulas with KV cache + overhead
+- **ModelAdvisor.recommend():** Ranked model list with optimal EdgeVedaConfig per model+device
+- **ModelAdvisor.canRun():** Quick fit check before download
+- **Storage availability:** getFreeDiskSpace() via MethodChannel
+- **Qwen3 0.6B** in ModelRegistry (tool-calling capable, Q4_K_M, 397 MB)
+- **All MiniLM L6 v2** in ModelRegistry (embedding model, F16, 46 MB)
+
+### Changed
+- KV cache quantization: Q8_0 by default (halves cache from ~64MB to ~32MB)
+- Flash attention AUTO enabled by default
+- getMemoryStats() routed through StreamingWorker (eliminates ~600MB spike)
+
+### Fixed
+- Batched prompt evaluation: chunk in n_batch-sized batches (fixes 3rd+ multi-turn assertion)
+- Streaming persistence: assistant message saved after natural stream close
+- GBNF grammar-constrained generation reliability
+
 ## [2.0.1] - 2026-02-13
 
 ### Fixed

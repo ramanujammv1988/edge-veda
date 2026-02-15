@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'edge_veda'
-  s.version          = '2.0.1'
+  s.version          = '2.1.0'
   s.summary          = 'Edge Veda SDK - On-device AI inference for Flutter'
   s.description      = <<-DESC
 Edge Veda SDK enables running Large Language Models, Speech-to-Text, and
