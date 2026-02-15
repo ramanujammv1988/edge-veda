@@ -32,8 +32,8 @@ class SearchService {
       modelPath: modelPath,
       useGpu: true,
       numThreads: 4,
-      contextLength: 512,
-      maxMemoryMb: 256,
+      contextLength: 512, // Embedding models need minimal context window
+      maxMemoryMb: 256, // MiniLM is small (~46 MB model + overhead)
     ));
 
     // Set up persistence path
@@ -48,11 +48,11 @@ class SearchService {
         onStatus?.call('Search index loaded (${_index!.size} entries)');
       } catch (_) {
         // Corrupted index -- start fresh
-        _index = VectorIndex(dimensions: 384);
+        _index = VectorIndex(dimensions: 384); // all-MiniLM-L6-v2 output dimensionality
         onStatus?.call('Search index created');
       }
     } else {
-      _index = VectorIndex(dimensions: 384);
+      _index = VectorIndex(dimensions: 384); // all-MiniLM-L6-v2 output dimensionality
       onStatus?.call('Search index created');
     }
   }
