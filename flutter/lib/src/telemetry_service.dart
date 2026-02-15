@@ -88,6 +88,21 @@ class TelemetryService {
     }
   }
 
+  /// Get free disk space in bytes via NSFileManager.
+  ///
+  /// Returns -1 on non-iOS platforms or error.
+  Future<int> getFreeDiskSpace() async {
+    try {
+      final result =
+          await _methodChannel.invokeMethod<int>('getFreeDiskSpace');
+      return result ?? -1;
+    } on PlatformException {
+      return -1;
+    } on MissingPluginException {
+      return -1;
+    }
+  }
+
   /// Whether iOS Low Power Mode is enabled.
   ///
   /// Returns false on non-iOS platforms.

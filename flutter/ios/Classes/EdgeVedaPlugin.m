@@ -256,6 +256,8 @@
         [self handleGetPhotoInsights:call result:result];
     } else if ([@"getCalendarInsights" isEqualToString:call.method]) {
         [self handleGetCalendarInsights:call result:result];
+    } else if ([@"getFreeDiskSpace" isEqualToString:call.method]) {
+        [self handleGetFreeDiskSpace:result];
     } else {
         result(FlutterMethodNotImplemented);
     }
@@ -307,6 +309,23 @@
 - (void)handleGetAvailableMemory:(FlutterResult)result {
     size_t available = os_proc_available_memory();
     result(@((long long)available));
+}
+
+#pragma mark - Storage
+
+/// Returns free disk space in bytes via NSFileManager.
+/// Returns -1 on failure.
+- (void)handleGetFreeDiskSpace:(FlutterResult)result {
+    NSError *error = nil;
+    NSDictionary *attrs = [[NSFileManager defaultManager]
+        attributesOfFileSystemForPath:NSHomeDirectory()
+        error:&error];
+    if (error || !attrs) {
+        result(@(-1));
+        return;
+    }
+    NSNumber *freeSpace = attrs[NSFileSystemFreeSize];
+    result(@([freeSpace longLongValue]));
 }
 
 #pragma mark - Power
