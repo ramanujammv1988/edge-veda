@@ -70,6 +70,15 @@ class StartStreamCommand extends WorkerCommand {
   /// Repetition penalty
   final double repeatPenalty;
 
+  /// Confidence threshold for cloud handoff (0.0 = disabled)
+  final double confidenceThreshold;
+
+  /// GBNF grammar string (empty = no grammar constraint)
+  final String grammarStr;
+
+  /// GBNF grammar root rule name
+  final String grammarRoot;
+
   StartStreamCommand({
     required this.prompt,
     this.maxTokens = 512,
@@ -77,6 +86,9 @@ class StartStreamCommand extends WorkerCommand {
     this.topP = 0.9,
     this.topK = 40,
     this.repeatPenalty = 1.1,
+    this.confidenceThreshold = 0.0,
+    this.grammarStr = '',
+    this.grammarRoot = '',
   });
 }
 
@@ -132,10 +144,18 @@ class TokenResponse extends WorkerResponse {
   /// Native error code (0 = success)
   final int errorCode;
 
+  /// Per-token confidence score (0.0-1.0), -1.0 if not computed
+  final double confidence;
+
+  /// Whether cloud handoff is recommended at this point
+  final bool needsCloudHandoff;
+
   TokenResponse({
     this.token,
     required this.isFinal,
     this.errorCode = 0,
+    this.confidence = -1.0,
+    this.needsCloudHandoff = false,
   });
 
   /// Create response for successful token

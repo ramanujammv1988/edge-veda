@@ -503,6 +503,9 @@ class EdgeVeda {
         topP: options.topP,
         topK: options.topK,
         repeatPenalty: options.repeatPenalty,
+        confidenceThreshold: options.confidenceThreshold,
+        grammarStr: options.grammarStr ?? '',
+        grammarRoot: options.grammarRoot ?? '',
       );
       debugPrint('EdgeVeda: Stream started, beginning token loop');
 
@@ -530,6 +533,8 @@ class EdgeVeda {
             token: response.token!,
             index: tokenIndex++,
             isFinal: false,
+            confidence: response.confidence >= 0.0 ? response.confidence : null,
+            needsCloudHandoff: response.needsCloudHandoff,
           );
         }
       }

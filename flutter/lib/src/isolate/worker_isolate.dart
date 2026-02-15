@@ -143,6 +143,9 @@ class StreamingWorker {
     double topP = 0.9,
     int topK = 40,
     double repeatPenalty = 1.1,
+    double confidenceThreshold = 0.0,
+    String grammarStr = '',
+    String grammarRoot = '',
   }) async {
     _ensureActive();
 
@@ -163,6 +166,9 @@ class StreamingWorker {
       topP: topP,
       topK: topK,
       repeatPenalty: repeatPenalty,
+      confidenceThreshold: confidenceThreshold,
+      grammarStr: grammarStr,
+      grammarRoot: grammarRoot,
     ));
 
     try {
@@ -296,6 +302,7 @@ void _workerEntryPoint(SendPort mainSendPort) {
   ffi.Pointer<EvContextImpl>? nativeContext;
   ffi.Pointer<EvStreamImpl>? currentStream;
   EdgeVedaNativeBindings? bindings;
+  double currentConfidenceThreshold = 0.0;
 
   commandPort.listen((message) {
     // First message is always the response port
@@ -321,6 +328,7 @@ void _workerEntryPoint(SendPort mainSendPort) {
         ));
         return;
       }
+      currentConfidenceThreshold = message.confidenceThreshold;
       currentStream = _handleStartStream(
         message,
         nativeContext!,
@@ -332,7 +340,8 @@ void _workerEntryPoint(SendPort mainSendPort) {
         responseSendPort.send(TokenResponse.end());
         return;
       }
-      _handleNextToken(currentStream!, bindings!, responseSendPort);
+      _handleNextToken(currentStream!, bindings!, responseSendPort,
+          confidenceThreshold: currentConfidenceThreshold);
     } else if (message is CancelStreamCommand) {
       if (currentStream != null && bindings != null) {
         bindings!.evStreamCancel(currentStream!);
@@ -427,6 +436,8 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
   final promptPtr = cmd.prompt.toNativeUtf8();
   final paramsPtr = calloc<EvGenerationParams>();
   final errorPtr = calloc<ffi.Int32>();
+  ffi.Pointer<Utf8>? grammarStrPtr;
+  ffi.Pointer<Utf8>? grammarRootPtr;
 
   try {
     paramsPtr.ref.maxTokens = cmd.maxTokens;
@@ -438,9 +449,21 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
     paramsPtr.ref.presencePenalty = 0.0;
     paramsPtr.ref.stopSequences = ffi.nullptr;
     paramsPtr.ref.numStopSequences = 0;
-    paramsPtr.ref.grammarStr = ffi.nullptr;
-    paramsPtr.ref.grammarRoot = ffi.nullptr;
-    paramsPtr.ref.confidenceThreshold = 0.0;
+    // Grammar support
+    if (cmd.grammarStr.isNotEmpty) {
+      grammarStrPtr = cmd.grammarStr.toNativeUtf8();
+      paramsPtr.ref.grammarStr = grammarStrPtr.cast();
+      if (cmd.grammarRoot.isNotEmpty) {
+        grammarRootPtr = cmd.grammarRoot.toNativeUtf8();
+        paramsPtr.ref.grammarRoot = grammarRootPtr.cast();
+      } else {
+        paramsPtr.ref.grammarRoot = ffi.nullptr;
+      }
+    } else {
+      paramsPtr.ref.grammarStr = ffi.nullptr;
+      paramsPtr.ref.grammarRoot = ffi.nullptr;
+    }
+    paramsPtr.ref.confidenceThreshold = cmd.confidenceThreshold;
     paramsPtr.ref.reserved = ffi.nullptr;
 
     final stream =
@@ -458,6 +481,8 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
     return stream;
   } finally {
     calloc.free(promptPtr);
+    if (grammarStrPtr != null) calloc.free(grammarStrPtr);
+    if (grammarRootPtr != null) calloc.free(grammarRootPtr);
     calloc.free(paramsPtr);
     calloc.free(errorPtr);
   }
@@ -466,8 +491,9 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
 void _handleNextToken(
   ffi.Pointer<EvStreamImpl> stream,
   EdgeVedaNativeBindings bindings,
-  SendPort responseSendPort,
-) {
+  SendPort responseSendPort, {
+  double confidenceThreshold = 0.0,
+}) {
   final errorPtr = calloc<ffi.Int32>();
 
   try {
@@ -488,10 +514,28 @@ void _handleNextToken(
     final token = tokenPtr.toDartString();
     bindings.evFreeString(tokenPtr);
 
+    // Get confidence data if threshold is enabled
+    double tokenConfidence = -1.0;
+    bool needsHandoff = false;
+    if (confidenceThreshold > 0.0) {
+      final infoPtr = calloc<EvStreamTokenInfo>();
+      try {
+        final infoErr = bindings.evStreamGetTokenInfo(stream, infoPtr);
+        if (infoErr == 0) {
+          tokenConfidence = infoPtr.ref.confidence;
+          needsHandoff = infoPtr.ref.needsCloudHandoff;
+        }
+      } finally {
+        calloc.free(infoPtr);
+      }
+    }
+
     responseSendPort.send(TokenResponse(
       token: token,
       isFinal: false,
       errorCode: 0,
+      confidence: tokenConfidence,
+      needsCloudHandoff: needsHandoff,
     ));
   } finally {
     calloc.free(errorPtr);
