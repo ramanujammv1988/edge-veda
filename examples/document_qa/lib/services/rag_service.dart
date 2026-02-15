@@ -37,7 +37,7 @@ class RagService {
 
     try {
       // Download embedding model
-      onStatus('Downloading embedding model...');
+      onStatus('Downloading model 1/2: Embedding (46 MB)...');
       final embModel = ModelRegistry.allMiniLmL6V2;
       late final String embPath;
 
@@ -55,7 +55,7 @@ class RagService {
       onProgress(0.3);
 
       // Download generation model
-      onStatus('Downloading generation model...');
+      onStatus('Downloading model 2/2: Llama 3.2 1B (668 MB)...');
       final genModel = ModelRegistry.llama32_1b;
       late final String genPath;
 

@@ -253,6 +253,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppTheme.textSecondary,
                 ),
               ),
+              const SizedBox(height: 4),
+              const Text(
+                'First run downloads ~714 MB of AI models',
+                style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 24),
 
               // Privacy callout
