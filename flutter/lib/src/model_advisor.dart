@@ -13,6 +13,8 @@ import 'package:ffi/ffi.dart';
 
 import 'types.dart';
 import 'model_manager.dart';
+import 'telemetry_service.dart';
+import 'edge_veda_impl.dart';
 
 // ── FFI Typedefs ──────────────────────────────────────────────────────────
 
@@ -390,6 +392,68 @@ class ModelRecommendation {
   });
 }
 
+// ── StorageCheck ──────────────────────────────────────────────────────────
+
+/// Result of a storage availability check for a model download
+class StorageCheck {
+  /// Free disk space in bytes (-1 if unavailable)
+  final int freeDiskBytes;
+
+  /// Model file size in bytes
+  final int requiredBytes;
+
+  /// Whether there is sufficient free space
+  final bool hasSufficientSpace;
+
+  /// Human-readable warning message, or null if OK
+  final String? warning;
+
+  const StorageCheck({
+    required this.freeDiskBytes,
+    required this.requiredBytes,
+    required this.hasSufficientSpace,
+    this.warning,
+  });
+
+  @override
+  String toString() =>
+      'StorageCheck(free: ${(freeDiskBytes / (1024 * 1024)).round()}MB, '
+      'required: ${(requiredBytes / (1024 * 1024)).round()}MB, ok: $hasSufficientSpace)';
+}
+
+// ── MemoryValidation ─────────────────────────────────────────────────────
+
+/// Result of real-time memory validation after model load
+class MemoryValidation {
+  /// Current memory usage percentage (0.0 - 1.0)
+  final double usagePercent;
+
+  /// Whether memory pressure is detected (>80%)
+  final bool isHighPressure;
+
+  /// Whether memory usage is critical (>90%)
+  final bool isCritical;
+
+  /// Human-readable status message
+  final String status;
+
+  /// Human-readable warning, or null if healthy
+  final String? warning;
+
+  const MemoryValidation({
+    required this.usagePercent,
+    required this.isHighPressure,
+    required this.isCritical,
+    required this.status,
+    this.warning,
+  });
+
+  @override
+  String toString() =>
+      'MemoryValidation(${(usagePercent * 100).toStringAsFixed(1)}%, '
+      'status: $status)';
+}
+
 // ── ModelAdvisor ──────────────────────────────────────────────────────────
 
 /// Device-aware model recommendation engine with 4D scoring
@@ -576,6 +640,124 @@ class ModelAdvisor {
       bestMatch: bestMatch,
       device: device,
       useCase: useCase,
+    );
+  }
+
+  /// Quick boolean check: can this device run a given model for a use case?
+  ///
+  /// Wraps [score()] and returns true if the model fits within the device's
+  /// memory budget. No network or async calls -- purely local estimation.
+  static bool canRun({
+    required ModelInfo model,
+    UseCase useCase = UseCase.chat,
+    DeviceProfile? device,
+  }) {
+    final d = device ?? DeviceProfile.detect();
+    final result = score(model: model, device: d, useCase: useCase);
+    return result.fits;
+  }
+
+  /// Check if there is sufficient free disk space to download a model.
+  ///
+  /// Uses NSFileManager (iOS) via MethodChannel to query real free space.
+  /// Includes a 100MB buffer beyond model size to account for extraction
+  /// and temp files. Returns [StorageCheck] with warning if insufficient.
+  ///
+  /// On non-iOS platforms or when disk space query fails, returns
+  /// hasSufficientSpace: true with freeDiskBytes: -1 (optimistic fallback).
+  static Future<StorageCheck> checkStorageAvailability({
+    required ModelInfo model,
+  }) async {
+    final telemetry = TelemetryService();
+    final freeBytes = await telemetry.getFreeDiskSpace();
+
+    if (freeBytes < 0) {
+      // Can't determine free space -- optimistic fallback
+      return StorageCheck(
+        freeDiskBytes: -1,
+        requiredBytes: model.sizeBytes,
+        hasSufficientSpace: true,
+        warning: null,
+      );
+    }
+
+    // Require model size + 100MB buffer for temp files
+    const bufferBytes = 100 * 1024 * 1024;
+    final requiredWithBuffer = model.sizeBytes + bufferBytes;
+    final sufficient = freeBytes >= requiredWithBuffer;
+
+    String? warning;
+    if (!sufficient) {
+      final freeMB = (freeBytes / (1024 * 1024)).round();
+      final requiredMB = (model.sizeBytes / (1024 * 1024)).round();
+      warning = 'Insufficient storage: ${freeMB}MB free, '
+          '${requiredMB}MB required for ${model.name}';
+    } else if (freeBytes < requiredWithBuffer * 2) {
+      // Warn if space is tight (less than 2x required)
+      final freeMB = (freeBytes / (1024 * 1024)).round();
+      warning = 'Low storage: ${freeMB}MB free after download';
+    }
+
+    return StorageCheck(
+      freeDiskBytes: freeBytes,
+      requiredBytes: model.sizeBytes,
+      hasSufficientSpace: sufficient,
+      warning: warning,
+    );
+  }
+
+  /// Validate actual memory pressure after a model has been loaded.
+  ///
+  /// Uses [EdgeVeda.getMemoryStats()] (routed through StreamingWorker)
+  /// to read real memory usage. Call this after [EdgeVeda.init()] to
+  /// verify the model loaded within safe memory bounds.
+  ///
+  /// Requires an initialized [EdgeVeda] instance. If no worker is active,
+  /// returns healthy status (model not yet loaded = no pressure).
+  static Future<MemoryValidation> validateMemoryAfterLoad(
+      EdgeVeda edgeVeda) async {
+    final stats = await edgeVeda.getMemoryStats();
+
+    if (stats.currentBytes == 0) {
+      return const MemoryValidation(
+        usagePercent: 0,
+        isHighPressure: false,
+        isCritical: false,
+        status: 'No model loaded',
+      );
+    }
+
+    final percent = stats.usagePercent;
+    final currentMB = (stats.currentBytes / (1024 * 1024)).round();
+    final limitMB = (stats.limitBytes / (1024 * 1024)).round();
+
+    String status;
+    String? warning;
+
+    if (stats.isCritical) {
+      status = 'Critical';
+      warning = 'Memory usage critical: ${currentMB}MB / ${limitMB}MB '
+          '(${(percent * 100).toStringAsFixed(0)}%). '
+          'Risk of jetsam termination. Consider reducing context size or using a smaller model.';
+    } else if (stats.isHighPressure) {
+      status = 'Warning';
+      warning = 'High memory pressure: ${currentMB}MB / ${limitMB}MB '
+          '(${(percent * 100).toStringAsFixed(0)}%). '
+          'May experience jetsam under heavy usage.';
+    } else if (percent > 0.6) {
+      status = 'Moderate';
+      warning =
+          'Memory usage moderate: ${currentMB}MB / ${limitMB}MB. Stable for normal use.';
+    } else {
+      status = 'Healthy';
+    }
+
+    return MemoryValidation(
+      usagePercent: percent,
+      isHighPressure: stats.isHighPressure,
+      isCritical: stats.isCritical,
+      status: status,
+      warning: warning,
     );
   }
 

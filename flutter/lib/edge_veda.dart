@@ -187,4 +187,6 @@ export 'src/model_advisor.dart' show
     ModelScore,
     ModelRecommendation,
     ModelAdvisor,
-    UseCase;
+    UseCase,
+    StorageCheck,
+    MemoryValidation;
