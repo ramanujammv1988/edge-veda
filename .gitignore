@@ -74,6 +74,7 @@ Makefile.generated
 .packages
 .pub-cache/
 .pub/
+pubspec.lock
 build/
 ios/Flutter/App.framework
 ios/Flutter/Flutter.framework
