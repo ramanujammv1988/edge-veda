@@ -94,7 +94,7 @@ class _AppShellState extends State<AppShell> {
       // Step 1: Download whisper-base model
       await _downloadModel(
         ModelRegistry.whisperBaseEn,
-        'Downloading speech model...',
+        'Downloading model 1/3: Whisper Base (148 MB)...',
         0.0,
         0.33,
       );
@@ -102,7 +102,7 @@ class _AppShellState extends State<AppShell> {
       // Step 2: Download llama32_1b model
       await _downloadModel(
         ModelRegistry.llama32_1b,
-        'Downloading chat model...',
+        'Downloading model 2/3: Llama 3.2 1B (636 MB)...',
         0.33,
         0.66,
       );
@@ -110,7 +110,7 @@ class _AppShellState extends State<AppShell> {
       // Step 3: Download allMiniLmL6V2 embedding model
       await _downloadModel(
         ModelRegistry.allMiniLmL6V2,
-        'Downloading embedding model...',
+        'Downloading model 3/3: Embedding (46 MB)...',
         0.66,
         1.0,
       );
@@ -275,6 +275,12 @@ class _AppShellState extends State<AppShell> {
                     color: AppTheme.textSecondary,
                     height: 1.5,
                   ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'First run downloads ~830 MB of AI models',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 40),
                 if (_errorMessage != null) ...[

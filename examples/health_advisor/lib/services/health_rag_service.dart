@@ -63,21 +63,21 @@ class HealthRagService {
     required void Function(double progress) onProgress,
   }) async {
     // 1. Download / locate embedding model
-    onStatus('Preparing embedding model...');
+    onStatus('Downloading model 1/2: Embedding (46 MB)...');
     final embPath = await _ensureModel(
       ModelRegistry.allMiniLmL6V2,
       onProgress,
     );
 
     // 2. Download / locate generation model
-    onStatus('Preparing chat model...');
+    onStatus('Downloading model 2/2: Llama 3.2 1B (668 MB)...');
     final genPath = await _ensureModel(
       ModelRegistry.llama32_1b,
       onProgress,
     );
 
     // 3. Init embedder
-    onStatus('Loading embedding model...');
+    onStatus('Initializing embedding model...');
     _embedder = EdgeVeda();
     await _embedder!.init(EdgeVedaConfig(
       modelPath: embPath,
@@ -88,7 +88,7 @@ class HealthRagService {
     ));
 
     // 4. Init generator
-    onStatus('Loading chat model...');
+    onStatus('Initializing chat model...');
     _generator = EdgeVeda();
     await _generator!.init(EdgeVedaConfig(
       modelPath: genPath,

@@ -164,6 +164,9 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             const Text('Ask questions about any document, 100% offline',
               style: TextStyle(fontSize: 14, color: AppTheme.textSecondary), textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            const Text('First run downloads ~714 MB of AI models',
+              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary), textAlign: TextAlign.center),
             const SizedBox(height: 32),
             if (_isDownloading) ...[
               Text(_statusMessage, style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary), textAlign: TextAlign.center),
