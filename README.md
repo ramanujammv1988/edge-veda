@@ -10,6 +10,18 @@
 
 ---
 
+## Get Started in 3 Lines
+
+```dart
+final edgeVeda = EdgeVeda();
+await edgeVeda.init(EdgeVedaConfig(modelPath: modelPath));
+final response = await edgeVeda.generate('Explain quantum computing');
+```
+
+> Start with **Llama 3.2 1B** for chat, **Qwen3 0.6B** for tool calling, **SmolVLM2** for vision.
+
+---
+
 ## Why Edge-Veda Exists
 
 Modern on-device AI demos break instantly in real usage:
@@ -296,6 +308,20 @@ print(result.description);
 
 ---
 
+## Learning Path
+
+| Day | Topic | Classes to Learn | Lines |
+|-----|-------|-----------------|-------|
+| 1 | Text generation | `EdgeVeda`, `EdgeVedaConfig` | 3 |
+| 2 | Streaming + chat | `ChatSession`, `ChatTemplateFormat` | 8 |
+| 3 | Model management | `ModelManager`, `ModelRegistry` | 6 |
+| 4 | Tool calling | `ToolDefinition`, `ToolRegistry` | 20 |
+| 5 | Vision | `VisionWorker`, `VisionConfig` | 10 |
+| 6 | RAG pipeline | `RagPipeline`, `VectorIndex` | 9 |
+| 7 | Production | `Scheduler`, `EdgeVedaBudget` | 15 |
+
+---
+
 ## Runtime Supervision
 
 Edge-Veda continuously monitors:
@@ -418,17 +444,19 @@ Traces are analyzed offline using `tools/analyze_trace.py` (p50/p95/p99 stats, t
 
 Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 
-| Model | Size | Type | Use Case |
-|-------|------|------|----------|
-| Llama 3.2 1B Instruct | 668 MB | Text (Q4_K_M) | General chat, instruction following |
-| Qwen3 0.6B | 397 MB | Text (Q4_K_M) | Tool/function calling |
-| Phi 3.5 Mini Instruct | 2.3 GB | Text (Q4_K_M) | Reasoning, longer context |
-| Gemma 2 2B Instruct | 1.6 GB | Text (Q4_K_M) | General purpose |
-| TinyLlama 1.1B Chat | 669 MB | Text (Q4_K_M) | Lightweight, fast inference |
-| SmolVLM2 500M | 417 MB + 190 MB | Vision (Q8_0 + F16) | Image description |
-| All MiniLM L6 v2 | 46 MB | Embedding (F16) | Document embeddings for RAG |
-| Whisper Tiny English | 77 MB | Speech (F16) | Speech-to-text transcription |
-| Whisper Base English | 142 MB | Speech (F16) | Higher-accuracy transcription |
+| Model | Size | Template | Capabilities | Best For |
+|-------|------|----------|-------------|----------|
+| Llama 3.2 1B Instruct | 668 MB | `llama3Instruct` | chat, reasoning | General chat (default) |
+| Phi 3.5 Mini Instruct | 2.3 GB | `chatML` | chat, reasoning | Quality reasoning |
+| Gemma 2 2B Instruct | 1.6 GB | `generic` | chat | Balanced quality/speed |
+| TinyLlama 1.1B Chat | 669 MB | `generic` | chat | Speed-first, low memory |
+| Qwen3 0.6B | 397 MB | `qwen3` | chat, tool-calling | Function calling, tools |
+| SmolVLM2 500M | 607 MB | — | vision | Camera/image analysis |
+| Whisper Tiny | 77 MB | — | stt | Fast transcription |
+| Whisper Base | 148 MB | — | stt | Quality transcription |
+| MiniLM L6 v2 | 46 MB | — | embedding | RAG, similarity search |
+
+> **Template matters.** Using the wrong `ChatTemplateFormat` produces garbage output. Match the model to its template from the table above.
 
 Any GGUF model compatible with llama.cpp can be loaded by file path.
 
@@ -519,6 +547,18 @@ Edge-Veda is designed for teams building:
 - Long-running edge agents
 - Voice-first applications
 - Regulated or offline-first applications
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Garbage/repeated output | Wrong chat template | Match model family to template (see Supported Models table) |
+| App crashes on launch | Missing XCFramework | Run `./scripts/build-ios.sh --clean --release` |
+| Out of memory | Model too large for device | Use `ModelAdvisor.canRun()` to check compatibility |
+| Slow first token | Large context + cold start | Reduce `contextLength`, model loads once then reuses |
+| Tool calls not parsed | Wrong model for tools | Use Qwen3 0.6B with `ChatTemplateFormat.qwen3` |
 
 ---
 
