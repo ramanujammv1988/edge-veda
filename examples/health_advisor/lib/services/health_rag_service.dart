@@ -83,8 +83,8 @@ class HealthRagService {
       modelPath: embPath,
       useGpu: true,
       numThreads: 4,
-      contextLength: 512,
-      maxMemoryMb: 256,
+      contextLength: 512, // Embedding models need minimal context window
+      maxMemoryMb: 256, // MiniLM is small (~46 MB model + overhead)
     ));
 
     // 4. Init generator
@@ -94,8 +94,8 @@ class HealthRagService {
       modelPath: genPath,
       useGpu: true,
       numThreads: 4,
-      contextLength: 2048,
-      maxMemoryMb: 1024,
+      contextLength: 2048, // Enough for RAG prompt (query + retrieved chunks + generation)
+      maxMemoryMb: 1024, // Llama 3.2 1B needs ~400-550 MB; 1024 provides headroom
     ));
 
     onStatus('Models ready');
@@ -129,7 +129,7 @@ class HealthRagService {
     );
 
     // Build vector index
-    _index = VectorIndex(dimensions: 384);
+    _index = VectorIndex(dimensions: 384); // all-MiniLM-L6-v2 output dimensionality
     for (int i = 0; i < chunks.length; i++) {
       _index!.add(
         'chunk_$i',
@@ -164,9 +164,9 @@ class HealthRagService {
     _needsHandoff = false;
 
     const options = GenerateOptions(
-      confidenceThreshold: 0.3,
+      confidenceThreshold: 0.3, // Tokens below 30% confidence trigger needsCloudHandoff flag
       temperature: 0.3,
-      maxTokens: 512,
+      maxTokens: 512, // Cap response length for health Q&A (focused answers)
     );
 
     final stream = _pipeline!.queryStream(question, options: options);

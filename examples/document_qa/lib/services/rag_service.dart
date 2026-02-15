@@ -78,8 +78,8 @@ class RagService {
         modelPath: embPath,
         useGpu: true,
         numThreads: 4,
-        contextLength: 512,
-        maxMemoryMb: 256,
+        contextLength: 512, // Embedding models need minimal context window
+        maxMemoryMb: 256, // MiniLM is small (~46 MB model + overhead)
         verbose: false,
       ));
       onProgress(0.85);
@@ -91,14 +91,14 @@ class RagService {
         modelPath: genPath,
         useGpu: true,
         numThreads: 4,
-        contextLength: 2048,
-        maxMemoryMb: 1024,
+        contextLength: 2048, // Enough for RAG prompt (query + retrieved chunks + generation)
+        maxMemoryMb: 1024, // Llama 3.2 1B needs ~400-550 MB; 1024 provides headroom
         verbose: false,
       ));
       onProgress(0.95);
 
       // Create empty vector index (will be populated when document is loaded)
-      _index = VectorIndex(dimensions: 384);
+      _index = VectorIndex(dimensions: 384); // all-MiniLM-L6-v2 output dimensionality
       onStatus('Ready');
       onProgress(1.0);
     } finally {
@@ -120,7 +120,7 @@ class RagService {
     if (chunks.isEmpty) throw Exception('No text chunks extracted');
 
     // Reset index for new document
-    _index = VectorIndex(dimensions: 384);
+    _index = VectorIndex(dimensions: 384); // all-MiniLM-L6-v2 output dimensionality
 
     // Embed and index each chunk
     for (int i = 0; i < chunks.length; i++) {
@@ -156,7 +156,7 @@ class RagService {
 
   /// Remove the current document and reset the pipeline.
   void removeDocument() {
-    _index = VectorIndex(dimensions: 384);
+    _index = VectorIndex(dimensions: 384); // all-MiniLM-L6-v2 output dimensionality
     _pipeline = null;
     documentName = null;
     chunkCount = 0;

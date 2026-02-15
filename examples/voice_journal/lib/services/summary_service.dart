@@ -33,8 +33,8 @@ class SummaryService {
       modelPath: modelPath,
       useGpu: true,
       numThreads: 4,
-      contextLength: 2048,
-      maxMemoryMb: 1024,
+      contextLength: 2048, // Enough for system prompt + transcript + summary output
+      maxMemoryMb: 1024, // Llama 3.2 1B needs ~400-550 MB; 1024 provides headroom
     ));
 
     _chatSession = ChatSession(
