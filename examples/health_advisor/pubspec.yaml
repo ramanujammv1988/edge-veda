@@ -1,0 +1,28 @@
+name: health_advisor
+description: "Private On-Device Health Advisor with Confidence Scoring"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  edge_veda:
+    path: ../../flutter
+  ffi: ">=2.0.0 <2.1.0"
+  file_picker: ^7.0.2
+  read_pdf_text: ^0.3.1
+  path_provider: ^2.1.0
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
