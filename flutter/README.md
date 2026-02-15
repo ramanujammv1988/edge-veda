@@ -399,30 +399,35 @@ All numbers measured on a physical iPhone (A16 Bionic, 6 GB RAM, iOS 26.2.1) wit
 
 Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 
-### Text Generation
-| Model | Size | Quantization | Use Case |
-|-------|------|-------------|----------|
-| Llama 3.2 1B Instruct | 668 MB | Q4_K_M | General chat, instruction following |
-| Qwen3 0.6B | 397 MB | Q4_K_M | Tool/function calling |
-| Phi 3.5 Mini Instruct | 2.3 GB | Q4_K_M | Reasoning, longer context |
-| Gemma 2 2B Instruct | 1.6 GB | Q4_K_M | General purpose |
-| TinyLlama 1.1B Chat | 669 MB | Q4_K_M | Lightweight, fast inference |
+| Model | Size | Template | Capabilities | Best For |
+|-------|------|----------|-------------|----------|
+| Llama 3.2 1B Instruct | 668 MB | `llama3Instruct` | chat, reasoning | General chat (default) |
+| Phi 3.5 Mini Instruct | 2.3 GB | `chatML` | chat, reasoning | Quality reasoning |
+| Gemma 2 2B Instruct | 1.6 GB | `generic` | chat | Balanced quality/speed |
+| TinyLlama 1.1B Chat | 669 MB | `generic` | chat | Speed-first, low memory |
+| Qwen3 0.6B | 397 MB | `qwen3` | chat, tool-calling | Function calling, tools |
+| SmolVLM2 500M | 607 MB | — | vision | Camera/image analysis |
+| Whisper Tiny | 77 MB | — | stt | Fast transcription |
+| Whisper Base | 148 MB | — | stt | Quality transcription |
+| MiniLM L6 v2 | 46 MB | — | embedding | RAG, similarity search |
 
-### Vision
-| Model | Size | Quantization | Use Case |
-|-------|------|-------------|----------|
-| SmolVLM2 500M | 417 MB + 190 MB mmproj | Q8_0 / F16 | Image description, visual Q&A |
+### Template Selection
 
-### Speech-to-Text
-| Model | Size | Quantization | Use Case |
-|-------|------|-------------|----------|
-| Whisper Tiny | ~75 MB | GGUF | Fast transcription, lower accuracy |
-| Whisper Base | ~142 MB | GGUF | Balanced speed and accuracy |
+Using the wrong `ChatTemplateFormat` produces garbage output. Match the model to its template:
 
-### Embeddings
-| Model | Size | Quantization | Use Case |
-|-------|------|-------------|----------|
-| All MiniLM L6 v2 | 46 MB | F16 | Document embeddings for RAG (384 dimensions) |
+```dart
+// Llama 3.x models
+final session = ChatSession(edgeVeda: ev, templateFormat: ChatTemplateFormat.llama3Instruct);
+
+// Qwen3 with tool calling
+final session = ChatSession(edgeVeda: ev, templateFormat: ChatTemplateFormat.qwen3);
+
+// Phi 3.5 models
+final session = ChatSession(edgeVeda: ev, templateFormat: ChatTemplateFormat.chatML);
+
+// Gemma, TinyLlama, or unknown models
+final session = ChatSession(edgeVeda: ev, templateFormat: ChatTemplateFormat.generic);
+```
 
 Any GGUF model compatible with llama.cpp or whisper.cpp can be loaded by file path.
 
