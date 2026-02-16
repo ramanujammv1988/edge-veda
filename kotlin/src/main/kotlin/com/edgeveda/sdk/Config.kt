@@ -27,19 +27,18 @@ enum class Backend {
     AUTO;
 
     internal fun toNativeValue(): Int = when (this) {
-        CPU -> 0
-        VULKAN -> 1
-        NNAPI -> 2
-        AUTO -> 3
+        AUTO -> 0    // EV_BACKEND_AUTO = 0
+        VULKAN -> 2  // EV_BACKEND_VULKAN = 2
+        CPU -> 3     // EV_BACKEND_CPU = 3
+        NNAPI -> 3   // No C equivalent, fallback to CPU
     }
 
     companion object {
         internal fun fromNativeValue(value: Int): Backend = when (value) {
-            0 -> CPU
-            1 -> VULKAN
-            2 -> NNAPI
-            3 -> AUTO
-            else -> throw IllegalArgumentException("Invalid backend value: $value")
+            0 -> AUTO
+            2 -> VULKAN
+            3 -> CPU
+            else -> AUTO
         }
     }
 }

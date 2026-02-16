@@ -1,13 +1,32 @@
 package com.edgeveda.sdk
 
+import android.app.Application
+import android.content.ComponentCallbacks2
+import android.content.Context
+import android.content.res.Configuration
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.edgeveda.sdk.internal.NativeBridge
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
+
+/**
+ * Memory pressure handler callback.
+ * Called when the system requests memory to be freed.
+ */
+typealias MemoryPressureHandler = suspend (level: Int) -> Unit
 
 /**
  * EdgeVeda SDK - Main API for on-device LLM inference.
@@ -38,11 +57,23 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ```
  */
 class EdgeVeda private constructor(
-    private val nativeBridge: NativeBridge
+    private val nativeBridge: NativeBridge,
+    private val applicationContext: Context?
 ) : Closeable {
 
     private val initialized = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
+    private val currentGenerationJob = AtomicReference<Job?>(null)
+    private val currentStreamJob = AtomicReference<Job?>(null)
+    
+    // Lifecycle management
+    private val lifecycleScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var componentCallbacks: ComponentCallbacks2? = null
+    private var lifecycleObserver: DefaultLifecycleObserver? = null
+    private var customMemoryPressureHandler: MemoryPressureHandler? = null
+    private val autoUnloadedDueToMemory = AtomicBoolean(false)
+    private var lastModelPath: String? = null
+    private var lastConfig: EdgeVedaConfig? = null
 
     /**
      * Initialize the model with the given path and configuration.
@@ -59,12 +90,27 @@ class EdgeVeda private constructor(
             throw IllegalStateException("EdgeVeda is already initialized")
         }
 
+        // Store for potential reload
+        lastModelPath = modelPath
+        lastConfig = config
+
         withContext(Dispatchers.IO) {
             try {
                 nativeBridge.initModel(modelPath, config)
+                autoUnloadedDueToMemory.set(false)
             } catch (e: Exception) {
                 initialized.set(false)
+                lastModelPath = null
+                lastConfig = null
                 throw EdgeVedaException.ModelLoadError("Failed to load model: ${e.message}", e)
+            }
+        }
+
+        // Register lifecycle callbacks on main thread (after IO completes)
+        // Must NOT run inside Dispatchers.IO — addObserver requires main thread
+        applicationContext?.let { ctx ->
+            withContext(Dispatchers.Main) {
+                registerLifecycleCallbacks(ctx)
             }
         }
     }
@@ -87,10 +133,14 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         return withContext(Dispatchers.Default) {
+            val job = coroutineContext[Job]
+            currentGenerationJob.set(job)
             try {
                 nativeBridge.generate(prompt, options)
             } catch (e: Exception) {
                 throw EdgeVedaException.GenerationError("Generation failed: ${e.message}", e)
+            } finally {
+                currentGenerationJob.set(null)
             }
         }
     }
@@ -114,11 +164,17 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         try {
+            // Track the stream job for cancellation
+            val job = coroutineContext[Job]
+            currentStreamJob.set(job)
+            
             nativeBridge.generateStream(prompt, options) { token ->
                 emit(token)
             }
         } catch (e: Exception) {
             throw EdgeVedaException.GenerationError("Stream generation failed: ${e.message}", e)
+        } finally {
+            currentStreamJob.set(null)
         }
     }.flowOn(Dispatchers.Default)
 
@@ -140,6 +196,81 @@ class EdgeVeda private constructor(
         }
 
     /**
+     * Get model information including architecture, parameters, and metadata.
+     *
+     * @return Map of model information
+     * @throws EdgeVedaException.GenerationError if retrieval fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun getModelInfo(): Map<String, String> {
+        checkInitialized()
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.getModelInfo()
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to get model info: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Check if a model is currently loaded and ready for inference.
+     *
+     * @return true if model is loaded and initialized, false otherwise
+     */
+    fun isModelLoaded(): Boolean {
+        return initialized.get() && !closed.get()
+    }
+
+    /**
+     * Reset the conversation context while keeping the model loaded.
+     *
+     * This clears the KV cache and resets the conversation history,
+     * allowing you to start a fresh conversation with the same model.
+     *
+     * @throws EdgeVedaException.GenerationError if reset fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun resetContext() {
+        checkInitialized()
+
+        withContext(Dispatchers.Default) {
+            try {
+                val success = nativeBridge.resetContext()
+                if (!success) {
+                    throw EdgeVedaException.GenerationError("Failed to reset context", null)
+                }
+            } catch (e: EdgeVedaException) {
+                throw e
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to reset context: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Cancel an ongoing generation.
+     *
+     * Cancels any active generation or stream operation. For streaming, this sets
+     * a cancel flag in the native bridge that aborts token delivery at the JNI
+     * callback level, then cancels the Kotlin coroutine Jobs.
+     *
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun cancelGeneration() {
+        checkInitialized()
+
+        withContext(Dispatchers.Default) {
+            // Signal the native bridge to abort token delivery in the stream callback
+            nativeBridge.cancelCurrentStream()
+            // Cancel both generation and stream jobs if they exist
+            currentGenerationJob.getAndSet(null)?.cancel()
+            currentStreamJob.getAndSet(null)?.cancel()
+        }
+    }
+
+    /**
      * Unload the model from memory while keeping the SDK instance alive.
      *
      * After calling this, you must call init() again before generating.
@@ -159,6 +290,35 @@ class EdgeVeda private constructor(
             }
         }
     }
+    
+    /**
+     * Reload the model after it was unloaded.
+     * Useful for recovering from memory pressure situations.
+     *
+     * @throws EdgeVedaException.ModelLoadError if reload fails
+     * @throws IllegalStateException if model path is not available or already loaded
+     */
+    suspend fun reloadModel() {
+        checkNotClosed()
+        if (initialized.get()) {
+            return // Already loaded
+        }
+        
+        val modelPath = lastModelPath
+            ?: throw IllegalStateException("No model path available for reload. Call init() first.")
+        val config = lastConfig ?: EdgeVedaConfig()
+        
+        init(modelPath, config)
+    }
+    
+    /**
+     * Check if model was auto-unloaded due to memory pressure.
+     *
+     * @return true if model was unloaded due to memory warning
+     */
+    fun wasAutoUnloaded(): Boolean {
+        return autoUnloadedDueToMemory.get()
+    }
 
     /**
      * Close the SDK and release all resources.
@@ -168,6 +328,9 @@ class EdgeVeda private constructor(
     override fun close() {
         if (closed.compareAndSet(false, true)) {
             try {
+                // Unregister lifecycle callbacks
+                unregisterLifecycleCallbacks()
+                
                 if (initialized.get()) {
                     nativeBridge.unloadModel()
                     initialized.set(false)
@@ -192,16 +355,170 @@ class EdgeVeda private constructor(
             throw IllegalStateException("EdgeVeda is closed and cannot be used.")
         }
     }
+    
+    // MARK: - Lifecycle Management
+    
+    /**
+     * Register Android lifecycle callbacks for memory management.
+     */
+    private fun registerLifecycleCallbacks(context: Context) {
+        // ComponentCallbacks2 for memory pressure
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                lifecycleScope.launch {
+                    handleMemoryPressure(level)
+                }
+            }
+            
+            override fun onConfigurationChanged(newConfig: Configuration) {
+                // No action needed
+            }
+            
+            override fun onLowMemory() {
+                lifecycleScope.launch {
+                    handleMemoryPressure(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+                }
+            }
+        }
+        
+        context.registerComponentCallbacks(callbacks)
+        componentCallbacks = callbacks
+        
+        // Lifecycle observer for app backgrounding
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                // App is going to background - consider unloading if needed
+                lifecycleScope.launch {
+                    handleAppBackground()
+                }
+            }
+        }
+        
+        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+        lifecycleObserver = observer
+    }
+    
+    /**
+     * Unregister lifecycle callbacks.
+     */
+    private fun unregisterLifecycleCallbacks() {
+        componentCallbacks?.let { callbacks ->
+            applicationContext?.unregisterComponentCallbacks(callbacks)
+            componentCallbacks = null
+        }
+        
+        lifecycleObserver?.let { observer ->
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+            lifecycleObserver = null
+        }
+    }
+    
+    /**
+     * Handle memory pressure events.
+     */
+    private suspend fun handleMemoryPressure(level: Int) {
+        if (!initialized.get() || closed.get()) {
+            return
+        }
+        
+        // Call custom handler if set
+        customMemoryPressureHandler?.let { handler ->
+            handler(level)
+            return
+        }
+        
+        // Default behavior based on trim level
+        when (level) {
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                // Critical memory pressure - unload model
+                handleMemoryPressureDefault()
+            }
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW,
+            ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
+                // Moderate pressure - cancel ongoing operations
+                cancelGeneration()
+            }
+        }
+    }
+    
+    /**
+     * Default memory pressure handler: unload the model.
+     */
+    private suspend fun handleMemoryPressureDefault() {
+        if (!initialized.get()) {
+            return
+        }
+        
+        // Cancel any ongoing generation
+        currentGenerationJob.getAndSet(null)?.cancel()
+        currentStreamJob.getAndSet(null)?.cancel()
+        
+        // Unload model to free memory
+        withContext(Dispatchers.IO) {
+            try {
+                nativeBridge.unloadModel()
+                initialized.set(false)
+                autoUnloadedDueToMemory.set(true)
+            } catch (e: Exception) {
+                System.err.println("Error unloading model during memory pressure: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Handle app going to background.
+     */
+    private suspend fun handleAppBackground() {
+        // Optional: Consider unloading on background if memory is tight
+        // Currently no action, but can be customized
+    }
+    
+    /**
+     * Set a custom memory pressure handler.
+     * By default, EdgeVeda will unload the model when critical memory pressure occurs.
+     * Use this to customize the behavior (e.g., reduce cache size, free other resources).
+     *
+     * @param handler Custom handler to call on memory pressure, receives trim level
+     *
+     * Example:
+     * ```
+     * edgeVeda.setMemoryPressureHandler { level ->
+     *     when (level) {
+     *         ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> {
+     *             // Custom cleanup logic
+     *             println("Critical memory pressure, performing custom cleanup")
+     *         }
+     *     }
+     * }
+     * ```
+     */
+    fun setMemoryPressureHandler(handler: MemoryPressureHandler?) {
+        customMemoryPressureHandler = handler
+    }
 
     companion object {
         /**
-         * Create a new EdgeVeda instance.
+         * Create a new EdgeVeda instance with Android lifecycle integration.
+         *
+         * @param context Application context for lifecycle management
+         * @return A new EdgeVeda instance ready to be initialized
+         */
+        fun create(context: Context): EdgeVeda {
+            val nativeBridge = NativeBridge()
+            val appContext = context.applicationContext
+            return EdgeVeda(nativeBridge, appContext)
+        }
+        
+        /**
+         * Create a new EdgeVeda instance without lifecycle integration.
+         * Use this if you want to manage lifecycle manually.
          *
          * @return A new EdgeVeda instance ready to be initialized
          */
-        fun create(): EdgeVeda {
+        fun createWithoutLifecycle(): EdgeVeda {
             val nativeBridge = NativeBridge()
-            return EdgeVeda(nativeBridge)
+            return EdgeVeda(nativeBridge, null)
         }
 
         /**
@@ -209,7 +526,7 @@ class EdgeVeda private constructor(
          *
          * @return Version string (e.g., "1.0.0")
          */
-        fun getVersion(): String = "1.0.0"
+        fun getVersion(): String = BuildConfig.VERSION_NAME
 
         /**
          * Check if the native library is available.
@@ -219,6 +536,100 @@ class EdgeVeda private constructor(
         fun isNativeLibraryAvailable(): Boolean {
             return try {
                 NativeBridge.isLibraryLoaded()
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        // MARK: - Vision Inference
+
+        /**
+         * Create and initialize a VisionWorker for image description.
+         *
+         * VisionWorker maintains a persistent vision context (~600MB VLM + mmproj)
+         * for efficient frame processing. Use for camera-based vision tasks.
+         *
+         * @param config Vision configuration including model and mmproj paths
+         * @return Initialized VisionWorker ready for frame processing
+         * @throws EdgeVedaException if initialization fails
+         *
+         * Example:
+         * ```
+         * val worker = EdgeVeda.createVisionWorker(
+         *     VisionConfig(
+         *         modelPath = "/path/to/smolvlm2.gguf",
+         *         mmprojPath = "/path/to/smolvlm2-mmproj.gguf"
+         *     )
+         * )
+         *
+         * // Enqueue frames from camera
+         * worker.enqueueFrame(rgbData, width, height)
+         * val result = worker.processNextFrame("What do you see?")
+         *
+         * worker.cleanup()
+         * ```
+         */
+        suspend fun createVisionWorker(config: VisionConfig): VisionWorker {
+            val worker = VisionWorker()
+            worker.initialize(config)
+            return worker
+        }
+
+        /**
+         * Describe an image directly without creating a VisionWorker.
+         *
+         * Convenience method for one-off vision inference. For continuous
+         * camera feeds, prefer createVisionWorker() for better performance.
+         *
+         * @param config Vision configuration including model and mmproj paths
+         * @param rgb RGB888 pixel data (width * height * 3 bytes)
+         * @param width Frame width in pixels
+         * @param height Frame height in pixels
+         * @param prompt Text prompt for the model (default: "Describe what you see.")
+         * @param params Optional generation parameters
+         * @return VisionResult with description and timing information
+         * @throws EdgeVedaException if inference fails
+         *
+         * Example:
+         * ```
+         * val result = EdgeVeda.describeImage(
+         *     config = VisionConfig(
+         *         modelPath = "/path/to/smolvlm2.gguf",
+         *         mmprojPath = "/path/to/smolvlm2-mmproj.gguf"
+         *     ),
+         *     rgb = rgbData,
+         *     width = 640,
+         *     height = 480,
+         *     prompt = "What objects do you see?"
+         * )
+         * println(result.description)
+         * ```
+         */
+        suspend fun describeImage(
+            config: VisionConfig,
+            rgb: ByteArray,
+            width: Int,
+            height: Int,
+            prompt: String = "Describe what you see.",
+            params: VisionGenerationParams = VisionGenerationParams()
+        ): VisionResult {
+            val worker = VisionWorker()
+            return try {
+                worker.initialize(config)
+                worker.describeFrame(rgb, width, height, prompt, params)
+            } finally {
+                worker.cleanup()
+            }
+        }
+
+        /**
+         * Check if vision context is loaded.
+         *
+         * @return true if vision is loaded and ready for inference
+         */
+        fun isVisionLoaded(): Boolean {
+            return try {
+                NativeBridge.isVisionInitialized()
             } catch (e: Exception) {
                 false
             }

@@ -189,9 +189,39 @@ sealed class EdgeVedaException(
         EdgeVedaException(message)
 
     /**
+     * Model file not found at specified path.
+     */
+    class ModelNotFoundError(message: String, cause: Throwable? = null) :
+        EdgeVedaException(message, cause)
+
+    /**
+     * Context overflow - prompt exceeds context window.
+     */
+    class ContextOverflowError(message: String, cause: Throwable? = null) :
+        EdgeVedaException(message, cause)
+
+    /**
+     * Vision processing error.
+     */
+    class VisionError(message: String, cause: Throwable? = null) :
+        EdgeVedaException(message, cause)
+
+    /**
      * Generic native error from JNI layer.
      */
     class NativeError(message: String, cause: Throwable? = null) :
+        EdgeVedaException(message, cause)
+
+    /**
+     * Error during model download.
+     */
+    class DownloadError(message: String, cause: Throwable? = null) :
+        EdgeVedaException(message, cause)
+
+    /**
+     * Checksum verification mismatch.
+     */
+    class ChecksumError(message: String, cause: Throwable? = null) :
         EdgeVedaException(message, cause)
 }
 
