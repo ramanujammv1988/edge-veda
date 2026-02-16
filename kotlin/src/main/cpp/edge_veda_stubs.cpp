@@ -312,6 +312,201 @@ EV_API ev_error_t ev_vision_get_last_timings(
     return EV_SUCCESS;
 }
 
+/* ============================================================================
+ * NEW: Advanced Features (Added for Kotlin SDK Parity)
+ * ========================================================================= */
+
+/**
+ * @brief Cancel ongoing inference operation
+ * 
+ * This stub allows cancellation to be called but has no effect
+ * since there's no real inference happening.
+ * 
+ * @param ctx Context handle
+ * @return Always returns false (no operation to cancel)
+ */
+EV_API bool ev_cancel(ev_context ctx) {
+    (void)ctx;
+    return false;
+}
+
+/**
+ * @brief Set system prompt for conversation
+ * 
+ * @param ctx Context handle
+ * @param prompt System prompt text
+ * @return Always returns false (stub build)
+ */
+EV_API bool ev_set_system_prompt(ev_context ctx, const char* prompt) {
+    (void)ctx;
+    (void)prompt;
+    return false;
+}
+
+/**
+ * @brief Clear conversation history while keeping system prompt
+ * 
+ * @param ctx Context handle
+ * @return Always returns false (stub build)
+ */
+EV_API bool ev_clear_chat_history(ev_context ctx) {
+    (void)ctx;
+    return false;
+}
+
+/**
+ * @brief Get total context size (token capacity)
+ * 
+ * @param ctx Context handle
+ * @return Always returns 0 (stub build)
+ */
+EV_API int ev_get_context_size(ev_context ctx) {
+    (void)ctx;
+    return 0;
+}
+
+/**
+ * @brief Get number of tokens currently used in context
+ * 
+ * @param ctx Context handle
+ * @return Always returns 0 (stub build)
+ */
+EV_API int ev_get_context_used(ev_context ctx) {
+    (void)ctx;
+    return 0;
+}
+
+/**
+ * @brief Tokenize text into token IDs
+ * 
+ * @param ctx Context handle
+ * @param text Input text
+ * @param tokens Output pointer for token array (caller must free with ev_free_tokens)
+ * @param n_tokens Output pointer for number of tokens
+ * @return Always returns EV_ERROR_NOT_IMPLEMENTED (stub build)
+ */
+EV_API ev_error_t ev_tokenize(
+    ev_context ctx,
+    const char* text,
+    int** tokens,
+    int* n_tokens
+) {
+    (void)ctx;
+    (void)text;
+    if (tokens) *tokens = nullptr;
+    if (n_tokens) *n_tokens = 0;
+    return EV_ERROR_NOT_IMPLEMENTED;
+}
+
+/**
+ * @brief Convert token IDs back to text
+ * 
+ * @param ctx Context handle
+ * @param tokens Array of token IDs
+ * @param n_tokens Number of tokens
+ * @param output Output pointer for text (caller must free with ev_free_string)
+ * @return Always returns EV_ERROR_NOT_IMPLEMENTED (stub build)
+ */
+EV_API ev_error_t ev_detokenize(
+    ev_context ctx,
+    const int* tokens,
+    int n_tokens,
+    char** output
+) {
+    (void)ctx;
+    (void)tokens;
+    (void)n_tokens;
+    if (output) *output = nullptr;
+    return EV_ERROR_NOT_IMPLEMENTED;
+}
+
+/**
+ * @brief Free token array allocated by ev_tokenize
+ * 
+ * @param tokens Token array to free
+ */
+EV_API void ev_free_tokens(int* tokens) {
+    free(tokens);
+}
+
+/**
+ * @brief Get embedding vector for text
+ * 
+ * @param ctx Context handle
+ * @param text Input text
+ * @param embedding Output pointer for embedding array (caller must free with ev_free_embedding)
+ * @param dimensions Output pointer for embedding dimensions
+ * @return Always returns EV_ERROR_NOT_IMPLEMENTED (stub build)
+ */
+EV_API ev_error_t ev_get_embedding(
+    ev_context ctx,
+    const char* text,
+    float** embedding,
+    int* dimensions
+) {
+    (void)ctx;
+    (void)text;
+    if (embedding) *embedding = nullptr;
+    if (dimensions) *dimensions = 0;
+    return EV_ERROR_NOT_IMPLEMENTED;
+}
+
+/**
+ * @brief Free embedding array allocated by ev_get_embedding
+ * 
+ * @param embedding Embedding array to free
+ */
+EV_API void ev_free_embedding(float* embedding) {
+    free(embedding);
+}
+
+/**
+ * @brief Save conversation session to file
+ * 
+ * @param ctx Context handle
+ * @param path File path to save session
+ * @return Always returns false (stub build)
+ */
+EV_API bool ev_save_session(ev_context ctx, const char* path) {
+    (void)ctx;
+    (void)path;
+    return false;
+}
+
+/**
+ * @brief Load conversation session from file
+ * 
+ * @param ctx Context handle
+ * @param path File path to load session from
+ * @return Always returns false (stub build)
+ */
+EV_API bool ev_load_session(ev_context ctx, const char* path) {
+    (void)ctx;
+    (void)path;
+    return false;
+}
+
+/**
+ * @brief Run performance benchmark
+ * 
+ * @param ctx Context handle
+ * @param n_threads Number of threads to use
+ * @param n_tokens Number of tokens to benchmark
+ * @param results Output array for benchmark results [prompt_ms, decode_ms, total_ms]
+ * @return Always returns false (stub build)
+ */
+EV_API bool ev_bench(ev_context ctx, int n_threads, int n_tokens, double* results) {
+    (void)ctx;
+    (void)n_threads;
+    (void)n_tokens;
+    if (results) {
+        results[0] = 0.0;  // prompt_ms
+        results[1] = 0.0;  // decode_ms
+        results[2] = 0.0;  // total_ms
+    }
+    return false;
+}
+
 #ifdef __cplusplus
 }
 #endif

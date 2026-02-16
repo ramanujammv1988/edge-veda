@@ -907,18 +907,424 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeSetVerbose(
  * ========================================================================= */
 
 /**
- * Cancel ongoing streaming generation.
- * Note: This requires storing the stream handle in EdgeVedaInstance.
+ * Cancel ongoing generation (immediate native-level cancellation).
  */
-JNIEXPORT void JNICALL
-Java_com_edgeveda_sdk_internal_NativeBridge_nativeCancelStream(
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeCancel(
     JNIEnv* /* env */,
     jobject /* this */,
-    jlong stream_handle
+    jlong handle
 ) {
-    if (stream_handle != 0) {
-        ev_stream stream = reinterpret_cast<ev_stream>(stream_handle);
-        ev_stream_cancel(stream);
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return JNI_FALSE;
+    }
+
+    try {
+        ev_error_t error = ev_cancel(instance->context);
+        if (error == EV_SUCCESS) {
+            LOGI("Generation cancelled successfully");
+            return JNI_TRUE;
+        } else {
+            LOGE("Failed to cancel generation: %s", ev_error_string(error));
+            return JNI_FALSE;
+        }
+    } catch (const std::exception& e) {
+        LOGE("Failed to cancel generation: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+/* ============================================================================
+ * Error Handling Functions
+ * ========================================================================= */
+
+/**
+ * Get last error message from context.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetLastError(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return string_to_jstring(env, "Context not initialized");
+    }
+
+    try {
+        const char* error_msg = ev_get_last_error(instance->context);
+        return string_to_jstring(env, error_msg ? error_msg : "");
+    } catch (const std::exception& e) {
+        LOGE("Failed to get last error: %s", e.what());
+        return string_to_jstring(env, e.what());
+    }
+}
+
+/* ============================================================================
+ * System Prompt Functions
+ * ========================================================================= */
+
+/**
+ * Set system prompt for the context.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeSetSystemPrompt(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring system_prompt
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return JNI_FALSE;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+        std::string prompt = jstring_to_string(env, system_prompt);
+        
+        ev_error_t error = ev_set_system_prompt(instance->context, prompt.c_str());
+        if (error == EV_SUCCESS) {
+            LOGI("System prompt set successfully");
+            return JNI_TRUE;
+        } else {
+            LOGE("Failed to set system prompt: %s", ev_error_string(error));
+            return JNI_FALSE;
+        }
+    } catch (const std::exception& e) {
+        LOGE("Failed to set system prompt: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+/**
+ * Clear chat history.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeClearChatHistory(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handle
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return JNI_FALSE;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+        ev_error_t error = ev_clear_chat_history(instance->context);
+        if (error == EV_SUCCESS) {
+            LOGI("Chat history cleared successfully");
+            return JNI_TRUE;
+        } else {
+            LOGE("Failed to clear chat history: %s", ev_error_string(error));
+            return JNI_FALSE;
+        }
+    } catch (const std::exception& e) {
+        LOGE("Failed to clear chat history: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+/* ============================================================================
+ * Context Introspection Functions
+ * ========================================================================= */
+
+/**
+ * Get context window size.
+ */
+JNIEXPORT jint JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextSize(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handle
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return -1;
+    }
+
+    try {
+        int size = ev_get_context_size(instance->context);
+        return static_cast<jint>(size);
+    } catch (const std::exception& e) {
+        LOGE("Failed to get context size: %s", e.what());
+        return -1;
+    }
+}
+
+/**
+ * Get number of tokens currently used in context.
+ */
+JNIEXPORT jint JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextUsed(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handle
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return -1;
+    }
+
+    try {
+        int used = ev_get_context_used(instance->context);
+        return static_cast<jint>(used);
+    } catch (const std::exception& e) {
+        LOGE("Failed to get context used: %s", e.what());
+        return -1;
+    }
+}
+
+/* ============================================================================
+ * Tokenization Functions
+ * ========================================================================= */
+
+/**
+ * Tokenize text into token IDs.
+ */
+JNIEXPORT jintArray JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeTokenize(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring text
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return nullptr;
+    }
+
+    try {
+        std::string text_str = jstring_to_string(env, text);
+        
+        int* tokens = nullptr;
+        int num_tokens = 0;
+        
+        ev_error_t error = ev_tokenize(instance->context, text_str.c_str(), &tokens, &num_tokens);
+        
+        if (error != EV_SUCCESS || !tokens) {
+            LOGE("Failed to tokenize: %s", ev_error_string(error));
+            return nullptr;
+        }
+
+        jintArray result = env->NewIntArray(num_tokens);
+        if (result) {
+            env->SetIntArrayRegion(result, 0, num_tokens, tokens);
+        }
+
+        ev_free_tokens(tokens);
+        return result;
+        
+    } catch (const std::exception& e) {
+        LOGE("Failed to tokenize: %s", e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * Detokenize token IDs into text.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeDetokenize(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jintArray tokens
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return nullptr;
+    }
+
+    try {
+        jsize num_tokens = env->GetArrayLength(tokens);
+        jint* token_data = env->GetIntArrayElements(tokens, nullptr);
+        
+        char* text = nullptr;
+        ev_error_t error = ev_detokenize(instance->context, token_data, num_tokens, &text);
+        
+        env->ReleaseIntArrayElements(tokens, token_data, JNI_ABORT);
+        
+        if (error != EV_SUCCESS || !text) {
+            LOGE("Failed to detokenize: %s", ev_error_string(error));
+            return nullptr;
+        }
+
+        jstring result = string_to_jstring(env, text);
+        ev_free_string(text);
+        return result;
+        
+    } catch (const std::exception& e) {
+        LOGE("Failed to detokenize: %s", e.what());
+        return nullptr;
+    }
+}
+
+/* ============================================================================
+ * Embedding Functions
+ * ========================================================================= */
+
+/**
+ * Generate embeddings for text.
+ */
+JNIEXPORT jfloatArray JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetEmbedding(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring text
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return nullptr;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+        std::string text_str = jstring_to_string(env, text);
+        
+        ev_embed_result result;
+        ev_error_t error = ev_get_embedding(instance->context, text_str.c_str(), &result);
+        
+        if (error != EV_SUCCESS) {
+            LOGE("Failed to get embedding: %s", ev_error_string(error));
+            return nullptr;
+        }
+
+        jfloatArray array = env->NewFloatArray(result.dimension);
+        if (array) {
+            env->SetFloatArrayRegion(array, 0, result.dimension, result.embedding);
+        }
+
+        ev_free_embedding(&result);
+        return array;
+        
+    } catch (const std::exception& e) {
+        LOGE("Failed to get embedding: %s", e.what());
+        return nullptr;
+    }
+}
+
+/* ============================================================================
+ * Session Management Functions
+ * ========================================================================= */
+
+/**
+ * Save session state to file.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeSaveSession(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring path
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return JNI_FALSE;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+        std::string path_str = jstring_to_string(env, path);
+        
+        ev_error_t error = ev_save_session(instance->context, path_str.c_str());
+        if (error == EV_SUCCESS) {
+            LOGI("Session saved to: %s", path_str.c_str());
+            return JNI_TRUE;
+        } else {
+            LOGE("Failed to save session: %s", ev_error_string(error));
+            return JNI_FALSE;
+        }
+    } catch (const std::exception& e) {
+        LOGE("Failed to save session: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+/**
+ * Load session state from file.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeLoadSession(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring path
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return JNI_FALSE;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+        std::string path_str = jstring_to_string(env, path);
+        
+        ev_error_t error = ev_load_session(instance->context, path_str.c_str());
+        if (error == EV_SUCCESS) {
+            LOGI("Session loaded from: %s", path_str.c_str());
+            return JNI_TRUE;
+        } else {
+            LOGE("Failed to load session: %s", ev_error_string(error));
+            return JNI_FALSE;
+        }
+    } catch (const std::exception& e) {
+        LOGE("Failed to load session: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+/* ============================================================================
+ * Benchmarking Functions
+ * ========================================================================= */
+
+/**
+ * Run performance benchmark.
+ */
+JNIEXPORT jdoubleArray JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeBench(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jint num_threads,
+    jint num_tokens
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->context) {
+        return nullptr;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+        
+        ev_bench_result result;
+        ev_error_t error = ev_bench(instance->context, num_threads, num_tokens, &result);
+        
+        if (error != EV_SUCCESS) {
+            LOGE("Failed to run benchmark: %s", ev_error_string(error));
+            return nullptr;
+        }
+
+        // Return array: [tokens_per_second, time_ms, tokens_processed]
+        jdoubleArray array = env->NewDoubleArray(3);
+        if (array) {
+            jdouble values[3];
+            values[0] = result.tokens_per_second;
+            values[1] = result.time_ms;
+            values[2] = static_cast<jdouble>(result.tokens_processed);
+            env->SetDoubleArrayRegion(array, 0, 3, values);
+        }
+
+        return array;
+        
+    } catch (const std::exception& e) {
+        LOGE("Failed to run benchmark: %s", e.what());
+        return nullptr;
     }
 }
 

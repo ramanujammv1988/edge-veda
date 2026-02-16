@@ -175,6 +175,134 @@ internal class NativeBridge {
     }
 
     /**
+     * Cancel ongoing generation immediately at the native level.
+     *
+     * @return true if cancellation was successful, false otherwise
+     */
+    fun cancel(): Boolean {
+        checkNotDisposed()
+        return nativeCancel(nativeHandle)
+    }
+
+    /**
+     * Get the last error message from the native context.
+     *
+     * @return Error message string, or empty string if no error
+     */
+    fun getLastError(): String {
+        checkNotDisposed()
+        return nativeGetLastError(nativeHandle)
+    }
+
+    /**
+     * Set system prompt for the context.
+     *
+     * @param systemPrompt The system prompt to set
+     * @return true if successful, false otherwise
+     */
+    fun setSystemPrompt(systemPrompt: String): Boolean {
+        checkNotDisposed()
+        return nativeSetSystemPrompt(nativeHandle, systemPrompt)
+    }
+
+    /**
+     * Clear chat history while keeping the model loaded.
+     *
+     * @return true if successful, false otherwise
+     */
+    fun clearChatHistory(): Boolean {
+        checkNotDisposed()
+        return nativeClearChatHistory(nativeHandle)
+    }
+
+    /**
+     * Get the context window size (maximum number of tokens).
+     *
+     * @return Context size in tokens, or -1 on error
+     */
+    fun getContextSize(): Int {
+        checkNotDisposed()
+        return nativeGetContextSize(nativeHandle)
+    }
+
+    /**
+     * Get the number of tokens currently used in the context.
+     *
+     * @return Number of tokens used, or -1 on error
+     */
+    fun getContextUsed(): Int {
+        checkNotDisposed()
+        return nativeGetContextUsed(nativeHandle)
+    }
+
+    /**
+     * Tokenize text into token IDs.
+     *
+     * @param text Text to tokenize
+     * @return Array of token IDs, or null on error
+     */
+    fun tokenize(text: String): IntArray? {
+        checkNotDisposed()
+        return nativeTokenize(nativeHandle, text)
+    }
+
+    /**
+     * Detokenize token IDs into text.
+     *
+     * @param tokens Array of token IDs
+     * @return Detokenized text, or null on error
+     */
+    fun detokenize(tokens: IntArray): String? {
+        checkNotDisposed()
+        return nativeDetokenize(nativeHandle, tokens)
+    }
+
+    /**
+     * Generate embeddings for the given text.
+     *
+     * @param text Text to generate embeddings for
+     * @return Array of embedding values, or null on error
+     */
+    fun getEmbedding(text: String): FloatArray? {
+        checkNotDisposed()
+        return nativeGetEmbedding(nativeHandle, text)
+    }
+
+    /**
+     * Save the current session state to a file.
+     *
+     * @param path Path to save the session file
+     * @return true if successful, false otherwise
+     */
+    fun saveSession(path: String): Boolean {
+        checkNotDisposed()
+        return nativeSaveSession(nativeHandle, path)
+    }
+
+    /**
+     * Load session state from a file.
+     *
+     * @param path Path to the session file
+     * @return true if successful, false otherwise
+     */
+    fun loadSession(path: String): Boolean {
+        checkNotDisposed()
+        return nativeLoadSession(nativeHandle, path)
+    }
+
+    /**
+     * Run a performance benchmark.
+     *
+     * @param numThreads Number of threads to use
+     * @param numTokens Number of tokens to process
+     * @return Array with [tokens_per_second, time_ms, tokens_processed], or null on error
+     */
+    fun bench(numThreads: Int, numTokens: Int): DoubleArray? {
+        checkNotDisposed()
+        return nativeBench(nativeHandle, numThreads, numTokens)
+    }
+
+    /**
      * Get current memory usage in bytes.
      */
     fun getMemoryUsage(): Long {
@@ -340,8 +468,37 @@ internal class NativeBridge {
 
     private external fun nativeSetVerbose(enable: Boolean)
 
-    // Stream Control
-    private external fun nativeCancelStream(streamHandle: Long)
+    // Stream Control & Cancellation
+    private external fun nativeCancel(handle: Long): Boolean
+
+    // Error Handling
+    private external fun nativeGetLastError(handle: Long): String
+
+    // System Prompt & Chat History
+    private external fun nativeSetSystemPrompt(handle: Long, systemPrompt: String): Boolean
+    
+    private external fun nativeClearChatHistory(handle: Long): Boolean
+
+    // Context Introspection
+    private external fun nativeGetContextSize(handle: Long): Int
+    
+    private external fun nativeGetContextUsed(handle: Long): Int
+
+    // Tokenization
+    private external fun nativeTokenize(handle: Long, text: String): IntArray?
+    
+    private external fun nativeDetokenize(handle: Long, tokens: IntArray): String?
+
+    // Embeddings
+    private external fun nativeGetEmbedding(handle: Long, text: String): FloatArray?
+
+    // Session Management
+    private external fun nativeSaveSession(handle: Long, path: String): Boolean
+    
+    private external fun nativeLoadSession(handle: Long, path: String): Boolean
+
+    // Benchmarking
+    private external fun nativeBench(handle: Long, numThreads: Int, numTokens: Int): DoubleArray?
 
     companion object {
         private const val LIBRARY_NAME = "edgeveda_jni"
