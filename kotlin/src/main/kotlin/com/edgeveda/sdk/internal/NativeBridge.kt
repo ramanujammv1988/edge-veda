@@ -508,6 +508,10 @@ internal class NativeBridge {
         // Vision context singleton
         private var visionHandle: Long = 0L
         private val visionLock = Any()
+        
+        // Whisper context singleton
+        private var whisperHandle: Long = 0L
+        private val whisperLock = Any()
 
         // Vision API JNI declarations (must be in companion object for static access)
         @JvmStatic
@@ -548,6 +552,33 @@ internal class NativeBridge {
 
         @JvmStatic
         private external fun nativeVisionDispose(handle: Long)
+
+        // Whisper API JNI declarations (must be in companion object for static access)
+        @JvmStatic
+        private external fun nativeWhisperCreate(): Long
+
+        @JvmStatic
+        private external fun nativeWhisperInit(
+            handle: Long,
+            modelPath: String,
+            numThreads: Int,
+            useGpu: Boolean
+        ): Boolean
+
+        @JvmStatic
+        private external fun nativeWhisperTranscribe(
+            handle: Long,
+            pcmSamples: FloatArray,
+            language: String,
+            translate: Boolean,
+            nThreads: Int
+        ): Array<String>?
+
+        @JvmStatic
+        private external fun nativeWhisperIsValid(handle: Long): Boolean
+
+        @JvmStatic
+        private external fun nativeWhisperDispose(handle: Long)
 
         /**
          * Load the native library.
@@ -775,6 +806,165 @@ internal class NativeBridge {
                 repeatPenalty = obj.optDouble("repeatPenalty", 1.1).toFloat()
             )
         }
+
+        /**
+         * Initialize whisper context with Whisper STT model.
+         *
+         * @param configJson JSON string with WhisperConfig parameters
+         * @return Backend name (e.g., "Metal", "CPU")
+         * @throws EdgeVedaException if initialization fails
+         */
+        fun initWhisper(configJson: String): String {
+            synchronized(whisperLock) {
+                ensureLibraryLoaded()
+                
+                // Free existing context if any
+                if (whisperHandle != 0L) {
+                    nativeWhisperDispose(whisperHandle)
+                    whisperHandle = 0L
+                }
+                
+                // Parse config JSON
+                val config = parseWhisperConfig(configJson)
+                
+                // Create new context
+                whisperHandle = nativeWhisperCreate()
+                if (whisperHandle == 0L) {
+                    throw EdgeVedaException.NativeLibraryError("Failed to create whisper context")
+                }
+                
+                // Initialize whisper model
+                val success = nativeWhisperInit(
+                    whisperHandle,
+                    config.modelPath,
+                    config.numThreads,
+                    config.useGpu
+                )
+                
+                if (!success) {
+                    nativeWhisperDispose(whisperHandle)
+                    whisperHandle = 0L
+                    throw EdgeVedaException.ModelLoadError("Failed to initialize whisper model")
+                }
+                
+                // Verify context is valid
+                if (!nativeWhisperIsValid(whisperHandle)) {
+                    nativeWhisperDispose(whisperHandle)
+                    whisperHandle = 0L
+                    throw EdgeVedaException.ModelLoadError("Whisper context validation failed")
+                }
+                
+                // Return backend name based on GPU usage
+                return if (config.useGpu) "Metal" else "CPU"
+            }
+        }
+
+        /**
+         * Transcribe PCM audio samples to text with timing segments.
+         *
+         * @param pcmSamples PCM audio data (16kHz, mono, float32, range [-1.0, 1.0])
+         * @param paramsJson JSON string with WhisperTranscribeParams
+         * @return JSON string with transcription segments and timing info
+         * @throws EdgeVedaException if transcription fails
+         */
+        fun transcribeAudio(
+            pcmSamples: FloatArray,
+            paramsJson: String
+        ): String {
+            synchronized(whisperLock) {
+                ensureLibraryLoaded()
+                
+                if (whisperHandle == 0L || !nativeWhisperIsValid(whisperHandle)) {
+                    throw EdgeVedaException.ModelLoadError("Whisper context not initialized")
+                }
+                
+                // Parse params JSON
+                val params = parseWhisperParams(paramsJson)
+                
+                // Perform transcription
+                val segmentArray = nativeWhisperTranscribe(
+                    whisperHandle,
+                    pcmSamples,
+                    params.language,
+                    params.translate,
+                    params.nThreads
+                ) ?: throw EdgeVedaException.GenerationError("Whisper transcription returned null")
+                
+                // Convert flat array [text1, start_ms1, end_ms1, text2, start_ms2, end_ms2, ...]
+                // to JSON array of segment objects
+                val segments = org.json.JSONArray()
+                var i = 0
+                while (i < segmentArray.size) {
+                    if (i + 2 < segmentArray.size) {
+                        val segment = org.json.JSONObject().apply {
+                            put("text", segmentArray[i])
+                            put("start_ms", segmentArray[i + 1].toLongOrNull() ?: 0L)
+                            put("end_ms", segmentArray[i + 2].toLongOrNull() ?: 0L)
+                        }
+                        segments.put(segment)
+                    }
+                    i += 3
+                }
+                
+                // Build result JSON
+                val result = org.json.JSONObject().apply {
+                    put("segments", segments)
+                    put("n_segments", segments.length())
+                }
+                
+                return result.toString()
+            }
+        }
+
+        /**
+         * Free whisper context and release resources.
+         *
+         * @throws EdgeVedaException if cleanup fails
+         */
+        fun freeWhisper() {
+            synchronized(whisperLock) {
+                if (whisperHandle != 0L) {
+                    try {
+                        nativeWhisperDispose(whisperHandle)
+                    } finally {
+                        whisperHandle = 0L
+                    }
+                }
+            }
+        }
+
+        /**
+         * Check if whisper context is initialized.
+         */
+        fun isWhisperInitialized(): Boolean {
+            synchronized(whisperLock) {
+                return whisperHandle != 0L && nativeWhisperIsValid(whisperHandle)
+            }
+        }
+
+        /**
+         * Parse whisper config JSON string.
+         */
+        private fun parseWhisperConfig(json: String): WhisperConfigData {
+            val obj = org.json.JSONObject(json)
+            return WhisperConfigData(
+                modelPath = obj.getString("modelPath"),
+                numThreads = obj.optInt("numThreads", 4),
+                useGpu = obj.optBoolean("useGpu", true)
+            )
+        }
+
+        /**
+         * Parse whisper transcribe params JSON string.
+         */
+        private fun parseWhisperParams(json: String): WhisperParamsData {
+            val obj = org.json.JSONObject(json)
+            return WhisperParamsData(
+                language = obj.optString("language", "en"),
+                translate = obj.optBoolean("translate", false),
+                nThreads = obj.optInt("nThreads", 4)
+            )
+        }
     }
 }
 
@@ -801,6 +991,24 @@ private data class VisionParamsData(
     val topP: Float,
     val topK: Int,
     val repeatPenalty: Float
+)
+
+/**
+ * Internal data class for whisper config parsing.
+ */
+private data class WhisperConfigData(
+    val modelPath: String,
+    val numThreads: Int,
+    val useGpu: Boolean
+)
+
+/**
+ * Internal data class for whisper params parsing.
+ */
+private data class WhisperParamsData(
+    val language: String,
+    val translate: Boolean,
+    val nThreads: Int
 )
 
 /**

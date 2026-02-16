@@ -507,6 +507,104 @@ EV_API bool ev_bench(ev_context ctx, int n_threads, int n_tokens, double* result
     return false;
 }
 
+/* ============================================================================
+ * Whisper API (Speech-to-Text)
+ * ========================================================================= */
+
+/**
+ * @brief Get default whisper configuration
+ * 
+ * @param config Pointer to configuration structure to fill
+ */
+EV_API void ev_whisper_config_default(ev_whisper_config* config) {
+    if (!config) return;
+    memset(config, 0, sizeof(ev_whisper_config));
+    config->model_path = nullptr;
+    config->num_threads = 0;
+    config->use_gpu = true;
+    config->reserved = nullptr;
+}
+
+/**
+ * @brief Initialize whisper context for speech-to-text
+ * 
+ * @param config Whisper configuration
+ * @param error Optional pointer to receive error code
+ * @return Always returns nullptr (stub build)
+ */
+EV_API ev_whisper_context ev_whisper_init(
+    const ev_whisper_config* config,
+    ev_error_t* error
+) {
+    (void)config;
+    if (error) *error = EV_ERROR_MODEL_LOAD_FAILED;
+    return nullptr;
+}
+
+/**
+ * @brief Transcribe PCM audio samples to text
+ * 
+ * @param ctx Whisper context handle
+ * @param pcm_samples PCM audio data (16kHz, mono, float32, range [-1.0, 1.0])
+ * @param n_samples Number of samples
+ * @param params Transcription parameters
+ * @param result Output pointer for transcription result (caller must free with ev_whisper_free_result)
+ * @return Always returns EV_ERROR_MODEL_LOAD_FAILED (stub build)
+ */
+EV_API ev_error_t ev_whisper_transcribe(
+    ev_whisper_context ctx,
+    const float* pcm_samples,
+    int n_samples,
+    const ev_whisper_params* params,
+    ev_whisper_result* result
+) {
+    (void)ctx;
+    (void)pcm_samples;
+    (void)n_samples;
+    (void)params;
+    if (result) {
+        memset(result, 0, sizeof(ev_whisper_result));
+    }
+    return EV_ERROR_MODEL_LOAD_FAILED;
+}
+
+/**
+ * @brief Free whisper transcription result
+ * 
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_whisper_free_result(ev_whisper_result* result) {
+    if (!result) return;
+    if (result->segments) {
+        // Free each segment's text
+        for (int i = 0; i < result->n_segments; i++) {
+            free((void*)result->segments[i].text);
+        }
+        free(result->segments);
+    }
+    memset(result, 0, sizeof(ev_whisper_result));
+}
+
+/**
+ * @brief Free whisper context
+ * 
+ * @param ctx Whisper context handle
+ */
+EV_API void ev_whisper_free(ev_whisper_context ctx) {
+    (void)ctx;
+}
+
+/**
+ * @brief Check if whisper context is valid
+ * 
+ * @param ctx Whisper context handle
+ * @return Always returns false (stub build)
+ */
+EV_API bool ev_whisper_is_valid(ev_whisper_context ctx) {
+    (void)ctx;
+    return false;
+}
+
 #ifdef __cplusplus
 }
 #endif

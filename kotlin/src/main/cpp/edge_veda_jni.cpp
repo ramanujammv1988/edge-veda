@@ -1611,4 +1611,250 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionDispose(
     }
 }
 
+/* ============================================================================
+ * Whisper API Functions (Speech-to-Text)
+ * ========================================================================= */
+
+/**
+ * Native whisper instance structure.
+ */
+struct EdgeVedaWhisperInstance {
+    ev_whisper_context context = nullptr;
+    std::mutex mutex;
+    bool initialized = false;
+    std::string last_error;
+};
+
+/**
+ * Get EdgeVedaWhisperInstance from handle.
+ */
+EdgeVedaWhisperInstance* get_whisper_instance(jlong handle) {
+    return reinterpret_cast<EdgeVedaWhisperInstance*>(handle);
+}
+
+/**
+ * Create a new whisper instance.
+ */
+JNIEXPORT jlong JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeWhisperCreate(
+    JNIEnv* env,
+    jobject /* this */
+) {
+    try {
+        LOGI("Creating EdgeVeda whisper instance");
+        auto* instance = new EdgeVedaWhisperInstance();
+        return reinterpret_cast<jlong>(instance);
+    } catch (const std::exception& e) {
+        LOGE("Failed to create whisper instance: %s", e.what());
+        throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$NativeError", e.what());
+        return 0;
+    }
+}
+
+/**
+ * Initialize whisper context.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeWhisperInit(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring model_path,
+    jint num_threads,
+    jboolean use_gpu
+) {
+    auto* instance = get_whisper_instance(handle);
+    if (!instance) {
+        throw_exception(env, "java/lang/IllegalStateException", "Invalid whisper handle");
+        return JNI_FALSE;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+
+        std::string model = jstring_to_string(env, model_path);
+        
+        LOGI("Initializing whisper model: %s", model.c_str());
+        LOGI("Threads: %d, GPU: %d", num_threads, use_gpu);
+
+        // Configure whisper context
+        ev_whisper_config config;
+        ev_whisper_config_default(&config);
+        
+        config.model_path = model.c_str();
+        config.num_threads = num_threads > 0 ? num_threads : 0;
+        config.use_gpu = use_gpu;
+        config.reserved = nullptr;
+
+        // Initialize whisper context
+        ev_error_t error;
+        instance->context = ev_whisper_init(&config, &error);
+        
+        if (!instance->context) {
+            const char* error_msg = ev_error_string(error);
+            instance->last_error = error_msg;
+            LOGE("Failed to initialize whisper context: %s", error_msg);
+            throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$ModelLoadError", error_msg);
+            return JNI_FALSE;
+        }
+
+        instance->initialized = true;
+        LOGI("Whisper model initialized successfully");
+        return JNI_TRUE;
+
+    } catch (const std::exception& e) {
+        LOGE("Whisper initialization failed: %s", e.what());
+        instance->last_error = e.what();
+        throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$ModelLoadError", e.what());
+        return JNI_FALSE;
+    }
+}
+
+/**
+ * Transcribe PCM audio samples to text.
+ * 
+ * @param pcm_samples Float array of PCM samples (16kHz, mono, range [-1.0, 1.0])
+ * @return Array of [segment_text, start_ms, end_ms] triplets, or null on error
+ */
+JNIEXPORT jobjectArray JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeWhisperTranscribe(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jfloatArray pcm_samples,
+    jstring language,
+    jboolean translate,
+    jint n_threads
+) {
+    auto* instance = get_whisper_instance(handle);
+    if (!instance || !instance->initialized || !instance->context) {
+        throw_exception(env, "java/lang/IllegalStateException", "Whisper model not initialized");
+        return nullptr;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+
+        // Get PCM audio data
+        jsize n_samples = env->GetArrayLength(pcm_samples);
+        jfloat* pcm_data = env->GetFloatArrayElements(pcm_samples, nullptr);
+        
+        std::string lang = jstring_to_string(env, language);
+        LOGI("Transcribing %d samples, language: %s, translate: %d", n_samples, lang.c_str(), translate);
+
+        // Configure transcription parameters
+        ev_whisper_params params;
+        params.n_threads = n_threads > 0 ? n_threads : 0;
+        params.language = lang.empty() ? nullptr : lang.c_str();
+        params.translate = translate;
+        params.reserved = nullptr;
+
+        // Transcribe audio
+        ev_whisper_result result;
+        ev_error_t error = ev_whisper_transcribe(
+            instance->context,
+            pcm_data,
+            n_samples,
+            &params,
+            &result
+        );
+        
+        env->ReleaseFloatArrayElements(pcm_samples, pcm_data, JNI_ABORT);
+        
+        if (error != EV_SUCCESS) {
+            const char* error_msg = ev_error_string(error);
+            instance->last_error = error_msg;
+            LOGE("Whisper transcription failed: %s", error_msg);
+            throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$GenerationError", error_msg);
+            return nullptr;
+        }
+
+        LOGI("Transcription complete: %d segments, %.2f ms", result.n_segments, result.process_time_ms);
+
+        // Create result array: each element is [text, start_ms, end_ms]
+        jclass string_class = env->FindClass("java/lang/String");
+        jobjectArray segments_array = env->NewObjectArray(result.n_segments * 3, string_class, nullptr);
+        
+        if (segments_array) {
+            for (int i = 0; i < result.n_segments; i++) {
+                const ev_whisper_segment& seg = result.segments[i];
+                
+                // Add text
+                env->SetObjectArrayElement(segments_array, i * 3, 
+                    string_to_jstring(env, seg.text ? seg.text : ""));
+                
+                // Add start_ms
+                env->SetObjectArrayElement(segments_array, i * 3 + 1, 
+                    string_to_jstring(env, std::to_string(seg.start_ms)));
+                
+                // Add end_ms
+                env->SetObjectArrayElement(segments_array, i * 3 + 2, 
+                    string_to_jstring(env, std::to_string(seg.end_ms)));
+            }
+        }
+
+        // Free native result
+        ev_whisper_free_result(&result);
+        env->DeleteLocalRef(string_class);
+        
+        return segments_array;
+
+    } catch (const std::exception& e) {
+        LOGE("Whisper transcription failed: %s", e.what());
+        instance->last_error = e.what();
+        throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$GenerationError", e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * Check if whisper context is valid.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeWhisperIsValid(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handle
+) {
+    auto* instance = get_whisper_instance(handle);
+    if (!instance || !instance->context) {
+        return JNI_FALSE;
+    }
+
+    return ev_whisper_is_valid(instance->context) ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * Free whisper context.
+ */
+JNIEXPORT void JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeWhisperDispose(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handle
+) {
+    auto* instance = get_whisper_instance(handle);
+    if (!instance) return;
+
+    try {
+        LOGI("Disposing whisper instance");
+
+        {
+            std::lock_guard<std::mutex> lock(instance->mutex);
+            if (instance->initialized && instance->context) {
+                ev_whisper_free(instance->context);
+                instance->context = nullptr;
+                instance->initialized = false;
+            }
+        }
+
+        delete instance;
+        LOGI("Whisper instance disposed");
+
+    } catch (const std::exception& e) {
+        LOGE("Failed to dispose whisper instance: %s", e.what());
+        delete instance; // Try to delete anyway
+    }
+}
+
 } // extern "C"
