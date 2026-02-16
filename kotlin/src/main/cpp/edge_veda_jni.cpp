@@ -167,10 +167,10 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
     jboolean use_gpu,
     jboolean use_mmap,
     jboolean use_mlock,
-    jfloat temperature,
-    jfloat top_p,
-    jint top_k,
-    jfloat repeat_penalty,
+    [[maybe_unused]] jfloat temperature,
+    [[maybe_unused]] jfloat top_p,
+    [[maybe_unused]] jint top_k,
+    [[maybe_unused]] jfloat repeat_penalty,
     jlong seed
 ) {
     auto* instance = get_instance(handle);
@@ -207,13 +207,6 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeInitModel(
         config.memory_limit_bytes = 2147483648ULL; // 2 GB safe default for mobile
         config.auto_unload_on_memory_pressure = true;
         config.reserved = nullptr;
-
-        // Suppress unused parameter warnings – these are reserved for future use
-        (void)temperature;
-        (void)top_p;
-        (void)top_k;
-        (void)repeat_penalty;
-        (void)seed;
 
         // Detect actual backend that will be used
         ev_backend_t detected_backend = ev_detect_backend();
@@ -1065,6 +1058,8 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeSetVerbose(
 
 /**
  * Cancel ongoing generation (immediate native-level cancellation).
+ * NOTE: ev_cancel() does not exist in core API. This functionality would need
+ * to be implemented at the stream level using ev_stream_cancel().
  */
 JNIEXPORT jboolean JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeCancel(
@@ -1077,19 +1072,10 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeCancel(
         return JNI_FALSE;
     }
 
-    try {
-        ev_error_t error = ev_cancel(instance->context);
-        if (error == EV_SUCCESS) {
-            LOGI("Generation cancelled successfully");
-            return JNI_TRUE;
-        } else {
-            LOGE("Failed to cancel generation: %s", ev_error_string(error));
-            return JNI_FALSE;
-        }
-    } catch (const std::exception& e) {
-        LOGE("Failed to cancel generation: %s", e.what());
-        return JNI_FALSE;
-    }
+    // ev_cancel() does not exist in core C API
+    // Cancellation must be handled at stream level via ev_stream_cancel()
+    LOGE("nativeCancel: ev_cancel() not implemented in core API");
+    return JNI_FALSE;
 }
 
 /* ============================================================================
@@ -1125,6 +1111,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetLastError(
 
 /**
  * Set system prompt for the context.
+ * NOTE: ev_set_system_prompt() does not exist in core API.
  */
 JNIEXPORT jboolean JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeSetSystemPrompt(
@@ -1138,26 +1125,16 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeSetSystemPrompt(
         return JNI_FALSE;
     }
 
-    try {
-        std::lock_guard<std::mutex> lock(instance->mutex);
-        std::string prompt = jstring_to_string(env, system_prompt);
-        
-        ev_error_t error = ev_set_system_prompt(instance->context, prompt.c_str());
-        if (error == EV_SUCCESS) {
-            LOGI("System prompt set successfully");
-            return JNI_TRUE;
-        } else {
-            LOGE("Failed to set system prompt: %s", ev_error_string(error));
-            return JNI_FALSE;
-        }
-    } catch (const std::exception& e) {
-        LOGE("Failed to set system prompt: %s", e.what());
-        return JNI_FALSE;
-    }
+    [[maybe_unused]] std::string prompt = jstring_to_string(env, system_prompt);
+    
+    // ev_set_system_prompt() does not exist in core C API
+    LOGE("nativeSetSystemPrompt: ev_set_system_prompt() not implemented in core API");
+    return JNI_FALSE;
 }
 
 /**
  * Clear chat history.
+ * NOTE: ev_clear_chat_history() does not exist in core API. Use ev_reset() instead.
  */
 JNIEXPORT jboolean JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeClearChatHistory(
@@ -1172,9 +1149,10 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeClearChatHistory(
 
     try {
         std::lock_guard<std::mutex> lock(instance->mutex);
-        ev_error_t error = ev_clear_chat_history(instance->context);
+        // Use ev_reset() instead of non-existent ev_clear_chat_history()
+        ev_error_t error = ev_reset(instance->context);
         if (error == EV_SUCCESS) {
-            LOGI("Chat history cleared successfully");
+            LOGI("Chat history cleared successfully via ev_reset()");
             return JNI_TRUE;
         } else {
             LOGE("Failed to clear chat history: %s", ev_error_string(error));
@@ -1192,6 +1170,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeClearChatHistory(
 
 /**
  * Get context window size.
+ * NOTE: ev_get_context_size() does not exist in core API.
  */
 JNIEXPORT jint JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextSize(
@@ -1204,17 +1183,14 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextSize(
         return -1;
     }
 
-    try {
-        int size = ev_get_context_size(instance->context);
-        return static_cast<jint>(size);
-    } catch (const std::exception& e) {
-        LOGE("Failed to get context size: %s", e.what());
-        return -1;
-    }
+    // ev_get_context_size() does not exist in core C API
+    LOGE("nativeGetContextSize: ev_get_context_size() not implemented in core API");
+    return -1;
 }
 
 /**
  * Get number of tokens currently used in context.
+ * NOTE: ev_get_context_used() does not exist in core API.
  */
 JNIEXPORT jint JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextUsed(
@@ -1227,13 +1203,9 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextUsed(
         return -1;
     }
 
-    try {
-        int used = ev_get_context_used(instance->context);
-        return static_cast<jint>(used);
-    } catch (const std::exception& e) {
-        LOGE("Failed to get context used: %s", e.what());
-        return -1;
-    }
+    // ev_get_context_used() does not exist in core C API
+    LOGE("nativeGetContextUsed: ev_get_context_used() not implemented in core API");
+    return -1;
 }
 
 /* ============================================================================
@@ -1242,6 +1214,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetContextUsed(
 
 /**
  * Tokenize text into token IDs.
+ * NOTE: ev_tokenize() and ev_free_tokens() do not exist in core API.
  */
 JNIEXPORT jintArray JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeTokenize(
@@ -1255,70 +1228,32 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeTokenize(
         return nullptr;
     }
 
-    try {
-        std::string text_str = jstring_to_string(env, text);
-        
-        int* tokens = nullptr;
-        int num_tokens = 0;
-        
-        ev_error_t error = ev_tokenize(instance->context, text_str.c_str(), &tokens, &num_tokens);
-        
-        if (error != EV_SUCCESS || !tokens) {
-            LOGE("Failed to tokenize: %s", ev_error_string(error));
-            return nullptr;
-        }
-
-        jintArray result = env->NewIntArray(num_tokens);
-        if (result) {
-            env->SetIntArrayRegion(result, 0, num_tokens, tokens);
-        }
-
-        ev_free_tokens(tokens);
-        return result;
-        
-    } catch (const std::exception& e) {
-        LOGE("Failed to tokenize: %s", e.what());
-        return nullptr;
-    }
+    [[maybe_unused]] std::string text_str = jstring_to_string(env, text);
+    
+    // ev_tokenize() does not exist in core C API
+    LOGE("nativeTokenize: ev_tokenize() not implemented in core API");
+    return nullptr;
 }
 
 /**
  * Detokenize token IDs into text.
+ * NOTE: ev_detokenize() does not exist in core API.
  */
 JNIEXPORT jstring JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeDetokenize(
     JNIEnv* env,
     jobject /* this */,
     jlong handle,
-    jintArray tokens
+    [[maybe_unused]] jintArray tokens
 ) {
     auto* instance = get_instance(handle);
     if (!instance || !instance->context) {
         return nullptr;
     }
 
-    try {
-        jsize num_tokens = env->GetArrayLength(tokens);
-        jint* token_data = env->GetIntArrayElements(tokens, nullptr);
-        
-        char* text = nullptr;
-        ev_error_t error = ev_detokenize(instance->context, token_data, num_tokens, &text);
-        
-        env->ReleaseIntArrayElements(tokens, token_data, JNI_ABORT);
-        
-        if (error != EV_SUCCESS || !text) {
-            LOGE("Failed to detokenize: %s", ev_error_string(error));
-            return nullptr;
-        }
-
-        jstring result = string_to_jstring(env, text);
-        ev_free_string(text);
-        return result;
-        
-    } catch (const std::exception& e) {
-        LOGE("Failed to detokenize: %s", e.what());
-        return nullptr;
-    }
+    // ev_detokenize() does not exist in core C API
+    LOGE("nativeDetokenize: ev_detokenize() not implemented in core API");
+    return nullptr;
 }
 
 /* ============================================================================
@@ -1327,6 +1262,8 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeDetokenize(
 
 /**
  * Generate embeddings for text.
+ * FIXED: Use ev_embed() instead of ev_get_embedding()
+ * FIXED: Use dimensions/embeddings (plural) instead of dimension/embedding
  */
 JNIEXPORT jfloatArray JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetEmbedding(
@@ -1345,19 +1282,23 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetEmbedding(
         std::string text_str = jstring_to_string(env, text);
         
         ev_embed_result result;
-        ev_error_t error = ev_get_embedding(instance->context, text_str.c_str(), &result);
+        // FIXED: Use ev_embed() not ev_get_embedding()
+        ev_error_t error = ev_embed(instance->context, text_str.c_str(), &result);
         
         if (error != EV_SUCCESS) {
             LOGE("Failed to get embedding: %s", ev_error_string(error));
             return nullptr;
         }
 
-        jfloatArray array = env->NewFloatArray(result.dimension);
+        // FIXED: Use dimensions (plural) not dimension
+        jfloatArray array = env->NewFloatArray(result.dimensions);
         if (array) {
-            env->SetFloatArrayRegion(array, 0, result.dimension, result.embedding);
+            // FIXED: Use embeddings (plural) not embedding
+            env->SetFloatArrayRegion(array, 0, result.dimensions, result.embeddings);
         }
 
-        ev_free_embedding(&result);
+        // FIXED: Use ev_free_embeddings() (plural) not ev_free_embedding()
+        ev_free_embeddings(&result);
         return array;
         
     } catch (const std::exception& e) {
@@ -1372,6 +1313,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGetEmbedding(
 
 /**
  * Save session state to file.
+ * NOTE: ev_save_session() does not exist in core API.
  */
 JNIEXPORT jboolean JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeSaveSession(
@@ -1385,26 +1327,16 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeSaveSession(
         return JNI_FALSE;
     }
 
-    try {
-        std::lock_guard<std::mutex> lock(instance->mutex);
-        std::string path_str = jstring_to_string(env, path);
-        
-        ev_error_t error = ev_save_session(instance->context, path_str.c_str());
-        if (error == EV_SUCCESS) {
-            LOGI("Session saved to: %s", path_str.c_str());
-            return JNI_TRUE;
-        } else {
-            LOGE("Failed to save session: %s", ev_error_string(error));
-            return JNI_FALSE;
-        }
-    } catch (const std::exception& e) {
-        LOGE("Failed to save session: %s", e.what());
-        return JNI_FALSE;
-    }
+    [[maybe_unused]] std::string path_str = jstring_to_string(env, path);
+    
+    // ev_save_session() does not exist in core C API
+    LOGE("nativeSaveSession: ev_save_session() not implemented in core API");
+    return JNI_FALSE;
 }
 
 /**
  * Load session state from file.
+ * NOTE: ev_load_session() does not exist in core API.
  */
 JNIEXPORT jboolean JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeLoadSession(
@@ -1418,22 +1350,11 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeLoadSession(
         return JNI_FALSE;
     }
 
-    try {
-        std::lock_guard<std::mutex> lock(instance->mutex);
-        std::string path_str = jstring_to_string(env, path);
-        
-        ev_error_t error = ev_load_session(instance->context, path_str.c_str());
-        if (error == EV_SUCCESS) {
-            LOGI("Session loaded from: %s", path_str.c_str());
-            return JNI_TRUE;
-        } else {
-            LOGE("Failed to load session: %s", ev_error_string(error));
-            return JNI_FALSE;
-        }
-    } catch (const std::exception& e) {
-        LOGE("Failed to load session: %s", e.what());
-        return JNI_FALSE;
-    }
+    [[maybe_unused]] std::string path_str = jstring_to_string(env, path);
+    
+    // ev_load_session() does not exist in core C API
+    LOGE("nativeLoadSession: ev_load_session() not implemented in core API");
+    return JNI_FALSE;
 }
 
 /* ============================================================================
@@ -1442,47 +1363,24 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeLoadSession(
 
 /**
  * Run performance benchmark.
+ * NOTE: ev_bench() and ev_bench_result do not exist in core API.
  */
 JNIEXPORT jdoubleArray JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeBench(
-    JNIEnv* env,
+    JNIEnv* /* env */,
     jobject /* this */,
     jlong handle,
-    jint num_threads,
-    jint num_tokens
+    [[maybe_unused]] jint num_threads,
+    [[maybe_unused]] jint num_tokens
 ) {
     auto* instance = get_instance(handle);
     if (!instance || !instance->context) {
         return nullptr;
     }
 
-    try {
-        std::lock_guard<std::mutex> lock(instance->mutex);
-        
-        ev_bench_result result;
-        ev_error_t error = ev_bench(instance->context, num_threads, num_tokens, &result);
-        
-        if (error != EV_SUCCESS) {
-            LOGE("Failed to run benchmark: %s", ev_error_string(error));
-            return nullptr;
-        }
-
-        // Return array: [tokens_per_second, time_ms, tokens_processed]
-        jdoubleArray array = env->NewDoubleArray(3);
-        if (array) {
-            jdouble values[3];
-            values[0] = result.tokens_per_second;
-            values[1] = result.time_ms;
-            values[2] = static_cast<jdouble>(result.tokens_processed);
-            env->SetDoubleArrayRegion(array, 0, 3, values);
-        }
-
-        return array;
-        
-    } catch (const std::exception& e) {
-        LOGE("Failed to run benchmark: %s", e.what());
-        return nullptr;
-    }
+    // ev_bench() and ev_bench_result do not exist in core C API
+    LOGE("nativeBench: ev_bench() not implemented in core API");
+    return nullptr;
 }
 
 /* ============================================================================

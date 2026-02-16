@@ -4,7 +4,8 @@ import com.edgeveda.sdk.EdgeVedaConfig
 import com.edgeveda.sdk.EdgeVedaException
 import com.edgeveda.sdk.GenerateOptions
 import java.util.concurrent.atomic.AtomicBoolean
-
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 /**
  * Internal JNI bridge to native EdgeVeda implementation.
  *
@@ -173,7 +174,7 @@ internal class NativeBridge {
             // Iterate tokens one by one - allows cancellation between tokens
             while (true) {
                 // Check for cancellation
-                kotlinx.coroutines.ensureActive()
+                coroutineContext.ensureActive()
                 
                 // Get next token (blocking call, but runs on Dispatchers.Default)
                 val token = nextToken(streamHandle) ?: break

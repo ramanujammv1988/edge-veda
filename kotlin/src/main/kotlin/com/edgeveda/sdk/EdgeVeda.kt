@@ -535,11 +535,11 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         if (numThreads < 1 || numThreads > 32) {
-            throw EdgeVedaException.ConfigurationError("numThreads must be between 1 and 32")
+            throw EdgeVedaException.InvalidConfiguration("numThreads must be between 1 and 32")
         }
 
         if (numTokens < 1 || numTokens > 4096) {
-            throw EdgeVedaException.ConfigurationError("numTokens must be between 1 and 4096")
+            throw EdgeVedaException.InvalidConfiguration("numTokens must be between 1 and 4096")
         }
 
         return withContext(Dispatchers.Default) {

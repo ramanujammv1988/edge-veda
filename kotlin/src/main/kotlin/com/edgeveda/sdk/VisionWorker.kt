@@ -48,7 +48,7 @@ class VisionWorker {
      * Whether the vision context is initialized and ready
      */
     val isInitialized: Boolean
-        @Synchronized get() = _isInitialized
+        get() = _isInitialized
 
     /**
      * Number of frames dropped due to backpressure
@@ -60,7 +60,7 @@ class VisionWorker {
      * Backend name (e.g., "Vulkan", "CPU")
      */
     val backendName: String
-        @Synchronized get() = backend
+        get() = backend
 
     /**
      * Initialize the vision context with VLM model
