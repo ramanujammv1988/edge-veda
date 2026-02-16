@@ -1329,6 +1329,90 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeBench(
 }
 
 /* ============================================================================
+ * Generation Parameters Functions
+ * ========================================================================= */
+
+/**
+ * Get default generation parameters with all fields set to sensible defaults.
+ */
+JNIEXPORT jobjectArray JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerationParamsDefault(
+    JNIEnv* env,
+    jclass /* class */
+) {
+    try {
+        ev_generation_params params;
+        ev_generation_params_default(&params);
+        
+        // Return string array with parameter values
+        // [max_tokens, temperature, top_p, top_k, repeat_penalty, frequency_penalty, presence_penalty]
+        jobjectArray result = env->NewObjectArray(7, env->FindClass("java/lang/String"), nullptr);
+        if (result) {
+            env->SetObjectArrayElement(result, 0, string_to_jstring(env, std::to_string(params.max_tokens)));
+            env->SetObjectArrayElement(result, 1, string_to_jstring(env, std::to_string(params.temperature)));
+            env->SetObjectArrayElement(result, 2, string_to_jstring(env, std::to_string(params.top_p)));
+            env->SetObjectArrayElement(result, 3, string_to_jstring(env, std::to_string(params.top_k)));
+            env->SetObjectArrayElement(result, 4, string_to_jstring(env, std::to_string(params.repeat_penalty)));
+            env->SetObjectArrayElement(result, 5, string_to_jstring(env, std::to_string(params.frequency_penalty)));
+            env->SetObjectArrayElement(result, 6, string_to_jstring(env, std::to_string(params.presence_penalty)));
+        }
+        
+        return result;
+    } catch (const std::exception& e) {
+        LOGE("Failed to get default generation params: %s", e.what());
+        return nullptr;
+    }
+}
+
+/* ============================================================================
+ * Stream Token Info Functions (Confidence Scoring)
+ * ========================================================================= */
+
+/**
+ * Get extended token information from stream including confidence scores.
+ * 
+ * Returns: [confidence, avg_confidence, needs_cloud_handoff, token_index]
+ */
+JNIEXPORT jdoubleArray JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamGetTokenInfo(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong stream_handle
+) {
+    ev_stream stream = reinterpret_cast<ev_stream>(stream_handle);
+    if (!stream) {
+        LOGE("Invalid stream handle");
+        return nullptr;
+    }
+
+    try {
+        ev_stream_token_info info;
+        ev_error_t error = ev_stream_get_token_info(stream, &info);
+        
+        if (error != EV_SUCCESS) {
+            LOGE("Failed to get token info: %s", ev_error_string(error));
+            return nullptr;
+        }
+
+        // Return array: [confidence, avg_confidence, needs_cloud_handoff, token_index]
+        jdoubleArray result = env->NewDoubleArray(4);
+        if (result) {
+            jdouble values[4];
+            values[0] = static_cast<jdouble>(info.confidence);
+            values[1] = static_cast<jdouble>(info.avg_confidence);
+            values[2] = info.needs_cloud_handoff ? 1.0 : 0.0;
+            values[3] = static_cast<jdouble>(info.token_index);
+            env->SetDoubleArrayRegion(result, 0, 4, values);
+        }
+
+        return result;
+    } catch (const std::exception& e) {
+        LOGE("Failed to get stream token info: %s", e.what());
+        return nullptr;
+    }
+}
+
+/* ============================================================================
  * Vision API Functions
  * ========================================================================= */
 

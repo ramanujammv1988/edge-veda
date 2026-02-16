@@ -508,6 +508,70 @@ EV_API bool ev_bench(ev_context ctx, int n_threads, int n_tokens, double* result
 }
 
 /* ============================================================================
+ * Stream Token Info (Confidence Scoring)
+ * ========================================================================= */
+
+/**
+ * @brief Get extended token information from stream
+ * 
+ * @param stream Stream handle
+ * @param info Output pointer for token info structure
+ * @return Always returns EV_ERROR_NOT_IMPLEMENTED (stub build)
+ */
+EV_API ev_error_t ev_stream_get_token_info(
+    ev_stream stream,
+    ev_stream_token_info* info
+) {
+    (void)stream;
+    if (info) {
+        memset(info, 0, sizeof(ev_stream_token_info));
+        info->confidence = -1.0f;
+        info->avg_confidence = -1.0f;
+        info->needs_cloud_handoff = false;
+        info->token_index = 0;
+    }
+    return EV_ERROR_NOT_IMPLEMENTED;
+}
+
+/* ============================================================================
+ * Embeddings API
+ * ========================================================================= */
+
+/**
+ * @brief Compute text embeddings
+ * 
+ * @param ctx Context handle
+ * @param text Input text to embed
+ * @param result Output pointer for embedding result
+ * @return Always returns EV_ERROR_NOT_IMPLEMENTED (stub build)
+ */
+EV_API ev_error_t ev_embed(
+    ev_context ctx,
+    const char* text,
+    ev_embed_result* result
+) {
+    (void)ctx;
+    (void)text;
+    if (result) {
+        memset(result, 0, sizeof(ev_embed_result));
+    }
+    return EV_ERROR_NOT_IMPLEMENTED;
+}
+
+/**
+ * @brief Free embedding result
+ * 
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_free_embeddings(ev_embed_result* result) {
+    if (!result) return;
+    if (result->embeddings) {
+        free(result->embeddings);
+    }
+    memset(result, 0, sizeof(ev_embed_result));
+}
+
+/* ============================================================================
  * Whisper API (Speech-to-Text)
  * ========================================================================= */
 

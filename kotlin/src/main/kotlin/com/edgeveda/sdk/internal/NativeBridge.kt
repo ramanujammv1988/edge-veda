@@ -303,6 +303,43 @@ internal class NativeBridge {
     }
 
     /**
+     * Get default generation parameters.
+     *
+     * @return Map of default parameter values
+     */
+    fun getGenerationParamsDefault(): Map<String, Any> {
+        val params = nativeGenerationParamsDefault()
+            ?: throw EdgeVedaException.GenerationError("Failed to retrieve default generation parameters")
+
+        return mapOf(
+            "maxTokens" to (params.getOrNull(0)?.toIntOrNull() ?: 256),
+            "temperature" to (params.getOrNull(1)?.toFloatOrNull() ?: 0.7f),
+            "topP" to (params.getOrNull(2)?.toFloatOrNull() ?: 0.9f),
+            "topK" to (params.getOrNull(3)?.toIntOrNull() ?: 40),
+            "repeatPenalty" to (params.getOrNull(4)?.toFloatOrNull() ?: 1.1f),
+            "frequencyPenalty" to (params.getOrNull(5)?.toFloatOrNull() ?: 0.0f),
+            "presencePenalty" to (params.getOrNull(6)?.toFloatOrNull() ?: 0.0f)
+        )
+    }
+
+    /**
+     * Get extended token information from a streaming generation.
+     *
+     * @param streamHandle Native stream handle
+     * @return Map containing confidence, avg_confidence, needs_cloud_handoff, token_index
+     */
+    fun getStreamTokenInfo(streamHandle: Long): Map<String, Any>? {
+        val info = nativeStreamGetTokenInfo(streamHandle) ?: return null
+
+        return mapOf(
+            "confidence" to (info.getOrNull(0) ?: -1.0),
+            "avgConfidence" to (info.getOrNull(1) ?: -1.0),
+            "needsCloudHandoff" to ((info.getOrNull(2) ?: 0.0) > 0.5),
+            "tokenIndex" to (info.getOrNull(3)?.toInt() ?: 0)
+        )
+    }
+
+    /**
      * Get current memory usage in bytes.
      */
     fun getMemoryUsage(): Long {
@@ -499,6 +536,12 @@ internal class NativeBridge {
 
     // Benchmarking
     private external fun nativeBench(handle: Long, numThreads: Int, numTokens: Int): DoubleArray?
+
+    // Stream Token Info (Confidence Scoring)
+    private external fun nativeStreamGetTokenInfo(streamHandle: Long): DoubleArray?
+
+    // Generation Parameters
+    private external fun nativeGenerationParamsDefault(): Array<String>?
 
     companion object {
         private const val LIBRARY_NAME = "edgeveda_jni"
