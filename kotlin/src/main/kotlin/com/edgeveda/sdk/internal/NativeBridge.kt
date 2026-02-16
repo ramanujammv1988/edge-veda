@@ -82,6 +82,76 @@ internal class NativeBridge {
     }
 
     /**
+     * Create a streaming generation handle.
+     *
+     * Returns a native stream handle that can be iterated token-by-token.
+     * This allows for better control over streaming (pause, resume, cancel).
+     *
+     * @param prompt Input prompt
+     * @param options Generation options
+     * @return Native stream handle (must be freed with freeStream())
+     * @throws EdgeVedaException.GenerationError if stream creation fails
+     */
+    fun createStream(prompt: String, options: GenerateOptions): Long {
+        checkNotDisposed()
+        
+        val streamHandle = nativeStreamCreate(
+            nativeHandle,
+            prompt,
+            options.maxTokens ?: -1,
+            options.temperature ?: -1f,
+            options.topP ?: -1f,
+            options.topK ?: -1,
+            options.repeatPenalty ?: -1f,
+            options.stopSequences.toTypedArray(),
+            options.seed ?: -1L
+        )
+        
+        if (streamHandle == 0L) {
+            throw EdgeVedaException.GenerationError("Failed to create stream: ${getLastError()}")
+        }
+        
+        return streamHandle
+    }
+
+    /**
+     * Get the next token from a streaming generation.
+     *
+     * @param streamHandle Native stream handle from createStream()
+     * @return Next token, or null if stream is complete
+     * @throws EdgeVedaException.GenerationError if token retrieval fails
+     */
+    fun nextToken(streamHandle: Long): String? {
+        checkNotDisposed()
+        
+        if (streamHandle == 0L) {
+            throw EdgeVedaException.GenerationError("Invalid stream handle")
+        }
+        
+        return try {
+            nativeStreamNext(streamHandle)
+        } catch (e: Exception) {
+            throw EdgeVedaException.GenerationError("Failed to get next token: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Free a streaming generation handle and release resources.
+     *
+     * @param streamHandle Native stream handle from createStream()
+     */
+    fun freeStream(streamHandle: Long) {
+        if (streamHandle != 0L) {
+            try {
+                nativeStreamFree(streamHandle)
+            } catch (e: Exception) {
+                // Log but don't throw in cleanup
+                System.err.println("Error freeing stream: ${e.message}")
+            }
+        }
+    }
+
+    /**
      * Generate text with streaming callback.
      *
      * @param prompt Input prompt
@@ -96,71 +166,25 @@ internal class NativeBridge {
     ) {
         checkNotDisposed()
 
-        // Reset cancel flag before starting a new stream
-        streamCancelFlag.set(false)
-
-        // Use a blocking queue to bridge between the JNI callback thread and the
-        // suspend coroutine context.  The JNI onToken() callback simply enqueues
-        // tokens (pure Java, no coroutines).  A StreamItem.End sentinel signals
-        // end-of-stream (LinkedBlockingQueue does NOT allow null elements).
-        val tokenQueue = java.util.concurrent.LinkedBlockingQueue<StreamItem>()
-        var nativeError: Throwable? = null
-
-        // Run the blocking native generation on a dedicated thread so the
-        // current coroutine is free to consume tokens from the queue.
-        val nativeThread = Thread({
-            val bridge = object : StreamCallbackBridge {
-                override fun onToken(token: String) {
-                    if (streamCancelFlag.get()) {
-                        throw kotlinx.coroutines.CancellationException("Stream cancelled via cancelCurrentStream()")
-                    }
-                    tokenQueue.put(StreamItem.Token(token))
-                }
-            }
-            try {
-                val success = nativeGenerateStream(
-                    nativeHandle,
-                    prompt,
-                    options.maxTokens ?: -1,
-                    options.temperature ?: -1f,
-                    options.topP ?: -1f,
-                    options.topK ?: -1,
-                    options.repeatPenalty ?: -1f,
-                    options.stopSequences.toTypedArray(),
-                    options.seed ?: -1L,
-                    bridge
-                )
-                if (!success) {
-                    nativeError = EdgeVedaException.GenerationError("Native stream generation failed")
-                }
-            } catch (e: Throwable) {
-                nativeError = e
-            } finally {
-                // Sentinel: signals the consumer loop below to stop
-                tokenQueue.put(StreamItem.End)
-            }
-        }, "ev-stream-native")
-        nativeThread.start()
-
-        // Consume tokens from the queue in the caller's coroutine context.
-        // This is suspend-safe – callback() (e.g. Flow emit()) runs in the
-        // correct coroutine scope.
+        // Create stream handle
+        val streamHandle = createStream(prompt, options)
+        
         try {
+            // Iterate tokens one by one - allows cancellation between tokens
             while (true) {
-                when (val item = tokenQueue.take()) {
-                    is StreamItem.Token -> callback(item.value)
-                    is StreamItem.End -> break
-                }
+                // Check for cancellation
+                kotlinx.coroutines.ensureActive()
+                
+                // Get next token (blocking call, but runs on Dispatchers.Default)
+                val token = nextToken(streamHandle) ?: break
+                
+                // Emit token to callback
+                callback(token)
             }
         } finally {
-            // If the consumer is cancelled (e.g. job cancellation), signal native
-            // side to stop producing and wait for the thread to finish.
-            streamCancelFlag.set(true)
-            nativeThread.join(5_000)
+            // Always free the stream handle
+            freeStream(streamHandle)
         }
-
-        // Propagate any error from the native thread
-        nativeError?.let { throw it }
     }
 
     /**
@@ -470,6 +494,23 @@ internal class NativeBridge {
         callback: StreamCallbackBridge
     ): Boolean
 
+    // Token-by-token streaming methods
+    private external fun nativeStreamCreate(
+        handle: Long,
+        prompt: String,
+        maxTokens: Int,
+        temperature: Float,
+        topP: Float,
+        topK: Int,
+        repeatPenalty: Float,
+        stopSequences: Array<String>,
+        seed: Long
+    ): Long
+
+    private external fun nativeStreamNext(streamHandle: Long): String?
+
+    private external fun nativeStreamFree(streamHandle: Long)
+
     private external fun nativeGetMemoryUsage(handle: Long): Long
 
     private external fun nativeUnloadModel(handle: Long)
@@ -576,7 +617,7 @@ internal class NativeBridge {
         @JvmStatic
         private external fun nativeVisionDescribe(
             handle: Long,
-            imageBytes: ByteArray,
+            imageBuffer: java.nio.ByteBuffer,
             width: Int,
             height: Int,
             prompt: String,
@@ -730,9 +771,9 @@ internal class NativeBridge {
         }
 
         /**
-         * Describe an image using the vision model.
+         * Describe an image using the vision model (zero-copy via DirectByteBuffer).
          *
-         * @param base64Image Base64-encoded RGB888 image data
+         * @param imageBuffer DirectByteBuffer containing RGB888 image data
          * @param width Image width in pixels
          * @param height Image height in pixels
          * @param prompt Text prompt for the model
@@ -741,7 +782,7 @@ internal class NativeBridge {
          * @throws EdgeVedaException if inference fails
          */
         fun describeImage(
-            base64Image: String,
+            imageBuffer: java.nio.ByteBuffer,
             width: Int,
             height: Int,
             prompt: String,
@@ -754,16 +795,20 @@ internal class NativeBridge {
                     throw EdgeVedaException.ModelLoadError("Vision context not initialized")
                 }
                 
+                // Ensure buffer is direct for zero-copy access
+                if (!imageBuffer.isDirect) {
+                    throw EdgeVedaException.InvalidConfiguration(
+                        "Image buffer must be a DirectByteBuffer for zero-copy transfer"
+                    )
+                }
+                
                 // Parse params JSON
                 val params = parseVisionParams(paramsJson)
                 
-                // Decode Base64 to bytes
-                val imageBytes = android.util.Base64.decode(base64Image, android.util.Base64.NO_WRAP)
-                
-                // Perform vision inference
+                // Perform vision inference (zero-copy - direct pointer access)
                 val description = nativeVisionDescribe(
                     visionHandle,
-                    imageBytes,
+                    imageBuffer,
                     width,
                     height,
                     prompt,

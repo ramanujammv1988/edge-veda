@@ -1,6 +1,5 @@
 package com.edgeveda.sdk
 
-import android.util.Base64
 import com.edgeveda.sdk.internal.NativeBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -197,7 +196,7 @@ class VisionWorker {
     }
 
     /**
-     * Internal method to perform vision inference
+     * Internal method to perform vision inference (zero-copy via DirectByteBuffer)
      */
     private suspend fun describeFrameInternal(
         rgb: ByteArray,
@@ -207,8 +206,10 @@ class VisionWorker {
         params: VisionGenerationParams
     ): VisionResult = withContext(Dispatchers.IO) {
         try {
-            // Convert RGB bytes to Base64 for JNI transfer
-            val base64 = Base64.encodeToString(rgb, Base64.NO_WRAP)
+            // Allocate DirectByteBuffer for zero-copy JNI transfer
+            val buffer = java.nio.ByteBuffer.allocateDirect(rgb.size)
+            buffer.put(rgb)
+            buffer.flip()
 
             val paramsJson = JSONObject().apply {
                 put("maxTokens", params.maxTokens)
@@ -219,7 +220,7 @@ class VisionWorker {
             }.toString()
 
             val resultJson = NativeBridge.describeImage(
-                base64,
+                buffer,
                 width,
                 height,
                 prompt,

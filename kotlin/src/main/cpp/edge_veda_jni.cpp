@@ -340,6 +340,163 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerate(
 }
 
 /**
+ * Create a stream for token-by-token generation.
+ * Returns a stream handle that can be used with nativeStreamNext and nativeStreamFree.
+ */
+JNIEXPORT jlong JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamCreate(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handle,
+    jstring prompt,
+    jint max_tokens,
+    jfloat temperature,
+    jfloat top_p,
+    jint top_k,
+    jfloat repeat_penalty,
+    jobjectArray stop_sequences,
+    jlong seed
+) {
+    auto* instance = get_instance(handle);
+    if (!instance || !instance->initialized || !instance->context) {
+        throw_exception(env, "java/lang/IllegalStateException", "Model not initialized");
+        return 0;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(instance->mutex);
+
+        std::string prompt_str = jstring_to_string(env, prompt);
+        LOGI("Creating stream for prompt (length: %zu)", prompt_str.length());
+
+        // Convert stop sequences to C array
+        std::vector<std::string> stop_strs;
+        std::vector<const char*> stop_ptrs;
+        
+        if (stop_sequences) {
+            jsize len = env->GetArrayLength(stop_sequences);
+            for (jsize i = 0; i < len; i++) {
+                auto jstr = (jstring)env->GetObjectArrayElement(stop_sequences, i);
+                stop_strs.push_back(jstring_to_string(env, jstr));
+                env->DeleteLocalRef(jstr);
+            }
+            for (const auto& s : stop_strs) {
+                stop_ptrs.push_back(s.c_str());
+            }
+        }
+
+        // Configure generation parameters
+        ev_generation_params params;
+        ev_generation_params_default(&params);
+        
+        if (max_tokens > 0) params.max_tokens = max_tokens;
+        if (temperature > 0) params.temperature = temperature;
+        if (top_p > 0) params.top_p = top_p;
+        if (top_k > 0) params.top_k = top_k;
+        if (repeat_penalty > 0) params.repeat_penalty = repeat_penalty;
+        params.frequency_penalty = 0.0f;
+        params.presence_penalty = 0.0f;
+        params.stop_sequences = stop_ptrs.empty() ? nullptr : stop_ptrs.data();
+        params.num_stop_sequences = static_cast<int>(stop_ptrs.size());
+        params.reserved = nullptr;
+
+        // Suppress unused parameter warning
+        (void)seed;
+
+        // Create stream
+        ev_error_t error;
+        ev_stream stream = ev_generate_stream(instance->context, prompt_str.c_str(), &params, &error);
+        
+        if (!stream) {
+            const char* error_msg = ev_error_string(error);
+            instance->last_error = error_msg;
+            LOGE("Failed to create stream: %s", error_msg);
+            throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$GenerationError", error_msg);
+            return 0;
+        }
+
+        LOGI("Stream created successfully (handle: %p)", stream);
+        return reinterpret_cast<jlong>(stream);
+
+    } catch (const std::exception& e) {
+        LOGE("Stream creation failed: %s", e.what());
+        instance->last_error = e.what();
+        throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$GenerationError", e.what());
+        return 0;
+    }
+}
+
+/**
+ * Get the next token from a stream.
+ * Returns the token string, or null if the stream is complete or an error occurred.
+ */
+JNIEXPORT jstring JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamNext(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong stream_handle
+) {
+    ev_stream stream = reinterpret_cast<ev_stream>(stream_handle);
+    if (!stream) {
+        throw_exception(env, "java/lang/IllegalStateException", "Invalid stream handle");
+        return nullptr;
+    }
+
+    try {
+        // Check if stream has more tokens
+        if (!ev_stream_has_next(stream)) {
+            return nullptr; // End of stream
+        }
+
+        // Get next token
+        ev_error_t error;
+        char* token = ev_stream_next(stream, &error);
+        
+        if (!token) {
+            // Token is null - could be clean end or error
+            if (error != EV_ERROR_STREAM_ENDED && error != EV_SUCCESS) {
+                const char* error_msg = ev_error_string(error);
+                LOGE("Stream error: %s", error_msg);
+                throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$GenerationError", error_msg);
+            }
+            return nullptr; // End of stream
+        }
+
+        jstring jtoken = string_to_jstring(env, token);
+        ev_free_string(token);
+        
+        return jtoken;
+
+    } catch (const std::exception& e) {
+        LOGE("Stream next failed: %s", e.what());
+        throw_exception(env, "com/edgeveda/sdk/EdgeVedaException$GenerationError", e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * Free a stream and release its resources.
+ */
+JNIEXPORT void JNICALL
+Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamFree(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong stream_handle
+) {
+    ev_stream stream = reinterpret_cast<ev_stream>(stream_handle);
+    if (!stream) {
+        return;
+    }
+
+    try {
+        LOGI("Freeing stream (handle: %p)", stream);
+        ev_stream_free(stream);
+    } catch (const std::exception& e) {
+        LOGE("Failed to free stream: %s", e.what());
+    }
+}
+
+/**
  * Generate text with streaming callback.
  */
 JNIEXPORT jboolean JNICALL
@@ -1523,14 +1680,14 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionInit(
 }
 
 /**
- * Describe an image using the vision model.
+ * Describe an image using the vision model (zero-copy via DirectByteBuffer).
  */
 JNIEXPORT jstring JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionDescribe(
     JNIEnv* env,
     jobject /* this */,
     jlong handle,
-    jbyteArray image_bytes,
+    jobject image_buffer,
     jint width,
     jint height,
     jstring prompt,
@@ -1549,12 +1706,19 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionDescribe(
     try {
         std::lock_guard<std::mutex> lock(instance->mutex);
 
-        // Get image data
-        jsize img_len = env->GetArrayLength(image_bytes);
-        jbyte* img_data = env->GetByteArrayElements(image_bytes, nullptr);
+        // Get direct buffer pointer (zero-copy)
+        void* buffer_ptr = env->GetDirectBufferAddress(image_buffer);
+        jlong buffer_capacity = env->GetDirectBufferCapacity(image_buffer);
+        
+        if (!buffer_ptr || buffer_capacity < 0) {
+            LOGE("Invalid DirectByteBuffer");
+            throw_exception(env, "java/lang/IllegalArgumentException", "Invalid DirectByteBuffer");
+            return nullptr;
+        }
         
         std::string prompt_str = jstring_to_string(env, prompt);
-        LOGI("Describing image (%dx%d, %d bytes) with prompt: %s", width, height, img_len, prompt_str.c_str());
+        LOGI("Describing image (%dx%d, %ld bytes) with prompt: %s [ZERO-COPY]", 
+             width, height, buffer_capacity, prompt_str.c_str());
 
         // Configure generation parameters
         ev_generation_params params;
@@ -1566,19 +1730,17 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionDescribe(
         if (top_k > 0) params.top_k = top_k;
         if (repeat_penalty > 0) params.repeat_penalty = repeat_penalty;
 
-        // Describe image
+        // Describe image (direct pointer access - no copy)
         char* output = nullptr;
         ev_error_t error = ev_vision_describe(
             instance->context,
-            reinterpret_cast<const unsigned char*>(img_data),
+            static_cast<const unsigned char*>(buffer_ptr),
             width,
             height,
             prompt_str.c_str(),
             &params,
             &output
         );
-        
-        env->ReleaseByteArrayElements(image_bytes, img_data, JNI_ABORT);
         
         if (error != EV_SUCCESS || !output) {
             const char* error_msg = ev_error_string(error);
