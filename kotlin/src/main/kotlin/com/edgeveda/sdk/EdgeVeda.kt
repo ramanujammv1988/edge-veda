@@ -271,6 +271,294 @@ class EdgeVeda private constructor(
     }
 
     /**
+     * Get text embedding for semantic similarity and retrieval.
+     *
+     * Returns a normalized embedding vector for the given text. The model must be
+     * an embedding model (e.g., nomic-embed, bge, etc.) -- using a generative model
+     * will produce meaningless embeddings.
+     *
+     * @param text Text to generate embedding for
+     * @return FloatArray containing the embedding vector
+     * @throws EdgeVedaException.GenerationError if embedding generation fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun getEmbedding(text: String): FloatArray {
+        checkInitialized()
+
+        if (text.isEmpty()) {
+            throw EdgeVedaException.GenerationError("Text cannot be empty for embedding")
+        }
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.getEmbedding(text)
+                    ?: throw EdgeVedaException.GenerationError("Embedding generation returned null")
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Embedding generation failed: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Tokenize text into token IDs.
+     *
+     * Converts text into the model's token representation. Useful for:
+     * - Counting tokens in a prompt to check context limits
+     * - Understanding how the model sees the text
+     * - Debugging tokenization issues
+     *
+     * @param text Text to tokenize
+     * @return IntArray of token IDs
+     * @throws EdgeVedaException.GenerationError if tokenization fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun tokenize(text: String): IntArray {
+        checkInitialized()
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.tokenize(text)
+                    ?: throw EdgeVedaException.GenerationError("Tokenization returned null")
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Tokenization failed: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Convert token IDs back to text.
+     *
+     * Converts a sequence of token IDs back into text. Useful for:
+     * - Debugging token sequences
+     * - Understanding model output at token level
+     * - Implementing custom token processing
+     *
+     * @param tokens Array of token IDs
+     * @return Detokenized text
+     * @throws EdgeVedaException.GenerationError if detokenization fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun detokenize(tokens: IntArray): String {
+        checkInitialized()
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.detokenize(tokens)
+                    ?: throw EdgeVedaException.GenerationError("Detokenization returned null")
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Detokenization failed: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Get the maximum context window size in tokens.
+     *
+     * Returns the total number of tokens that can fit in the context window,
+     * as configured during initialization.
+     *
+     * @return Context size in tokens
+     * @throws IllegalStateException if not initialized or closed
+     */
+    fun getContextSize(): Int {
+        checkInitialized()
+        val size = nativeBridge.getContextSize()
+        if (size < 0) {
+            throw EdgeVedaException.GenerationError("Failed to retrieve context size")
+        }
+        return size
+    }
+
+    /**
+     * Get the number of tokens currently used in the context.
+     *
+     * Returns how many tokens from the context window are currently occupied
+     * by the conversation history and KV cache. Use this to monitor context
+     * usage and avoid running out of space.
+     *
+     * @return Number of tokens currently used
+     * @throws IllegalStateException if not initialized or closed
+     */
+    fun getContextUsed(): Int {
+        checkInitialized()
+        val used = nativeBridge.getContextUsed()
+        if (used < 0) {
+            throw EdgeVedaException.GenerationError("Failed to retrieve context usage")
+        }
+        return used
+    }
+
+    /**
+     * Save the current conversation session to a file.
+     *
+     * Persists the KV cache and context state to disk, allowing you to resume
+     * the conversation later without reprocessing all the history. Useful for:
+     * - Long-running conversations that span app sessions
+     * - Saving computational resources on app restart
+     * - Creating conversation snapshots
+     *
+     * @param path Absolute path where the session file will be saved
+     * @return true if successful
+     * @throws EdgeVedaException.GenerationError if save fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun saveSession(path: String): Boolean {
+        checkInitialized()
+
+        if (path.isEmpty()) {
+            throw EdgeVedaException.GenerationError("Session path cannot be empty")
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                nativeBridge.saveSession(path)
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to save session: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Load a previously saved conversation session from a file.
+     *
+     * Restores the KV cache and context state from disk, allowing you to resume
+     * a conversation from where it left off. The loaded session must have been
+     * created with the same model.
+     *
+     * @param path Absolute path to the session file
+     * @return true if successful
+     * @throws EdgeVedaException.GenerationError if load fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun loadSession(path: String): Boolean {
+        checkInitialized()
+
+        if (path.isEmpty()) {
+            throw EdgeVedaException.GenerationError("Session path cannot be empty")
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                nativeBridge.loadSession(path)
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to load session: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Set a system prompt to guide the model's behavior.
+     *
+     * System prompts establish rules, tone, and behavior that the model should
+     * follow across all interactions. Unlike user messages, system prompts are
+     * typically not visible in the conversation and guide the model's responses.
+     *
+     * Example:
+     * ```
+     * edgeVeda.setSystemPrompt("You are a helpful coding assistant. Provide concise, accurate code examples.")
+     * ```
+     *
+     * @param systemPrompt The system instruction text
+     * @return true if successful
+     * @throws EdgeVedaException.GenerationError if setting fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun setSystemPrompt(systemPrompt: String): Boolean {
+        checkInitialized()
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.setSystemPrompt(systemPrompt)
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to set system prompt: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Clear the conversation history while keeping the model loaded.
+     *
+     * Removes all previous messages from the context, freeing up space for new
+     * conversations. This is lighter than resetContext() as it only clears the
+     * conversation history while maintaining other context state.
+     *
+     * @return true if successful
+     * @throws EdgeVedaException.GenerationError if clearing fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun clearChatHistory(): Boolean {
+        checkInitialized()
+
+        return withContext(Dispatchers.Default) {
+            try {
+                nativeBridge.clearChatHistory()
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Failed to clear chat history: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Get the last error message from the native layer.
+     *
+     * Retrieves detailed error information from the underlying C++ implementation.
+     * Useful for debugging when operations fail.
+     *
+     * @return Error message string, or empty string if no error
+     * @throws IllegalStateException if not initialized or closed
+     */
+    fun getLastError(): String {
+        checkInitialized()
+        return try {
+            nativeBridge.getLastError()
+        } catch (e: Exception) {
+            "Failed to retrieve error: ${e.message}"
+        }
+    }
+
+    /**
+     * Run a performance benchmark to measure inference speed.
+     *
+     * Executes a standardized benchmark to measure tokens per second and latency.
+     * Useful for:
+     * - Comparing different model configurations
+     * - Verifying GPU acceleration is working
+     * - Profiling performance across devices
+     *
+     * @param numThreads Number of threads to use for the benchmark
+     * @param numTokens Number of tokens to process in the benchmark
+     * @return BenchmarkResult with performance metrics
+     * @throws EdgeVedaException.GenerationError if benchmark fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun runBenchmark(numThreads: Int = 4, numTokens: Int = 512): BenchmarkResult {
+        checkInitialized()
+
+        if (numThreads < 1 || numThreads > 32) {
+            throw EdgeVedaException.ConfigurationError("numThreads must be between 1 and 32")
+        }
+
+        if (numTokens < 1 || numTokens > 4096) {
+            throw EdgeVedaException.ConfigurationError("numTokens must be between 1 and 4096")
+        }
+
+        return withContext(Dispatchers.Default) {
+            try {
+                val result = nativeBridge.bench(numThreads, numTokens)
+                    ?: throw EdgeVedaException.GenerationError("Benchmark returned null")
+
+                BenchmarkResult(
+                    tokensPerSecond = result.getOrNull(0) ?: 0.0,
+                    timeMs = result.getOrNull(1) ?: 0.0,
+                    tokensProcessed = result.getOrNull(2)?.toInt() ?: 0
+                )
+            } catch (e: Exception) {
+                throw EdgeVedaException.GenerationError("Benchmark failed: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
      * Unload the model from memory while keeping the SDK instance alive.
      *
      * After calling this, you must call init() again before generating.

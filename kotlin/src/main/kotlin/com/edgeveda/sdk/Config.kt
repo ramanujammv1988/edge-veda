@@ -44,6 +44,26 @@ enum class Backend {
 }
 
 /**
+ * Result from a benchmark run.
+ *
+ * @property tokensPerSecond Average tokens processed per second
+ * @property timeMs Total time taken in milliseconds
+ * @property tokensProcessed Total number of tokens processed
+ */
+data class BenchmarkResult(
+    val tokensPerSecond: Double,
+    val timeMs: Double,
+    val tokensProcessed: Int
+) {
+    override fun toString(): String {
+        return "BenchmarkResult(tokensPerSec=%.2f, timeMs=%.2f, tokens=%d)".format(
+            tokensPerSecond,
+            timeMs,
+            tokensProcessed
+        )
+    }
+}
+/**
  * Configuration options for EdgeVeda model initialization.
  *
  * @property backend Hardware acceleration backend to use
