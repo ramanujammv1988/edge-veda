@@ -1,0 +1,25 @@
+name: intent_engine
+description: "On-Device Intent Engine for Smart Home Control"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  edge_veda:
+    path: ../../flutter
+  ffi: ">=2.0.0 <2.1.0" # Pinned: ffi >=2.1.0 pulls objective_c 9.x which crashes on iOS simulator
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
