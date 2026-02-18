@@ -2,12 +2,14 @@ import typescript from '@rollup/plugin-typescript';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
+import json from '@rollup/plugin-json';
 
 const production = !process.env.ROLLUP_WATCH;
 
 const baseConfig = {
   external: [],
   plugins: [
+    json(),
     resolve({
       browser: true,
       preferBuiltins: false,
@@ -83,6 +85,7 @@ export default [
     },
     external: [],
     plugins: [
+      json(),
       resolve({
         browser: true,
         preferBuiltins: false,

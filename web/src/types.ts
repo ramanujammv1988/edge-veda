@@ -274,6 +274,16 @@ export enum WorkerMessageType {
   GENERATE_CHUNK = 'generate_chunk',
   GENERATE_COMPLETE = 'generate_complete',
   GENERATE_ERROR = 'generate_error',
+  CANCEL_GENERATION = 'cancel_generation',
+  CANCEL_SUCCESS = 'cancel_success',
+  GET_MEMORY_USAGE = 'get_memory_usage',
+  MEMORY_USAGE_RESPONSE = 'memory_usage_response',
+  GET_MODEL_INFO = 'get_model_info',
+  MODEL_INFO_RESPONSE = 'model_info_response',
+  UNLOAD_MODEL = 'unload_model',
+  UNLOAD_SUCCESS = 'unload_success',
+  RESET_CONTEXT = 'reset_context',
+  RESET_SUCCESS = 'reset_success',
   PROGRESS = 'progress',
   TERMINATE = 'terminate',
 }
@@ -351,6 +361,78 @@ export interface WorkerProgressMessage extends WorkerMessageBase {
 }
 
 /**
+ * Cancel generation message
+ */
+export interface WorkerCancelGenerationMessage extends WorkerMessageBase {
+  type: WorkerMessageType.CANCEL_GENERATION;
+}
+
+/**
+ * Cancel success response
+ */
+export interface WorkerCancelSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.CANCEL_SUCCESS;
+}
+
+/**
+ * Get memory usage message
+ */
+export interface WorkerGetMemoryUsageMessage extends WorkerMessageBase {
+  type: WorkerMessageType.GET_MEMORY_USAGE;
+}
+
+/**
+ * Memory usage response
+ */
+export interface WorkerMemoryUsageResponseMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MEMORY_USAGE_RESPONSE;
+  memoryStats: MemoryStats;
+}
+
+/**
+ * Get model info message
+ */
+export interface WorkerGetModelInfoMessage extends WorkerMessageBase {
+  type: WorkerMessageType.GET_MODEL_INFO;
+}
+
+/**
+ * Model info response
+ */
+export interface WorkerModelInfoResponseMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MODEL_INFO_RESPONSE;
+  modelInfo: ModelInfo;
+}
+
+/**
+ * Unload model message
+ */
+export interface WorkerUnloadModelMessage extends WorkerMessageBase {
+  type: WorkerMessageType.UNLOAD_MODEL;
+}
+
+/**
+ * Unload success response
+ */
+export interface WorkerUnloadSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.UNLOAD_SUCCESS;
+}
+
+/**
+ * Reset context message
+ */
+export interface WorkerResetContextMessage extends WorkerMessageBase {
+  type: WorkerMessageType.RESET_CONTEXT;
+}
+
+/**
+ * Reset success response
+ */
+export interface WorkerResetSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.RESET_SUCCESS;
+}
+
+/**
  * Terminate message
  */
 export interface WorkerTerminateMessage extends WorkerMessageBase {
@@ -368,6 +450,16 @@ export type WorkerMessage =
   | WorkerGenerateChunkMessage
   | WorkerGenerateCompleteMessage
   | WorkerGenerateErrorMessage
+  | WorkerCancelGenerationMessage
+  | WorkerCancelSuccessMessage
+  | WorkerGetMemoryUsageMessage
+  | WorkerMemoryUsageResponseMessage
+  | WorkerGetModelInfoMessage
+  | WorkerModelInfoResponseMessage
+  | WorkerUnloadModelMessage
+  | WorkerUnloadSuccessMessage
+  | WorkerResetContextMessage
+  | WorkerResetSuccessMessage
   | WorkerProgressMessage
   | WorkerTerminateMessage;
 
@@ -389,4 +481,392 @@ export interface CachedModelMetadata {
 export interface CachedModel {
   metadata: CachedModelMetadata;
   data: ArrayBuffer;
+}
+
+/**
+ * Memory usage statistics
+ */
+export interface MemoryStats {
+  /**
+   * Bytes currently used by the model and context
+   */
+  used: number;
+
+  /**
+   * Total memory available (estimated)
+   */
+  total: number;
+
+  /**
+   * Usage percentage (0-1)
+   */
+  percentage: number;
+
+  /**
+   * WASM heap size if using WASM backend
+   */
+  wasmHeapSize?: number;
+
+  /**
+   * GPU memory usage if using WebGPU
+   */
+  gpuMemoryUsage?: number;
+}
+
+/**
+ * Model information and metadata
+ */
+export interface ModelInfo {
+  /**
+   * Model name/identifier
+   */
+  name: string;
+
+  /**
+   * Model file size in bytes
+   */
+  size: number;
+
+  /**
+   * Quantization/precision type
+   */
+  quantization: PrecisionType;
+
+  /**
+   * Maximum context length
+   */
+  contextLength: number;
+
+  /**
+   * Vocabulary size
+   */
+  vocabSize?: number;
+
+  /**
+   * Model architecture (e.g., 'llama', 'mistral')
+   */
+  architecture?: string;
+
+  /**
+   * Number of parameters
+   */
+  parameters?: string;
+
+  /**
+   * Model version
+   */
+  version?: string;
+}
+
+/**
+ * Downloadable model descriptor (for ModelManager/ModelRegistry)
+ */
+export interface DownloadableModelInfo {
+  /** Unique model identifier */
+  id: string;
+  /** Human-readable model name */
+  name: string;
+  /** Model file size in bytes */
+  sizeBytes: number;
+  /** Description of the model */
+  description: string;
+  /** Direct download URL for the GGUF file */
+  downloadUrl: string;
+  /** Expected SHA-256 checksum (hex) */
+  checksum?: string;
+  /** Model file format (e.g., 'GGUF') */
+  format: string;
+  /** Quantization type (e.g., 'Q4_K_M', 'Q8_0', 'F16') */
+  quantization: string;
+}
+
+/**
+ * Download progress information
+ */
+export interface DownloadProgress {
+  /** Total bytes to download */
+  totalBytes: number;
+  /** Bytes downloaded so far */
+  downloadedBytes: number;
+  /** Download speed in bytes per second */
+  speedBytesPerSecond: number;
+  /** Estimated seconds remaining (null if unknown) */
+  estimatedSecondsRemaining: number | null;
+  /** Progress percentage 0-100 */
+  percentage: number;
+}
+
+/**
+ * Error codes for EdgeVeda operations
+ */
+export enum EdgeVedaErrorCode {
+  MODEL_NOT_FOUND = 'MODEL_NOT_FOUND',
+  MODEL_LOAD_FAILED = 'MODEL_LOAD_FAILED',
+  GENERATION_FAILED = 'GENERATION_FAILED',
+  OUT_OF_MEMORY = 'OUT_OF_MEMORY',
+  CONTEXT_OVERFLOW = 'CONTEXT_OVERFLOW',
+  INVALID_CONFIG = 'INVALID_CONFIG',
+  CANCELLATION = 'CANCELLATION',
+  VISION_ERROR = 'VISION_ERROR',
+  UNLOAD_ERROR = 'UNLOAD_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+}
+
+/**
+ * Typed error for EdgeVeda operations.
+ *
+ * Provides a structured error with a machine-readable `code` and optional `details`
+ * string for additional context.
+ */
+export class EdgeVedaError extends Error {
+  code: EdgeVedaErrorCode;
+  details?: string;
+
+  constructor(code: EdgeVedaErrorCode, message: string, details?: string) {
+    super(message);
+    this.name = 'EdgeVedaError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+/**
+ * Cancellation token for aborting generation
+ */
+export class CancelToken {
+  private _cancelled = false;
+  private _callbacks: Array<() => void> = [];
+  private _abortController: AbortController;
+
+  constructor() {
+    this._abortController = new AbortController();
+  }
+
+  /**
+   * Whether cancellation has been requested
+   */
+  get cancelled(): boolean {
+    return this._cancelled;
+  }
+
+  /**
+   * AbortSignal for fetch/async operations
+   */
+  get signal(): AbortSignal {
+    return this._abortController.signal;
+  }
+
+  /**
+   * Request cancellation
+   */
+  cancel(): void {
+    if (this._cancelled) return;
+    
+    this._cancelled = true;
+    this._abortController.abort();
+    
+    // Notify all callbacks
+    for (const callback of this._callbacks) {
+      try {
+        callback();
+      } catch (error) {
+        console.error('Error in cancel callback:', error);
+      }
+    }
+    
+    this._callbacks = [];
+  }
+
+  /**
+   * Register a callback for when cancellation is requested
+   */
+  onCancel(callback: () => void): void {
+    if (this._cancelled) {
+      callback();
+    } else {
+      this._callbacks.push(callback);
+    }
+  }
+
+  /**
+   * Throw if cancelled
+   */
+  throwIfCancelled(): void {
+    if (this._cancelled) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.CANCELLATION,
+        'Operation was cancelled'
+      );
+    }
+  }
+}
+
+// ============================================================================
+// Vision Inference Types
+// ============================================================================
+
+/**
+ * Configuration for vision model initialization
+ */
+export interface VisionConfig {
+  /**
+   * Path or URL to the vision model file (GGUF format, e.g., SmolVLM2)
+   */
+  modelPath: string;
+
+  /**
+   * Path or URL to the multimodal projection file
+   */
+  mmprojPath: string;
+
+  /**
+   * Number of threads for inference
+   * @default navigator.hardwareConcurrency || 4
+   */
+  numThreads?: number;
+
+  /**
+   * Context size for the model
+   * @default 2048
+   */
+  contextSize?: number;
+
+  /**
+   * Number of GPU layers to offload (WebGPU only)
+   * @default 0
+   */
+  gpuLayers?: number;
+
+  /**
+   * Memory limit in bytes
+   * @default undefined (no limit)
+   */
+  memoryLimitBytes?: number;
+
+  /**
+   * Use memory mapping for model loading
+   * @default true
+   */
+  useMmap?: boolean;
+
+  /**
+   * Device to run inference on
+   * @default 'auto'
+   */
+  device?: DeviceType;
+}
+
+/**
+ * Parameters for vision text generation
+ */
+export interface VisionGenerationParams {
+  /**
+   * Maximum number of tokens to generate
+   * @default 128
+   */
+  maxTokens?: number;
+
+  /**
+   * Sampling temperature
+   * @default 0.1
+   */
+  temperature?: number;
+
+  /**
+   * Top-p sampling
+   * @default 0.95
+   */
+  topP?: number;
+
+  /**
+   * Top-k sampling
+   * @default 40
+   */
+  topK?: number;
+
+  /**
+   * Repetition penalty
+   * @default 1.1
+   */
+  repeatPenalty?: number;
+}
+
+/**
+ * Timing information for vision inference
+ */
+export interface VisionTimings {
+  /**
+   * Model loading time in milliseconds
+   */
+  modelLoadMs: number;
+
+  /**
+   * Image encoding time in milliseconds
+   */
+  imageEncodeMs: number;
+
+  /**
+   * Prompt evaluation time in milliseconds
+   */
+  promptEvalMs: number;
+
+  /**
+   * Decoding/generation time in milliseconds
+   */
+  decodeMs: number;
+
+  /**
+   * Number of prompt tokens processed
+   */
+  promptTokens: number;
+
+  /**
+   * Number of tokens generated
+   */
+  generatedTokens: number;
+
+  /**
+   * Total time in milliseconds
+   */
+  totalMs: number;
+
+  /**
+   * Tokens per second throughput
+   */
+  tokensPerSecond: number;
+}
+
+/**
+ * Result from vision inference
+ */
+export interface VisionResult {
+  /**
+   * Generated description of the image
+   */
+  description: string;
+
+  /**
+   * Timing information
+   */
+  timings: VisionTimings;
+}
+
+/**
+ * Frame data structure for vision inference
+ */
+export interface FrameData {
+  /**
+   * RGB888 pixel data (width * height * 3 bytes)
+   */
+  rgb: Uint8Array;
+
+  /**
+   * Frame width in pixels
+   */
+  width: number;
+
+  /**
+   * Frame height in pixels
+   */
+  height: number;
 }

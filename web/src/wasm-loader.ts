@@ -16,7 +16,7 @@ export async function detectWebGPU(): Promise<WebGPUCapabilities> {
   }
 
   try {
-    const gpu = navigator.gpu;
+    const gpu = navigator.gpu as any;
     if (!gpu) {
       return {
         supported: false,
@@ -37,7 +37,7 @@ export async function detectWebGPU(): Promise<WebGPUCapabilities> {
 
     const device = await adapter.requestDevice();
     const info = adapter.info;
-    const features = Array.from(adapter.features);
+    const features = Array.from(adapter.features) as string[];
     const limits = adapter.limits;
 
     // Clean up device after checking
