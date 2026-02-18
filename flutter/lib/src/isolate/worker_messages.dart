@@ -23,7 +23,7 @@ class InitWorkerCommand extends WorkerCommand {
   /// Context size in tokens
   final int contextSize;
 
-  /// Use GPU acceleration (Metal on iOS, Vulkan on Android)
+  /// Use GPU acceleration (Metal on iOS)
   final bool useGpu;
 
   /// Memory limit in bytes (0 = no limit)

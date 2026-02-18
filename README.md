@@ -2,7 +2,7 @@
 
 **A managed on-device AI runtime for Flutter — text, vision, speech, and RAG running sustainably on real phones under real constraints. Private by default.**
 
-`~22,700 LOC | 50 C API functions | 32 Dart SDK files | 0 cloud dependencies`
+`~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
@@ -478,7 +478,7 @@ Any GGUF model compatible with llama.cpp can be loaded by file path.
 ```
 edge-veda/
 +-- core/
-|   +-- include/edge_veda.h       C API (50 functions, 858 LOC)
+|   +-- include/edge_veda.h       C API (40 functions, 858 LOC)
 |   +-- src/engine.cpp            Text inference + embeddings (1,173 LOC)
 |   +-- src/vision_engine.cpp     Vision inference (484 LOC)
 |   +-- src/whisper_engine.cpp    Speech-to-text (290 LOC)

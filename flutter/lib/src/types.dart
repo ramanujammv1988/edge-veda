@@ -12,7 +12,7 @@ class EdgeVedaConfig {
   /// Maximum context length in tokens (defaults to 2048)
   final int contextLength;
 
-  /// Enable GPU acceleration via Metal/Vulkan (defaults to true)
+  /// Enable GPU acceleration via Metal (defaults to true)
   final bool useGpu;
 
   /// Maximum memory budget in MB (defaults to 1536 for safety on 4GB devices)
