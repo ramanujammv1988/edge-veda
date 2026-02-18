@@ -171,7 +171,7 @@ class ModelManager {
     try {
       // Check for cancellation before starting
       if (cancelToken?.isCancelled == true) {
-        throw DownloadException('Download cancelled');
+        throw const DownloadException('Download cancelled');
       }
 
       // Start download with progress tracking
@@ -198,7 +198,7 @@ class ModelManager {
         if (cancelToken?.isCancelled == true) {
           await sink.close();
           await tempFile.delete();
-          throw DownloadException('Download cancelled');
+          throw const DownloadException('Download cancelled');
         }
 
         downloadedBytes += chunk.length;
@@ -429,7 +429,7 @@ class ModelRegistry {
       'https://huggingface.co/models';
 
   /// Llama 3.2 1B Instruct (Q4_K_M quantization) - Primary model
-  static final ModelInfo llama32_1b = ModelInfo(
+  static const ModelInfo llama32_1b = ModelInfo(
     id: 'llama-3.2-1b-instruct-q4',
     name: 'Llama 3.2 1B Instruct',
     sizeBytes: 668 * 1024 * 1024, // ~668 MB
@@ -445,7 +445,8 @@ class ModelRegistry {
   );
 
   /// Phi-3.5 Mini Instruct (Q4_K_M quantization) - Reasoning model
-  static final ModelInfo phi35_mini = ModelInfo(
+  // ignore: constant_identifier_names
+  static const ModelInfo phi35_mini = ModelInfo(
     id: 'phi-3.5-mini-instruct-q4',
     name: 'Phi 3.5 Mini Instruct',
     sizeBytes: 2300 * 1024 * 1024, // ~2.3 GB
@@ -461,7 +462,7 @@ class ModelRegistry {
   );
 
   /// Gemma 2 2B Instruct (Q4_K_M quantization)
-  static final ModelInfo gemma2_2b = ModelInfo(
+  static const ModelInfo gemma2_2b = ModelInfo(
     id: 'gemma-2-2b-instruct-q4',
     name: 'Gemma 2 2B Instruct',
     sizeBytes: 1600 * 1024 * 1024, // ~1.6 GB
@@ -477,7 +478,7 @@ class ModelRegistry {
   );
 
   /// TinyLlama 1.1B Chat (Q4_K_M quantization) - Smallest option
-  static final ModelInfo tinyLlama = ModelInfo(
+  static const ModelInfo tinyLlama = ModelInfo(
     id: 'tinyllama-1.1b-chat-q4',
     name: 'TinyLlama 1.1B Chat',
     sizeBytes: 669 * 1024 * 1024, // ~669 MB
@@ -495,7 +496,7 @@ class ModelRegistry {
   // === Tool Calling Models ===
 
   /// Qwen3 0.6B (Q4_K_M) - Tool calling capable model
-  static final ModelInfo qwen3_06b = ModelInfo(
+  static const ModelInfo qwen3_06b = ModelInfo(
     id: 'qwen3-0.6b-q4',
     name: 'Qwen3 0.6B',
     sizeBytes: 397 * 1024 * 1024, // ~397 MB Q4_K_M
@@ -513,7 +514,7 @@ class ModelRegistry {
   // === Vision Language Models ===
 
   /// SmolVLM2-500M-Video-Instruct (Q8_0) - Vision Language Model
-  static final ModelInfo smolvlm2_500m = ModelInfo(
+  static const ModelInfo smolvlm2_500m = ModelInfo(
     id: 'smolvlm2-500m-video-instruct-q8',
     name: 'SmolVLM2 500M Video Instruct',
     sizeBytes: 436808704, // ~417 MB
@@ -529,7 +530,8 @@ class ModelRegistry {
   );
 
   /// SmolVLM2-500M mmproj (F16) - Multimodal projector for SmolVLM2
-  static final ModelInfo smolvlm2_500m_mmproj = ModelInfo(
+  // ignore: constant_identifier_names
+  static const ModelInfo smolvlm2_500m_mmproj = ModelInfo(
     id: 'smolvlm2-500m-mmproj-f16',
     name: 'SmolVLM2 500M Multimodal Projector',
     sizeBytes: 199470624, // ~190 MB
@@ -545,7 +547,7 @@ class ModelRegistry {
   // === Whisper Speech-to-Text Models ===
 
   /// Whisper Tiny English - Fast, low memory (~77MB)
-  static final ModelInfo whisperTinyEn = ModelInfo(
+  static const ModelInfo whisperTinyEn = ModelInfo(
     id: 'whisper-tiny-en',
     name: 'Whisper Tiny (English)',
     sizeBytes: 77 * 1024 * 1024, // ~77 MB download
@@ -560,7 +562,7 @@ class ModelRegistry {
   );
 
   /// Whisper Base English - Better accuracy (~148MB)
-  static final ModelInfo whisperBaseEn = ModelInfo(
+  static const ModelInfo whisperBaseEn = ModelInfo(
     id: 'whisper-base-en',
     name: 'Whisper Base (English)',
     sizeBytes: 148 * 1024 * 1024, // ~148 MB download
@@ -606,7 +608,7 @@ class ModelRegistry {
   // === Embedding Models ===
 
   /// All MiniLM L6 v2 (F16) - Lightweight sentence embedding model
-  static final ModelInfo allMiniLmL6V2 = ModelInfo(
+  static const ModelInfo allMiniLmL6V2 = ModelInfo(
     id: 'all-minilm-l6-v2-f16',
     name: 'All MiniLM L6 v2',
     sizeBytes: 46 * 1024 * 1024, // ~46 MB F16

@@ -742,7 +742,7 @@ class _ModelRowState extends State<_ModelRow> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete', style: TextStyle(color: AppTheme.danger)),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.danger)),
           ),
         ],
       ),

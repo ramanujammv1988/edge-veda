@@ -97,7 +97,7 @@ class EdgeVeda {
   /// The actual context is created fresh in each background isolate call.
   Future<void> init(EdgeVedaConfig config) async {
     if (_isInitialized) {
-      throw InitializationException(
+      throw const InitializationException(
         'EdgeVeda is already initialized. Call dispose() first.',
       );
     }
@@ -153,7 +153,7 @@ class EdgeVeda {
           if (ctx == ffi.nullptr) {
             final errorCode = NativeErrorCode.fromCode(errorPtr.value);
             final exception = errorCode.toException('Init validation failed');
-            throw exception ?? InitializationException('Unknown init error');
+            throw exception ?? const InitializationException('Unknown init error');
           }
           // Immediately free - we just tested it works
           bindings.evFree(ctx);
@@ -182,7 +182,7 @@ class EdgeVeda {
   /// Runs on main isolate (no FFI calls - safe).
   void _validateConfig(EdgeVedaConfig config) {
     if (config.modelPath.isEmpty) {
-      throw ConfigurationException('Model path cannot be empty');
+      throw const ConfigurationException('Model path cannot be empty');
     }
 
     if (config.numThreads < 1 || config.numThreads > 32) {
@@ -259,7 +259,7 @@ class EdgeVeda {
     _ensureInitialized();
 
     if (prompt.isEmpty) {
-      throw GenerationException('Prompt cannot be empty');
+      throw const GenerationException('Prompt cannot be empty');
     }
 
     options ??= const GenerateOptions();
@@ -286,7 +286,7 @@ class EdgeVeda {
     final startTime = DateTime.now();
 
     // Run entire generate in background isolate
-    Future<String> generateFuture = Isolate.run<String>(() {
+    final Future<String> generateFuture = Isolate.run<String>(() {
       final bindings = EdgeVedaNativeBindings.instance;
 
       // Allocate config struct
@@ -317,7 +317,7 @@ class EdgeVeda {
         if (ctx == ffi.nullptr) {
           final errorCode = NativeErrorCode.fromCode(errorPtr.value);
           final exception = errorCode.toException('Generation init failed');
-          throw exception ?? GenerationException('Unknown init error');
+          throw exception ?? const GenerationException('Unknown init error');
         }
 
         // Allocate generation params
@@ -346,7 +346,7 @@ class EdgeVeda {
             if (result != 0) {
               final errorCode = NativeErrorCode.fromCode(result);
               final exception = errorCode.toException('Generation failed');
-              throw exception ?? GenerationException('Unknown generation error');
+              throw exception ?? const GenerationException('Unknown generation error');
             }
 
             // Read output and free C++-allocated string
@@ -436,11 +436,11 @@ class EdgeVeda {
     _ensureInitialized();
 
     if (prompt.isEmpty) {
-      throw GenerationException('Prompt cannot be empty');
+      throw const GenerationException('Prompt cannot be empty');
     }
 
     if (_isStreaming) {
-      throw GenerationException(
+      throw const GenerationException(
         'Streaming already in progress. Wait for current stream to complete or cancel it.',
       );
     }
@@ -567,7 +567,7 @@ class EdgeVeda {
     _ensureInitialized();
 
     if (text.isEmpty) {
-      throw EmbeddingException('Text cannot be empty');
+      throw const EmbeddingException('Text cannot be empty');
     }
 
     // Capture config values as primitives for isolate transfer
@@ -608,7 +608,7 @@ class EdgeVeda {
         if (ctx == ffi.nullptr) {
           final errorCode = NativeErrorCode.fromCode(errorPtr.value);
           final exception = errorCode.toException('Embedding init failed');
-          throw exception ?? ModelLoadException('Failed to load model for embedding');
+          throw exception ?? const ModelLoadException('Failed to load model for embedding');
         }
 
         try {
@@ -619,7 +619,7 @@ class EdgeVeda {
           try {
             final err = bindings.evEmbed(ctx, textPtr, result);
             if (err != 0) {
-              throw EmbeddingException('Embedding failed',
+              throw const EmbeddingException('Embedding failed',
                   details: 'Error code: \$err');
             }
 
@@ -708,7 +708,7 @@ class EdgeVeda {
           final errorCode = NativeErrorCode.fromCode(errorPtr.value);
           final exception = errorCode.toException('Embedding init failed');
           throw exception ??
-              ModelLoadException('Failed to load model for embedding');
+              const ModelLoadException('Failed to load model for embedding');
         }
         try {
           final results = <EmbeddingResult>[];
@@ -754,7 +754,7 @@ class EdgeVeda {
   /// Ensure SDK is initialized before operations
   void _ensureInitialized() {
     if (!_isInitialized || _config == null) {
-      throw InitializationException(
+      throw const InitializationException(
         'EdgeVeda not initialized. Call init() first.',
       );
     }
@@ -794,15 +794,15 @@ class EdgeVeda {
   /// ```
   Future<void> initVision(VisionConfig config) async {
     if (_isVisionInitialized) {
-      throw VisionException('Vision already initialized. Call disposeVision() first.');
+      throw const VisionException('Vision already initialized. Call disposeVision() first.');
     }
 
     // Validate config
     if (config.modelPath.isEmpty) {
-      throw VisionException('Model path cannot be empty');
+      throw const VisionException('Model path cannot be empty');
     }
     if (config.mmprojPath.isEmpty) {
-      throw VisionException('Mmproj path cannot be empty');
+      throw const VisionException('Mmproj path cannot be empty');
     }
 
     // Verify files exist
@@ -893,7 +893,7 @@ class EdgeVeda {
     GenerateOptions? options,
   }) async {
     if (!_isVisionInitialized || _visionConfig == null) {
-      throw VisionException('Vision not initialized. Call initVision() first.');
+      throw const VisionException('Vision not initialized. Call initVision() first.');
     }
 
     // Validate input
@@ -944,7 +944,7 @@ class EdgeVeda {
         // Init vision context
         ctx = bindings.evVisionInit(configPtr, errorPtr);
         if (ctx == ffi.nullptr) {
-          throw VisionException('Vision init failed in describe');
+          throw const VisionException('Vision init failed in describe');
         }
 
         // Allocate native memory for image bytes
