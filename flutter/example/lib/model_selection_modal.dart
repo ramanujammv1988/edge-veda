@@ -117,9 +117,9 @@ class ModelSelectionModal extends StatelessWidget {
                   ),
 
                   // Bottom safe area padding
-                  SafeArea(
+                  const SafeArea(
                     top: false,
-                    child: const SizedBox(height: 8),
+                    child: SizedBox(height: 8),
                   ),
                 ],
               ),

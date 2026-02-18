@@ -417,7 +417,7 @@ class _SttScreenState extends State<SttScreen>
 
   /// Empty transcript placeholder
   Widget _buildEmptyTranscript() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -426,16 +426,16 @@ class _SttScreenState extends State<SttScreen>
             size: 64,
             color: AppTheme.border,
           ),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 16),
+          Text(
             'Tap to start recording',
             style: TextStyle(
               color: AppTheme.textTertiary,
               fontSize: 16,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Audio is processed entirely on your device',
             style: TextStyle(
               color: AppTheme.textTertiary,

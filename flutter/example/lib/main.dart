@@ -284,10 +284,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         // Show user-friendly message about cancellation
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Generation cancelled - app backgrounded'),
+            const SnackBar(
+              content: Text('Generation cancelled - app backgrounded'),
               backgroundColor: AppTheme.warning,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -919,10 +919,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (_session!.isSummarizing) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Summarizing older messages...'),
+            const SnackBar(
+              content: Text('Summarizing older messages...'),
               backgroundColor: AppTheme.accentDim,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -986,10 +986,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         });
         if (mounted && usageBefore > 0.7) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Context summarized -- conversation continues'),
+            const SnackBar(
+              content: Text('Context summarized -- conversation continues'),
               backgroundColor: AppTheme.success,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -1048,10 +1048,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('New chat started'),
+        const SnackBar(
+          content: Text('New chat started'),
           backgroundColor: AppTheme.accentDim,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
     }
