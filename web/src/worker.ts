@@ -9,7 +9,6 @@ import type {
   WorkerInitMessage,
   WorkerGenerateMessage,
   EdgeVedaConfig,
-  GenerateOptions,
   GenerateResult,
   StreamChunk,
   LoadProgress,
@@ -394,6 +393,40 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         await generateStream(genMessage);
       } else {
         await generate(genMessage);
+      }
+      break;
+
+    case 'reset_context':
+      if (!state.initialized || !state.wasmModule) {
+        sendMessage({
+          type: 'generate_error' as WorkerMessageType.GENERATE_ERROR,
+          id: message.id,
+          error: 'Worker not initialized',
+        });
+        return;
+      }
+
+      try {
+        const exports = state.wasmModule.exports;
+
+        // Call reset function if available in WASM module
+        if (typeof exports.reset_context === 'function') {
+          const result = exports.reset_context();
+          if (result !== 0) {
+            throw new Error(`Failed to reset context: error code ${result}`);
+          }
+        }
+
+        sendMessage({
+          type: 'reset_success' as WorkerMessageType.RESET_SUCCESS,
+          id: message.id,
+        });
+      } catch (error) {
+        sendMessage({
+          type: 'generate_error' as WorkerMessageType.GENERATE_ERROR,
+          id: message.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
       }
       break;
 

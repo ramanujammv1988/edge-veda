@@ -10,8 +10,9 @@ import type {
   StreamChunk,
   WorkerMessage,
   WorkerMessageType,
-  LoadProgress,
 } from './types';
+import { version } from '../package.json';
+import { detectWebGPU, supportsWasmThreads } from './wasm-loader';
 
 export * from './types';
 export { detectWebGPU, supportsWasmThreads, getOptimalThreadCount } from './wasm-loader';
@@ -23,6 +24,82 @@ export {
   getCacheSize,
   estimateStorageQuota,
 } from './model-cache';
+
+// Export ChatSession and related types
+export { ChatSession } from './ChatSession';
+export type { ChatMessage } from './ChatTypes';
+export { ChatRole, SystemPromptPreset } from './ChatTypes';
+export { ChatTemplate } from './ChatTemplate';
+
+// Export VisionWorker and related types
+export { VisionWorker } from './VisionWorker';
+export { FrameQueue } from './FrameQueue';
+export type {
+  VisionConfig,
+  VisionResult,
+  VisionTimings,
+  VisionGenerationParams,
+  FrameData,
+} from './types';
+
+// Phase 4: Runtime Supervision exports
+export {
+  Budget,
+  BudgetProfile,
+  BudgetConstraint,
+  WorkloadPriority,
+  WorkloadId,
+} from './Budget';
+export type { EdgeVedaBudget, MeasuredBaseline, BudgetViolation } from './Budget';
+
+export { LatencyTracker } from './LatencyTracker';
+
+export { ResourceMonitor } from './ResourceMonitor';
+
+export { ThermalMonitor } from './ThermalMonitor';
+
+export { BatteryDrainTracker } from './BatteryDrainTracker';
+
+export { Scheduler } from './Scheduler';
+export { TaskPriority, TaskStatus } from './Scheduler';
+export type { TaskHandle, QueueStatus } from './Scheduler';
+
+export type { RuntimePolicy } from './RuntimePolicy';
+export {
+  RuntimePolicyPresets,
+  RuntimePolicyEnforcer,
+  detectCapabilities,
+  throttleRecommendationToString,
+} from './RuntimePolicy';
+export type {
+  RuntimePolicyOptions,
+  RuntimeCapabilities,
+  ThrottleRecommendation,
+  RuntimePolicyEnforcerOptions,
+} from './RuntimePolicy';
+
+export {
+  Telemetry,
+  BudgetViolationType,
+  ViolationSeverity,
+  latencyStatsToString,
+} from './Telemetry';
+export type {
+  LatencyMetric,
+  BudgetViolationRecord,
+  ResourceSnapshot,
+  LatencyStats,
+} from './Telemetry';
+
+// Phase 5: Model Management exports
+export { ModelRegistry } from './ModelRegistry';
+
+// Phase 6: Camera Utilities exports
+export { CameraUtils } from './CameraUtils';
+
+// Phase 7: Observability exports
+export { PerfTrace } from './PerfTrace';
+export { NativeErrorCode } from './NativeErrorCode';
 
 /**
  * Main EdgeVeda class for browser-based inference
@@ -40,6 +117,13 @@ export class EdgeVeda {
       onChunk?: (chunk: StreamChunk) => void;
     }
   >();
+
+  // Worker recovery state
+  private workerRestartCount = 0;
+  private readonly maxWorkerRestarts = 3;
+  private workerRestartCooldownMs = 2000;
+  private lastWorkerCrashTime = 0;
+  private workerRecoveryInProgress = false;
 
   constructor(config: EdgeVedaConfig) {
     this.config = {
@@ -60,21 +144,17 @@ export class EdgeVeda {
       throw new Error('EdgeVeda already initialized');
     }
 
+    // Perform browser compatibility checks
+    await this.checkBrowserCompatibility();
+
     // Create worker
     try {
       // In a real implementation, the worker URL would be bundled/imported
       // For now, we use a blob URL with the worker code
-      const workerUrl = this.createWorkerUrl();
-      this.worker = new Worker(workerUrl, { type: 'module' });
+      await this.createAndAttachWorker();
 
-      // Set up message handler
-      this.worker.onmessage = this.handleWorkerMessage.bind(this);
-      this.worker.onerror = (error) => {
-        console.error('Worker error:', error);
-        if (this.config.onError) {
-          this.config.onError(new Error(error.message));
-        }
-      };
+      // Reset restart counter on successful init
+      this.workerRestartCount = 0;
 
       // Send init message
       await this.sendWorkerMessage(
@@ -97,6 +177,112 @@ export class EdgeVeda {
         }`
       );
     }
+  }
+
+  /**
+   * Creates and attaches a Web Worker with error recovery handlers.
+   */
+  private async createAndAttachWorker(): Promise<void> {
+    const workerUrl = this.createWorkerUrl();
+    this.worker = new Worker(workerUrl, { type: 'module' });
+
+    // Set up message handler
+    this.worker.onmessage = this.handleWorkerMessage.bind(this);
+
+    // Error handler with auto-recovery
+    this.worker.onerror = (error) => {
+      console.error('[EdgeVeda] Worker error:', error);
+      if (this.config.onError) {
+        this.config.onError(new Error(error.message));
+      }
+      this.handleWorkerCrash(error.message);
+    };
+  }
+
+  /**
+   * Handles a worker crash by attempting auto-restart.
+   * Implements exponential backoff and a maximum restart limit.
+   */
+  private async handleWorkerCrash(errorMessage: string): Promise<void> {
+    if (this.workerRecoveryInProgress) {
+      return;
+    }
+
+    const now = Date.now();
+
+    // Reset restart counter if enough time has passed since last crash
+    if (now - this.lastWorkerCrashTime > 30_000) {
+      this.workerRestartCount = 0;
+    }
+    this.lastWorkerCrashTime = now;
+
+    // Reject all pending requests
+    for (const [id, request] of this.pendingRequests) {
+      request.reject(new Error(`Worker crashed: ${errorMessage}`));
+      this.pendingRequests.delete(id);
+    }
+
+    // Check if we've exceeded restart limit
+    if (this.workerRestartCount >= this.maxWorkerRestarts) {
+      console.error(
+        `[EdgeVeda] Worker crashed ${this.workerRestartCount} times. ` +
+        'Giving up on auto-restart. Call init() to manually reinitialize.'
+      );
+      this.initialized = false;
+      this.worker = null;
+      return;
+    }
+
+    // Attempt restart with exponential backoff
+    this.workerRecoveryInProgress = true;
+    this.workerRestartCount++;
+    const backoffMs = this.workerRestartCooldownMs * Math.pow(2, this.workerRestartCount - 1);
+
+    console.warn(
+      `[EdgeVeda] Worker crashed. Attempting restart ${this.workerRestartCount}/${this.maxWorkerRestarts} ` +
+      `in ${backoffMs}ms...`
+    );
+
+    try {
+      // Terminate old worker
+      this.worker?.terminate();
+      this.worker = null;
+
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+
+      // Create new worker
+      await this.createAndAttachWorker();
+
+      // Re-initialize
+      await this.sendWorkerMessage(
+        {
+          type: 'init' as WorkerMessageType.INIT,
+          config: this.config,
+        },
+        (message) => {
+          if (message.type === 'progress' && this.config.onProgress) {
+            this.config.onProgress(message.progress);
+          }
+        }
+      );
+
+      console.log('[EdgeVeda] Worker successfully restarted.');
+      this.initialized = true;
+    } catch (restartError) {
+      console.error('[EdgeVeda] Worker restart failed:', restartError);
+      this.initialized = false;
+      this.worker = null;
+    } finally {
+      this.workerRecoveryInProgress = false;
+    }
+  }
+
+  /**
+   * Gets the number of times the worker has been restarted.
+   * Useful for monitoring/telemetry.
+   */
+  getWorkerRestartCount(): number {
+    return this.workerRestartCount;
   }
 
   /**
@@ -214,6 +400,266 @@ export class EdgeVeda {
   }
 
   /**
+   * Gets current memory usage statistics
+   */
+  async getMemoryUsage(): Promise<import('./types').MemoryStats> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    const response = await this.sendWorkerMessage({
+      type: 'get_memory_usage' as WorkerMessageType.GET_MEMORY_USAGE,
+    });
+
+    return response.stats;
+  }
+
+  /**
+   * Gets information about the loaded model
+   */
+  async getModelInfo(): Promise<import('./types').ModelInfo> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    const response = await this.sendWorkerMessage({
+      type: 'get_model_info' as WorkerMessageType.GET_MODEL_INFO,
+    });
+
+    return response.info;
+  }
+
+  /**
+   * Cancels the currently running generation
+   */
+  async cancelGeneration(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'cancel_generation' as WorkerMessageType.CANCEL_GENERATION,
+    });
+  }
+
+  /**
+   * Unloads the current model and frees memory
+   */
+  async unloadModel(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'unload_model' as WorkerMessageType.UNLOAD_MODEL,
+    });
+  }
+
+  /**
+   * Resets the conversation context
+   */
+  async resetContext(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'reset_context' as WorkerMessageType.RESET_CONTEXT,
+    });
+  }
+
+  /**
+   * Gets the SDK version
+   */
+  static getVersion(): string {
+    return version;
+  }
+
+  /**
+   * Checks browser compatibility and warns about potential issues
+   */
+  private async checkBrowserCompatibility(): Promise<void> {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // Detect browser and version
+    const browserInfo = this.detectBrowser();
+
+    // Check WebGPU support
+    if (this.config.device === 'webgpu' || this.config.device === 'auto') {
+      const webgpuResult = await detectWebGPU();
+      
+      if (!webgpuResult.supported) {
+        if (this.config.device === 'webgpu') {
+          errors.push(
+            `WebGPU is not supported in this browser: ${webgpuResult.error}. ` +
+            'Consider using device: "wasm" or "auto" for fallback.'
+          );
+        } else {
+          warnings.push(
+            `WebGPU is not available (${webgpuResult.error}). ` +
+            'Falling back to WASM-only mode. Performance may be reduced.'
+          );
+        }
+      } else {
+        console.log('WebGPU detected:', webgpuResult.adapter);
+      }
+    }
+
+    // Check WASM threads support
+    const hasWasmThreads = supportsWasmThreads();
+    if (!hasWasmThreads) {
+      warnings.push(
+        'SharedArrayBuffer not available. WASM threading disabled. ' +
+        'For better performance, ensure cross-origin isolation is enabled ' +
+        '(COOP and COEP headers).'
+      );
+    }
+
+    // Safari-specific warnings
+    if (browserInfo.isSafari) {
+      warnings.push(
+        'Safari detected. Note: WebGPU support in Safari is experimental. ' +
+        'If you encounter issues, try switching to device: "wasm".'
+      );
+
+      if (browserInfo.version && browserInfo.version < 17) {
+        warnings.push(
+          `Safari ${browserInfo.version} may have limited WebGPU support. ` +
+          'Please update to Safari 17+ for best compatibility.'
+        );
+      }
+
+      // Safari has strict SharedArrayBuffer requirements
+      if (!hasWasmThreads) {
+        warnings.push(
+          'Safari requires specific cross-origin headers for SharedArrayBuffer. ' +
+          'Ensure your server sends: Cross-Origin-Opener-Policy: same-origin ' +
+          'and Cross-Origin-Embedder-Policy: require-corp'
+        );
+      }
+    }
+
+    // Firefox-specific warnings
+    if (browserInfo.isFirefox) {
+      if (browserInfo.version && browserInfo.version < 113) {
+        warnings.push(
+          `Firefox ${browserInfo.version} detected. WebGPU requires Firefox 113+. ` +
+          'Please update your browser or use device: "wasm".'
+        );
+      }
+    }
+
+    // Check Web Workers support
+    if (typeof Worker === 'undefined') {
+      errors.push(
+        'Web Workers are not supported in this environment. ' +
+        'EdgeVeda requires Web Workers for background inference.'
+      );
+    }
+
+    // Check for mobile browsers
+    if (browserInfo.isMobile) {
+      warnings.push(
+        'Mobile browser detected. Large models may cause memory issues. ' +
+        'Consider using smaller quantized models (Q4, Q5) for better performance.'
+      );
+    }
+
+    // Check available memory (if Performance API is available)
+    if ('memory' in performance && (performance as any).memory) {
+      const memoryInfo = (performance as any).memory;
+      const availableMB = memoryInfo.jsHeapSizeLimit / (1024 * 1024);
+      
+      if (availableMB < 512) {
+        warnings.push(
+          `Limited memory detected (${Math.round(availableMB)}MB available). ` +
+          'Large models may fail to load. Consider using smaller models.'
+        );
+      }
+    }
+
+    // Log all warnings
+    if (warnings.length > 0) {
+      console.warn('EdgeVeda compatibility warnings:');
+      warnings.forEach((warning, i) => {
+        console.warn(`  ${i + 1}. ${warning}`);
+      });
+    }
+
+    // Throw errors if critical features are missing
+    if (errors.length > 0) {
+      const errorMessage = 'EdgeVeda initialization failed due to compatibility issues:\n' +
+        errors.map((err, i) => `  ${i + 1}. ${err}`).join('\n');
+      throw new Error(errorMessage);
+    }
+
+    // Log successful compatibility check
+    if (warnings.length === 0 && errors.length === 0) {
+      console.log('EdgeVeda compatibility check passed. Browser fully supported.');
+    }
+  }
+
+  /**
+   * Detects the current browser and version
+   */
+  private detectBrowser(): {
+    name: string;
+    version: number | null;
+    isSafari: boolean;
+    isChrome: boolean;
+    isFirefox: boolean;
+    isEdge: boolean;
+    isMobile: boolean;
+  } {
+    const ua = navigator.userAgent;
+    const isMobile = /Mobile|Android|iPhone|iPad|iPod/i.test(ua);
+
+    // Safari detection
+    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+    const safariMatch = ua.match(/Version\/(\d+)/);
+    
+    // Chrome detection
+    const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor);
+    const chromeMatch = ua.match(/Chrome\/(\d+)/);
+    
+    // Firefox detection
+    const isFirefox = /Firefox/.test(ua);
+    const firefoxMatch = ua.match(/Firefox\/(\d+)/);
+    
+    // Edge detection
+    const isEdge = /Edg/.test(ua);
+    const edgeMatch = ua.match(/Edg\/(\d+)/);
+
+    let name = 'Unknown';
+    let version: number | null = null;
+
+    if (isEdge && edgeMatch) {
+      name = 'Edge';
+      version = parseInt(edgeMatch[1], 10);
+    } else if (isChrome && chromeMatch) {
+      name = 'Chrome';
+      version = parseInt(chromeMatch[1], 10);
+    } else if (isFirefox && firefoxMatch) {
+      name = 'Firefox';
+      version = parseInt(firefoxMatch[1], 10);
+    } else if (isSafari && safariMatch) {
+      name = 'Safari';
+      version = parseInt(safariMatch[1], 10);
+    }
+
+    return {
+      name,
+      version,
+      isSafari,
+      isChrome,
+      isFirefox,
+      isEdge,
+      isMobile,
+    };
+  }
+
+  /**
    * Sends a message to the worker and waits for response
    */
   private sendWorkerMessage(
@@ -289,6 +735,31 @@ export class EdgeVeda {
         if (request.onChunk) {
           request.onChunk(message as any);
         }
+        break;
+
+      case 'memory_usage_response':
+        request.resolve(message);
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'model_info_response':
+        request.resolve(message);
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'cancel_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'unload_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'reset_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
         break;
 
       default:

@@ -1,16 +1,21 @@
-# Edge Veda Web SDK
+# Edge Veda Web SDK (v1.2.0)
 
-Browser-based Large Language Model inference using WebGPU and WebAssembly.
+Browser-based Large Language Model inference using WebGPU and WebAssembly — with chat sessions, vision, runtime supervision, model registry, camera utilities, and observability.
 
 ## Features
 
 - **WebGPU Acceleration**: Automatic GPU detection and usage for high-performance inference
 - **WASM Fallback**: CPU-based inference when WebGPU is unavailable
+- **Chat Sessions**: Multi-turn conversation management with template support
+- **Vision Inference**: Process images/video frames through vision models
+- **Runtime Supervision**: Budget, latency, thermal, battery, resource monitoring, scheduling, and telemetry
+- **Model Registry**: Discover and manage available models with metadata
+- **Camera Utilities**: Capture and preprocess camera frames for vision pipelines
+- **Observability**: Performance tracing and native error codes
 - **Model Caching**: Automatic model caching in IndexedDB for faster subsequent loads
 - **Streaming Support**: Real-time token streaming for responsive UX
 - **Web Worker Architecture**: Non-blocking inference using Web Workers
 - **TypeScript**: Full type safety and excellent IDE support
-- **Zero Dependencies**: Lightweight and self-contained
 
 ## Installation
 
@@ -18,377 +23,305 @@ Browser-based Large Language Model inference using WebGPU and WebAssembly.
 npm install @edgeveda/web
 ```
 
-Or via CDN:
-
-```html
-<script src="https://unpkg.com/@edgeveda/web/dist/edgeveda.min.js"></script>
-```
-
 ## Quick Start
 
-### Basic Usage
-
 ```typescript
 import { EdgeVeda } from '@edgeveda/web';
 
-// Create instance
-const ai = new EdgeVeda({
-  modelId: 'llama-3.2-1b',
-  device: 'auto', // 'webgpu', 'wasm', or 'auto'
-  precision: 'fp16',
-});
-
-// Initialize (downloads and loads model)
+const ai = new EdgeVeda({ modelId: 'llama-3.2-1b', device: 'auto' });
 await ai.init();
 
-// Generate text
-const result = await ai.generate({
-  prompt: 'What is the capital of France?',
-  maxTokens: 100,
-  temperature: 0.7,
-});
-
+const result = await ai.generate({ prompt: 'Hello!', maxTokens: 100 });
 console.log(result.text);
-console.log(`Generated ${result.tokensGenerated} tokens in ${result.timeMs}ms`);
-console.log(`Speed: ${result.tokensPerSecond.toFixed(2)} tokens/second`);
 
-// Clean up
 await ai.terminate();
 ```
 
-### Streaming Generation
+### Streaming
 
 ```typescript
-import { EdgeVeda } from '@edgeveda/web';
-
-const ai = new EdgeVeda({
-  modelId: 'llama-3.2-1b',
-});
-
-await ai.init();
-
-// Stream tokens as they're generated
-for await (const chunk of ai.generateStream({
-  prompt: 'Write a short story about a robot:',
-  maxTokens: 200,
-})) {
+for await (const chunk of ai.generateStream({ prompt: 'Write a poem:', maxTokens: 200 })) {
   process.stdout.write(chunk.token);
-
-  if (chunk.done) {
-    console.log('\n\nGeneration complete!');
-    console.log(`Stats: ${chunk.stats?.tokensPerSecond.toFixed(2)} tokens/sec`);
-  }
 }
-
-await ai.terminate();
 ```
 
-### Progress Tracking
+## Chat Sessions
+
+Multi-turn conversation management with automatic prompt formatting.
 
 ```typescript
-const ai = new EdgeVeda({
-  modelId: 'llama-3.2-1b',
-  onProgress: (progress) => {
-    console.log(`${progress.stage}: ${progress.progress.toFixed(1)}%`);
-    if (progress.message) {
-      console.log(progress.message);
-    }
-  },
-  onError: (error) => {
-    console.error('Error:', error.message);
-  },
+import { ChatSession, ChatTemplate } from '@edgeveda/web';
+
+const template = new ChatTemplate('llama3');
+const session = new ChatSession(ai, template, { systemPrompt: 'You are helpful.' });
+
+const reply1 = await session.send('What is TypeScript?');
+console.log(reply1);
+
+const reply2 = await session.send('How does it differ from JavaScript?');
+console.log(reply2); // context-aware follow-up
+
+session.clearHistory();
+```
+
+## Vision Inference
+
+Process images and video frames through vision-capable models.
+
+```typescript
+import { VisionWorker, FrameQueue } from '@edgeveda/web';
+
+const vision = new VisionWorker(ai, { maxFrames: 30, resolution: { width: 224, height: 224 } });
+const queue = new FrameQueue(30);
+
+// Enqueue a frame (ImageData, Blob, or URL)
+queue.enqueue(imageData);
+
+// Process frames
+const result = await vision.processFrame(queue.dequeue());
+console.log(result.description);
+```
+
+## Runtime Supervision
+
+### Budget
+
+Control token and time limits for generation.
+
+```typescript
+import { Budget } from '@edgeveda/web';
+
+const budget = new Budget({ maxTokens: 500, maxTimeMs: 10000, maxMemoryBytes: 512 * 1024 * 1024 });
+budget.startTracking();
+
+if (budget.isExhausted()) console.log('Budget exceeded');
+console.log(budget.snapshot());
+```
+
+### Latency Tracker
+
+Track token generation latency with percentile statistics.
+
+```typescript
+import { LatencyTracker } from '@edgeveda/web';
+
+const tracker = new LatencyTracker({ windowSize: 100 });
+tracker.recordLatency(12.5);
+tracker.recordLatency(15.3);
+
+const stats = tracker.getStats();
+console.log(`p50=${stats.p50}ms, p99=${stats.p99}ms, avg=${stats.avg}ms`);
+```
+
+### Resource Monitor
+
+Monitor memory and system resource consumption.
+
+```typescript
+import { ResourceMonitor } from '@edgeveda/web';
+
+const monitor = new ResourceMonitor({ pollingIntervalMs: 1000 });
+monitor.start();
+monitor.onThreshold('memory', 0.85, () => console.warn('High memory'));
+
+const snapshot = monitor.snapshot();
+console.log(`Memory: ${snapshot.memoryUsagePercent}%`);
+monitor.stop();
+```
+
+### Thermal Monitor
+
+Track device thermal state (maps to browser/device thermal APIs).
+
+```typescript
+import { ThermalMonitor } from '@edgeveda/web';
+
+const thermal = new ThermalMonitor();
+thermal.start();
+thermal.onStateChange((state) => console.log(`Thermal: ${state}`));
+// States: nominal, fair, serious, critical
+thermal.stop();
+```
+
+### Battery Drain Tracker
+
+Monitor battery impact during inference.
+
+```typescript
+import { BatteryDrainTracker } from '@edgeveda/web';
+
+const battery = new BatteryDrainTracker();
+await battery.start();
+
+const drain = battery.snapshot();
+console.log(`Drain rate: ${drain.drainRatePerHour}%/hr, level: ${drain.level}%`);
+battery.stop();
+```
+
+### Scheduler
+
+Schedule and prioritize inference tasks.
+
+```typescript
+import { Scheduler } from '@edgeveda/web';
+
+const scheduler = new Scheduler({ maxConcurrent: 2, defaultPriority: 'normal' });
+
+const handle = scheduler.enqueue({ prompt: 'Task 1', priority: 'high' });
+const result = await handle.result;
+```
+
+### Runtime Policy
+
+Combine budget, thermal, and resource constraints into adaptive policies.
+
+```typescript
+import { RuntimePolicy } from '@edgeveda/web';
+
+const policy = new RuntimePolicy({
+  maxTokens: 1000,
+  thermalThrottleState: 'serious',
+  memoryThresholdPercent: 90,
+  action: 'throttle', // 'throttle' | 'cancel' | 'warn'
 });
 
-await ai.init();
+policy.evaluate(currentContext); // returns recommended action
 ```
 
-### Convenience Functions
+### Telemetry
 
-For one-off generations, use the convenience functions:
+Collect and export SDK usage metrics.
 
 ```typescript
-import { generate, generateStream } from '@edgeveda/web';
+import { Telemetry } from '@edgeveda/web';
 
-// Non-streaming
-const result = await generate(
-  { modelId: 'llama-3.2-1b' },
-  { prompt: 'Hello, world!', maxTokens: 50 }
-);
+const telemetry = new Telemetry({ enabled: true, batchSize: 50 });
+telemetry.record('inference_start', { model: 'llama-3.2-1b', tokens: 100 });
+telemetry.record('inference_end', { durationMs: 450, tokensPerSec: 22.1 });
 
-// Streaming
-for await (const chunk of generateStream(
-  { modelId: 'llama-3.2-1b' },
-  { prompt: 'Tell me a joke', maxTokens: 100 }
-)) {
-  console.log(chunk.token);
-}
+const events = telemetry.flush();
 ```
 
-## Configuration
+## Model Registry
 
-### EdgeVedaConfig
+Discover available models and their metadata.
 
 ```typescript
-interface EdgeVedaConfig {
-  // Model identifier or URL to model files
-  modelId: string;
+import { ModelRegistry } from '@edgeveda/web';
 
-  // Device to run inference on (default: 'auto')
-  device?: 'webgpu' | 'wasm' | 'auto';
+const registry = new ModelRegistry();
+await registry.refresh();
 
-  // Model precision (default: 'fp16')
-  precision?: 'fp32' | 'fp16' | 'int8' | 'int4';
+const models = registry.listModels();
+models.forEach(m => console.log(`${m.id}: ${m.name} (${m.sizeBytes} bytes)`));
 
-  // Path to WASM binary (optional)
-  wasmPath?: string;
-
-  // Maximum context length (default: 2048)
-  maxContextLength?: number;
-
-  // Number of threads for WASM (default: auto-detected)
-  numThreads?: number;
-
-  // Enable model caching (default: true)
-  enableCache?: boolean;
-
-  // Cache name for IndexedDB (default: 'edgeveda-models')
-  cacheName?: string;
-
-  // Progress callback
-  onProgress?: (progress: LoadProgress) => void;
-
-  // Error callback
-  onError?: (error: Error) => void;
-}
+const model = registry.getModel('llama-3.2-1b');
+console.log(model.quantization, model.contextLength);
 ```
 
-### GenerateOptions
+## Cache Management
 
 ```typescript
-interface GenerateOptions {
-  // The input prompt
-  prompt: string;
+import { listCachedModels, getCacheSize, deleteCachedModel, clearCache } from '@edgeveda/web';
 
-  // Maximum tokens to generate (default: 512)
-  maxTokens?: number;
-
-  // Sampling temperature 0.0-2.0 (default: 0.7)
-  temperature?: number;
-
-  // Top-p sampling (default: 0.9)
-  topP?: number;
-
-  // Top-k sampling (default: 40)
-  topK?: number;
-
-  // Repetition penalty (default: 1.1)
-  repetitionPenalty?: number;
-
-  // Stop sequences
-  stopSequences?: string[];
-
-  // Random seed for reproducibility
-  seed?: number;
-}
-```
-
-## Advanced Usage
-
-### WebGPU Detection
-
-```typescript
-import { detectWebGPU } from '@edgeveda/web';
-
-const capabilities = await detectWebGPU();
-
-if (capabilities.supported) {
-  console.log('WebGPU is supported!');
-  console.log('Adapter:', capabilities.adapter);
-  console.log('Features:', capabilities.features);
-} else {
-  console.log('WebGPU not available:', capabilities.error);
-}
-```
-
-### Cache Management
-
-```typescript
-import {
-  listCachedModels,
-  getCacheSize,
-  deleteCachedModel,
-  clearCache,
-  estimateStorageQuota,
-} from '@edgeveda/web';
-
-// List cached models
 const models = await listCachedModels();
-console.log('Cached models:', models);
-
-// Get cache size
 const size = await getCacheSize();
-console.log(`Cache size: ${(size / 1024 / 1024).toFixed(2)} MB`);
-
-// Delete a specific model
 await deleteCachedModel('llama-3.2-1b');
-
-// Clear all cache
 await clearCache();
-
-// Check storage quota
-const quota = await estimateStorageQuota();
-console.log(`Used: ${(quota.usage / 1024 / 1024).toFixed(2)} MB`);
-console.log(`Available: ${(quota.available / 1024 / 1024).toFixed(2)} MB`);
 ```
 
-### Custom Model URLs
+## Camera Utilities
+
+Capture and preprocess camera frames for vision pipelines.
 
 ```typescript
-const ai = new EdgeVeda({
-  modelId: 'https://example.com/models/custom-model.bin',
-  wasmPath: 'https://example.com/wasm/edgeveda.wasm',
-  precision: 'fp16',
-});
+import { CameraUtils } from '@edgeveda/web';
+
+const camera = new CameraUtils({ facingMode: 'environment', width: 640, height: 480 });
+await camera.start();
+
+const frame = await camera.captureFrame();
+const resized = camera.resize(frame, 224, 224);
+const normalized = camera.normalize(resized);
+
+camera.stop();
 ```
 
-### Thread Configuration
+## Observability
+
+### PerfTrace
+
+Capture detailed performance traces for inference runs.
 
 ```typescript
-import { getOptimalThreadCount, supportsWasmThreads } from '@edgeveda/web';
+import { PerfTrace } from '@edgeveda/web';
 
-console.log('WASM threads supported:', supportsWasmThreads());
-console.log('Optimal thread count:', getOptimalThreadCount());
+const trace = new PerfTrace('inference-run-1');
+trace.begin('tokenize');
+// ... tokenization ...
+trace.end('tokenize');
 
-const ai = new EdgeVeda({
-  modelId: 'llama-3.2-1b',
-  numThreads: 4, // Override auto-detection
-});
+trace.begin('generate');
+// ... generation ...
+trace.end('generate');
+
+const report = trace.report();
+console.log(report.spans); // [{name, startMs, endMs, durationMs}, ...]
+console.log(`Total: ${report.totalDurationMs}ms`);
 ```
+
+### NativeErrorCode
+
+Structured error codes from the C/WASM core.
+
+```typescript
+import { NativeErrorCode, isRecoverable } from '@edgeveda/web';
+
+try {
+  await ai.generate({ prompt: 'test' });
+} catch (e) {
+  const code = NativeErrorCode.fromError(e);
+  console.log(`Error ${code.code}: ${code.message} (domain: ${code.domain})`);
+  console.log(`Recoverable: ${isRecoverable(code)}`);
+}
+```
+
+## Architecture
+
+| Component | File | Description |
+|-----------|------|-------------|
+| EdgeVeda | `index.ts` | Main SDK entry point |
+| Types | `types.ts` | Core type definitions |
+| Worker | `worker.ts` | Web Worker inference engine |
+| WasmLoader | `wasm-loader.ts` | WASM module loader |
+| ModelCache | `model-cache.ts` | IndexedDB model caching |
+| ChatSession | `ChatSession.ts` | Multi-turn conversation manager |
+| ChatTemplate | `ChatTemplate.ts` | Prompt template formatting |
+| ChatTypes | `ChatTypes.ts` | Chat type definitions |
+| VisionWorker | `VisionWorker.ts` | Vision inference pipeline |
+| FrameQueue | `FrameQueue.ts` | Frame buffer for vision |
+| Budget | `Budget.ts` | Token/time budget enforcement |
+| LatencyTracker | `LatencyTracker.ts` | Latency percentile tracking |
+| ResourceMonitor | `ResourceMonitor.ts` | Memory/resource monitoring |
+| ThermalMonitor | `ThermalMonitor.ts` | Thermal state tracking |
+| BatteryDrainTracker | `BatteryDrainTracker.ts` | Battery drain monitoring |
+| Scheduler | `Scheduler.ts` | Task scheduling and prioritization |
+| RuntimePolicy | `RuntimePolicy.ts` | Adaptive runtime policies |
+| Telemetry | `Telemetry.ts` | Usage metrics collection |
+| ModelRegistry | `ModelRegistry.ts` | Model discovery and metadata |
+| CameraUtils | `CameraUtils.ts` | Camera capture and preprocessing |
+| PerfTrace | `PerfTrace.ts` | Performance tracing |
+| NativeErrorCode | `NativeErrorCode.ts` | Structured native error codes |
 
 ## Browser Requirements
 
 ### WebGPU Mode (Recommended)
-- Chrome 113+
-- Edge 113+
-- Safari 18+ (macOS Sonoma+)
-- Firefox (experimental, requires flags)
+- Chrome 113+ / Edge 113+ / Safari 18+ / Firefox (experimental)
 
 ### WASM Mode (Fallback)
 - Any modern browser with WebAssembly support
-- SharedArrayBuffer support for multi-threading
-- Requires COOP/COEP headers for threading:
-  ```
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
-  ```
-
-## Performance Tips
-
-1. **Use WebGPU**: Enable WebGPU for 10-50x faster inference
-2. **Enable Caching**: Keep `enableCache: true` to avoid re-downloading models
-3. **Choose Appropriate Precision**: Use `int4` or `int8` for smaller models and faster inference
-4. **Optimize Context Length**: Set `maxContextLength` to only what you need
-5. **Use Streaming**: Implement streaming for better perceived performance
-
-## Example: Chat Interface
-
-```typescript
-import { EdgeVeda } from '@edgeveda/web';
-
-class ChatBot {
-  private ai: EdgeVeda;
-
-  constructor() {
-    this.ai = new EdgeVeda({
-      modelId: 'llama-3.2-1b',
-      onProgress: (progress) => {
-        this.updateLoadingUI(progress);
-      },
-    });
-  }
-
-  async initialize() {
-    await this.ai.init();
-    console.log('Chat bot ready!');
-  }
-
-  async chat(message: string): Promise<string> {
-    const result = await this.ai.generate({
-      prompt: `User: ${message}\nAssistant:`,
-      maxTokens: 200,
-      temperature: 0.8,
-    });
-
-    return result.text.trim();
-  }
-
-  async *chatStream(message: string) {
-    for await (const chunk of this.ai.generateStream({
-      prompt: `User: ${message}\nAssistant:`,
-      maxTokens: 200,
-      temperature: 0.8,
-    })) {
-      yield chunk;
-    }
-  }
-
-  async cleanup() {
-    await this.ai.terminate();
-  }
-
-  private updateLoadingUI(progress: any) {
-    // Update your UI with progress
-    document.getElementById('progress').textContent =
-      `${progress.stage}: ${progress.progress.toFixed(1)}%`;
-  }
-}
-
-// Usage
-const bot = new ChatBot();
-await bot.initialize();
-
-const response = await bot.chat('What is machine learning?');
-console.log('Bot:', response);
-
-await bot.cleanup();
-```
-
-## Troubleshooting
-
-### WebGPU Not Available
-- Ensure you're using a supported browser
-- Check that hardware acceleration is enabled in browser settings
-- Some browsers require experimental flags to be enabled
-
-### SharedArrayBuffer Errors
-- Set proper COOP/COEP headers on your server
-- Or use single-threaded mode: `numThreads: 1`
-
-### Model Loading Errors
-- Check network connectivity
-- Verify model URL is accessible
-- Ensure sufficient storage quota is available
-
-### Performance Issues
-- Use WebGPU if available
-- Reduce `maxContextLength` if not needed
-- Use quantized models (int8/int4)
-- Ensure WASM threads are enabled
-
-## API Reference
-
-See the [TypeScript definitions](./src/types.ts) for complete API documentation.
+- SharedArrayBuffer support for multi-threading (requires COOP/COEP headers)
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
-
-## Support
-
-- GitHub Issues: https://github.com/edgeveda/sdk/issues
-- Documentation: https://docs.edgeveda.dev
-- Discord: https://discord.gg/edgeveda
