@@ -42,6 +42,41 @@ export type {
   FrameData,
 } from './types';
 
+// Export WhisperWorker and related types
+export { WhisperWorker, WhisperSession } from './WhisperWorker';
+export type {
+  WhisperConfig,
+  WhisperParams,
+  WhisperSegment,
+  WhisperResult,
+  WhisperTimings,
+} from './types';
+
+// Export Embeddings API types
+export type { EmbeddingResult } from './types';
+
+// Export Tool Calling System (Priority 2)
+export {
+  ToolRegistry,
+  ToolDefinition,
+  ToolCall,
+  ToolResult,
+  ToolPriority,
+  ToolCallParseException,
+} from './ToolRegistry';
+
+export { GbnfBuilder } from './GbnfBuilder';
+
+export { SchemaValidator, SchemaValidationResult } from './SchemaValidator';
+
+export { ToolTemplate, ToolTemplateFormat } from './ToolTemplate';
+
+// Export Vector Index & RAG Pipeline (Priority 2)
+export { VectorIndex, SearchResult } from './VectorIndex';
+
+export { RagPipeline } from './RagPipeline';
+export type { RagConfig, IEdgeVeda } from './RagPipeline';
+
 // Phase 4: Runtime Supervision exports
 export {
   Budget,
@@ -469,6 +504,29 @@ export class EdgeVeda {
   }
 
   /**
+   * Computes text embeddings for semantic search and RAG
+   * 
+   * Generates a dense vector representation of the input text.
+   * The embedding vector can be used for similarity comparisons,
+   * semantic search, and retrieval-augmented generation (RAG).
+   * 
+   * @param text - Input text to embed
+   * @returns EmbeddingResult containing the embedding vector and metadata
+   */
+  async embed(text: string): Promise<import('./types').EmbeddingResult> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    const response = await this.sendWorkerMessage({
+      type: 'embed' as WorkerMessageType.EMBED,
+      text,
+    });
+
+    return response.result;
+  }
+
+  /**
    * Gets the SDK version
    */
   static getVersion(): string {
@@ -759,6 +817,16 @@ export class EdgeVeda {
 
       case 'reset_success':
         request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'embed_success':
+        request.resolve(message);
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'embed_error':
+        request.reject(new Error(message.error));
         this.pendingRequests.delete(message.id);
         break;
 

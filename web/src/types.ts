@@ -183,6 +183,28 @@ export interface StreamChunk {
   done: boolean;
 
   /**
+   * Token confidence score (0.0-1.0)
+   * Higher values indicate higher model confidence
+   */
+  confidence?: number;
+
+  /**
+   * Running average confidence across all tokens
+   */
+  avgConfidence?: number;
+
+  /**
+   * Whether low confidence suggests cloud handoff
+   * True when avgConfidence falls below threshold
+   */
+  needsCloudHandoff?: boolean;
+
+  /**
+   * Index of this token in the sequence
+   */
+  tokenIndex?: number;
+
+  /**
    * Statistics (only in final chunk)
    */
   stats?: {
@@ -286,6 +308,9 @@ export enum WorkerMessageType {
   RESET_SUCCESS = 'reset_success',
   PROGRESS = 'progress',
   TERMINATE = 'terminate',
+  EMBED = 'embed',
+  EMBED_SUCCESS = 'embed_success',
+  EMBED_ERROR = 'embed_error',
 }
 
 /**
@@ -440,6 +465,30 @@ export interface WorkerTerminateMessage extends WorkerMessageBase {
 }
 
 /**
+ * Embed message to worker
+ */
+export interface WorkerEmbedMessage extends WorkerMessageBase {
+  type: WorkerMessageType.EMBED;
+  text: string;
+}
+
+/**
+ * Embed success response
+ */
+export interface WorkerEmbedSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.EMBED_SUCCESS;
+  result: EmbeddingResult;
+}
+
+/**
+ * Embed error response
+ */
+export interface WorkerEmbedErrorMessage extends WorkerMessageBase {
+  type: WorkerMessageType.EMBED_ERROR;
+  error: string;
+}
+
+/**
  * Union of all worker messages
  */
 export type WorkerMessage =
@@ -461,7 +510,10 @@ export type WorkerMessage =
   | WorkerResetContextMessage
   | WorkerResetSuccessMessage
   | WorkerProgressMessage
-  | WorkerTerminateMessage;
+  | WorkerTerminateMessage
+  | WorkerEmbedMessage
+  | WorkerEmbedSuccessMessage
+  | WorkerEmbedErrorMessage;
 
 /**
  * Model metadata stored in cache
@@ -631,6 +683,39 @@ export class EdgeVedaError extends Error {
 }
 
 /**
+ * Configuration validation error.
+ *
+ * Thrown when SDK configuration is invalid (e.g., bad tool definitions,
+ * invalid parameters, etc.)
+ */
+export class ConfigurationException extends Error {
+  details?: string;
+
+  constructor(message: string, details?: string) {
+    super(message);
+    this.name = 'ConfigurationException';
+    this.details = details;
+  }
+}
+
+/**
+ * Quality of Service levels for runtime policy management.
+ *
+ * Used to adapt behavior under resource constraints (memory pressure,
+ * thermal throttling, battery level, etc.)
+ */
+export enum QoSLevel {
+  /** Full quality - all features enabled, no restrictions */
+  FULL = 'full',
+  /** Reduced quality - optional features disabled, smaller context */
+  REDUCED = 'reduced',
+  /** Minimal quality - bare minimum functionality */
+  MINIMAL = 'minimal',
+  /** Paused - inference suspended, cleanup in progress */
+  PAUSED = 'paused',
+}
+
+/**
  * Cancellation token for aborting generation
  */
 export class CancelToken {
@@ -699,6 +784,138 @@ export class CancelToken {
       );
     }
   }
+}
+
+// ============================================================================
+// Whisper (STT) Types
+// ============================================================================
+
+/**
+ * Configuration for Whisper model initialization
+ */
+export interface WhisperConfig {
+  /**
+   * Path or URL to the Whisper model file (GGUF format)
+   */
+  modelPath: string;
+
+  /**
+   * Number of threads for inference
+   * @default navigator.hardwareConcurrency || 4
+   */
+  numThreads?: number;
+
+  /**
+   * Use GPU acceleration (WebGPU only)
+   * @default false
+   */
+  useGpu?: boolean;
+
+  /**
+   * Language code for transcription
+   * @default 'en'
+   */
+  language?: string;
+
+  /**
+   * Context size for the model
+   * @default 1500
+   */
+  contextSize?: number;
+
+  /**
+   * Device to run inference on
+   * @default 'auto'
+   */
+  device?: DeviceType;
+}
+
+/**
+ * Parameters for Whisper transcription
+ */
+export interface WhisperParams {
+  /**
+   * Language code (e.g., 'en', 'es', 'fr', 'auto')
+   * @default 'en'
+   */
+  language?: string;
+
+  /**
+   * Translate to English
+   * @default false
+   */
+  translate?: boolean;
+
+  /**
+   * Number of threads to use for this transcription
+   * @default undefined (uses config value)
+   */
+  nThreads?: number;
+}
+
+/**
+ * A single transcription segment with timing information
+ */
+export interface WhisperSegment {
+  /**
+   * Transcribed text for this segment
+   */
+  text: string;
+
+  /**
+   * Start time in milliseconds
+   */
+  startMs: number;
+
+  /**
+   * End time in milliseconds
+   */
+  endMs: number;
+}
+
+/**
+ * Result from Whisper transcription
+ */
+export interface WhisperResult {
+  /**
+   * Array of transcription segments
+   */
+  segments: WhisperSegment[];
+
+  /**
+   * Processing time in milliseconds
+   */
+  processTimeMs: number;
+
+  /**
+   * Full transcript (all segments concatenated)
+   */
+  fullText?: string;
+}
+
+/**
+ * Timing information for Whisper inference
+ */
+export interface WhisperTimings {
+  /**
+   * Model loading time in milliseconds
+   */
+  modelLoadMs: number;
+
+  /**
+   * Audio encoding time in milliseconds
+   */
+  audioEncodeMs: number;
+
+  /**
+   * Transcription time in milliseconds
+   */
+  transcribeMs: number;
+
+  /**
+   * Total time in milliseconds
+   */
+  totalMs: number;
 }
 
 // ============================================================================
@@ -869,4 +1086,33 @@ export interface FrameData {
    * Frame height in pixels
    */
   height: number;
+}
+
+// ============================================================================
+// Embeddings API Types
+// ============================================================================
+
+/**
+ * Result from text embedding
+ */
+export interface EmbeddingResult {
+  /**
+   * Embedding vector (array of floats)
+   */
+  embeddings: number[];
+
+  /**
+   * Number of dimensions in the embedding vector
+   */
+  dimensions: number;
+
+  /**
+   * Number of tokens processed
+   */
+  tokenCount: number;
+
+  /**
+   * Time taken to compute embedding in milliseconds
+   */
+  timeMs?: number;
 }
