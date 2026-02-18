@@ -274,6 +274,175 @@ public enum StopReason: String, Sendable {
     case error = "error"
 }
 
+// MARK: - Embeddings
+
+/// Result of a text embedding operation
+public struct EmbeddingResult: Sendable {
+    /// The embedding vector (normalized float array)
+    public let embeddings: [Float]
+    
+    /// Dimensionality of the embedding vector
+    public let dimensions: Int
+    
+    public init(embeddings: [Float]) {
+        self.embeddings = embeddings
+        self.dimensions = embeddings.count
+    }
+}
+
+// MARK: - Stream Token Info
+
+/// Per-token confidence information during streaming generation
+public struct StreamTokenInfo: Sendable {
+    /// Confidence score for the current token (0.0 - 1.0)
+    public let confidence: Float
+    
+    /// Average confidence across all tokens so far
+    public let avgConfidence: Float
+    
+    /// Whether confidence has dropped below threshold, suggesting cloud handoff
+    public let needsCloudHandoff: Bool
+    
+    /// Position/index of the current token in the sequence
+    public let tokenIndex: Int
+    
+    public init(
+        confidence: Float,
+        avgConfidence: Float,
+        needsCloudHandoff: Bool,
+        tokenIndex: Int
+    ) {
+        self.confidence = confidence
+        self.avgConfidence = avgConfidence
+        self.needsCloudHandoff = needsCloudHandoff
+        self.tokenIndex = tokenIndex
+    }
+}
+
+// MARK: - Whisper (Speech-to-Text)
+
+/// Configuration for Whisper speech-to-text initialization
+public struct WhisperConfig: Sendable {
+    /// Path to the Whisper model file (GGUF format)
+    public let modelPath: String
+    
+    /// Number of threads to use for processing
+    public let threads: Int
+    
+    /// Maximum context size
+    public let contextSize: Int
+    
+    /// GPU layers to offload (0 = CPU only)
+    public let gpuLayers: Int
+    
+    /// Whether to use memory mapping
+    public let useMemoryMapping: Bool
+    
+    public init(
+        modelPath: String,
+        threads: Int = 4,
+        contextSize: Int = 448,
+        gpuLayers: Int = 0,
+        useMemoryMapping: Bool = true
+    ) {
+        self.modelPath = modelPath
+        self.threads = threads
+        self.contextSize = contextSize
+        self.gpuLayers = gpuLayers
+        self.useMemoryMapping = useMemoryMapping
+    }
+}
+
+/// Parameters for Whisper transcription
+public struct WhisperParams: Sendable {
+    /// Language code (e.g., "en", "es", "fr") or nil for auto-detect
+    public let language: String?
+    
+    /// Whether to translate to English
+    public let translate: Bool
+    
+    /// Number of threads to use for transcription
+    public let threads: Int
+    
+    /// Maximum segment length in milliseconds
+    public let maxSegmentLength: Int
+    
+    /// Whether to split on word boundaries
+    public let splitOnWord: Bool
+    
+    /// Maximum tokens per segment
+    public let maxTokens: Int
+    
+    /// Temperature for sampling
+    public let temperature: Float
+    
+    public init(
+        language: String? = nil,
+        translate: Bool = false,
+        threads: Int = 4,
+        maxSegmentLength: Int = 0,
+        splitOnWord: Bool = false,
+        maxTokens: Int = 0,
+        temperature: Float = 0.0
+    ) {
+        self.language = language
+        self.translate = translate
+        self.threads = threads
+        self.maxSegmentLength = maxSegmentLength
+        self.splitOnWord = splitOnWord
+        self.maxTokens = maxTokens
+        self.temperature = temperature
+    }
+    
+    /// Default parameters for general transcription
+    public static let `default` = WhisperParams()
+}
+
+/// Individual segment from Whisper transcription with timing
+public struct WhisperSegment: Sendable {
+    /// Transcribed text for this segment
+    public let text: String
+    
+    /// Start time in milliseconds
+    public let startTime: Int64
+    
+    /// End time in milliseconds
+    public let endTime: Int64
+    
+    public init(text: String, startTime: Int64, endTime: Int64) {
+        self.text = text
+        self.startTime = startTime
+        self.endTime = endTime
+    }
+}
+
+/// Result of a Whisper transcription operation
+public struct WhisperResult: Sendable {
+    /// Full transcribed text
+    public let text: String
+    
+    /// Individual segments with timing information
+    public let segments: [WhisperSegment]
+    
+    /// Detected language code (if auto-detected)
+    public let detectedLanguage: String?
+    
+    /// Processing time in milliseconds
+    public let processingTime: Double
+    
+    public init(
+        text: String,
+        segments: [WhisperSegment],
+        detectedLanguage: String? = nil,
+        processingTime: Double
+    ) {
+        self.text = text
+        self.segments = segments
+        self.detectedLanguage = detectedLanguage
+        self.processingTime = processingTime
+    }
+}
+
 // MARK: - Device Information
 
 /// Information about the compute device

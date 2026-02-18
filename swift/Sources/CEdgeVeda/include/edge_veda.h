@@ -144,6 +144,18 @@ typedef struct {
     /** Seed for random number generation (-1 = random) */
     int seed;
 
+    /** Flash attention type: -1=auto, 0=disabled, 1=enabled (default: -1)
+     *  Maps to llama_flash_attn_type enum in llama.h */
+    int flash_attn;
+
+    /** KV cache data type for keys: 1=F16(default), 8=Q8_0
+     *  Maps to ggml_type enum. Q8_0 halves KV cache memory. */
+    int kv_cache_type_k;
+
+    /** KV cache data type for values: 1=F16(default), 8=Q8_0
+     *  Maps to ggml_type enum. Q8_0 halves KV cache memory. */
+    int kv_cache_type_v;
+
     /** Reserved for future use - must be NULL */
     void* reserved;
 } ev_config;
@@ -219,12 +231,25 @@ typedef struct {
     /** Number of stop sequences */
     int num_stop_sequences;
 
+    /** GBNF grammar string for constrained decoding (NULL = no constraint) */
+    const char* grammar_str;
+
+    /** Grammar root rule name (NULL = "root") */
+    const char* grammar_root;
+
+    /** Confidence threshold for cloud handoff (0.0 = disabled, >0.0 = enable confidence tracking) */
+    float confidence_threshold;
+
     /** Reserved for future use - must be NULL */
     void* reserved;
 } ev_generation_params;
 
 /**
  * @brief Get default generation parameters
+ *
+ * Sets all fields to sensible defaults. Grammar fields (grammar_str,
+ * grammar_root) default to NULL, meaning no grammar constraint is applied.
+ *
  * @param params Pointer to parameters structure to fill
  */
 EV_API void ev_generation_params_default(ev_generation_params* params);
@@ -316,6 +341,35 @@ EV_API void ev_stream_cancel(ev_stream stream);
  * @param stream Stream handle to free
  */
 EV_API void ev_stream_free(ev_stream stream);
+
+/* ============================================================================
+ * Streaming Token Info (confidence scoring)
+ * ========================================================================= */
+
+/**
+ * @brief Extended token information from streaming generation
+ */
+typedef struct {
+    float confidence;        /**< Token confidence score (0.0-1.0), -1.0 if not computed */
+    float avg_confidence;    /**< Running average confidence across all tokens */
+    bool needs_cloud_handoff; /**< True when avg confidence drops below threshold */
+    int token_index;         /**< Token position in generated sequence */
+} ev_stream_token_info;
+
+/**
+ * @brief Get extended token information from current stream position
+ *
+ * Returns confidence scoring and cloud handoff information for the
+ * most recently generated token in the stream.
+ *
+ * @param stream Stream handle
+ * @param info Pointer to info structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_stream_get_token_info(
+    ev_stream stream,
+    ev_stream_token_info* info
+);
 
 /* ============================================================================
  * Memory Management
@@ -614,8 +668,130 @@ EV_API ev_error_t ev_vision_get_last_timings(
     ev_timings_data* timings
 );
 
-#ifdef __cplusplus
-}
-#endif
+/* ============================================================================
+ * Embeddings API
+ * ========================================================================= */
 
-#endif /* EDGE_VEDA_H */
+/**
+ * @brief Result of text embedding operation
+ */
+typedef struct {
+    float* embeddings;    /**< Embedding vector (caller must free with ev_free_embeddings()) */
+    int dimensions;       /**< Number of dimensions (n_embd) */
+    int token_count;      /**< Number of tokens in input text */
+} ev_embed_result;
+
+/**
+ * @brief Compute text embeddings
+ *
+ * Generates an embedding vector for the input text using the loaded model.
+ * The caller must free the result with ev_free_embeddings().
+ *
+ * @param ctx Context handle
+ * @param text Input text to embed
+ * @param result Pointer to result structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_embed(
+    ev_context ctx,
+    const char* text,
+    ev_embed_result* result
+);
+
+/**
+ * @brief Free embedding result
+ *
+ * Frees the embeddings array allocated by ev_embed().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_free_embeddings(ev_embed_result* result);
+
+/* ============================================================================
+ * Whisper API (STT - Speech-to-Text)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda whisper (speech-to-text) engine
+ *
+ * Whisper context is SEPARATE from text context (ev_context) and
+ * vision context (ev_vision_context).
+ * Create with ev_whisper_init(), free with ev_whisper_free().
+ */
+typedef struct ev_whisper_context_impl* ev_whisper_context;
+
+/**
+ * @brief Configuration structure for initializing whisper context
+ */
+typedef struct {
+    /** Path to Whisper GGUF model file */
+    const char* model_path;
+
+    /** Number of CPU threads (0 = auto-detect) */
+    int num_threads;
+
+    /** Use GPU acceleration (Metal on iOS/macOS) */
+    bool use_gpu;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_whisper_config;
+
+/**
+ * @brief Parameters for whisper transcription
+ */
+typedef struct {
+    /** Number of threads for transcription (0 = use config default) */
+    int n_threads;
+
+    /** Language code: "en", "auto", etc. (NULL = "en") */
+    const char* language;
+
+    /** Translate to English (true = translate, false = transcribe) */
+    bool translate;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_whisper_params;
+
+/**
+ * @brief A single transcription segment with timing information
+ */
+typedef struct {
+    /** Transcribed text for this segment */
+    const char* text;
+
+    /** Segment start time in milliseconds */
+    int64_t start_ms;
+
+    /** Segment end time in milliseconds */
+    int64_t end_ms;
+} ev_whisper_segment;
+
+/**
+ * @brief Result of a whisper transcription
+ *
+ * Contains an array of segments with timing information.
+ * Must be freed with ev_whisper_free_result() after use.
+ */
+typedef struct {
+    /** Array of transcription segments */
+    ev_whisper_segment* segments;
+
+    /** Number of segments in the array */
+    int n_segments;
+
+    /** Total processing time in milliseconds */
+    double process_time_ms;
+} ev_whisper_result;
+
+/**
+ * @brief Get default whisper configuration with recommended settings
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_whisper_config_default(ev_whisper_config* config);
+
+/**
+ * @brief Initialize whisper context with model
+ *
+ * Loads the Whisper model for speech-to-

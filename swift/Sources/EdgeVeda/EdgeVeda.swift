@@ -70,9 +70,14 @@ public actor EdgeVeda {
                 contextSize: config.contextSize,
                 gpuLayers: config.gpuLayers,
                 batchSize: config.batchSize,
-                useMmap: true,
-                useMlock: false,
-                seed: -1
+                useMmap: config.useMemoryMapping,
+                useMlock: config.lockMemory,
+                seed: config.seed,
+                memoryLimitBytes: config.memoryLimitBytes,
+                autoUnloadOnMemoryPressure: config.autoUnloadOnMemoryPressure,
+                flashAttn: config.flashAttn,
+                kvCacheTypeK: config.kvCacheTypeK,
+                kvCacheTypeV: config.kvCacheTypeV
             )
             self.context = ctx
         }.value
@@ -108,9 +113,12 @@ public actor EdgeVeda {
                 topP: options.topP,
                 topK: options.topK,
                 repeatPenalty: options.repeatPenalty,
-                frequencyPenalty: 0.0,
-                presencePenalty: 0.0,
-                stopSequences: options.stopSequences
+                frequencyPenalty: options.frequencyPenalty,
+                presencePenalty: options.presencePenalty,
+                stopSequences: options.stopSequences,
+                grammarStr: options.grammarStr,
+                grammarRoot: options.grammarRoot,
+                confidenceThreshold: options.confidenceThreshold
             )
         }
         
@@ -149,9 +157,12 @@ public actor EdgeVeda {
                         topP: options.topP,
                         topK: options.topK,
                         repeatPenalty: options.repeatPenalty,
-                        frequencyPenalty: 0.0,
-                        presencePenalty: 0.0,
+                        frequencyPenalty: options.frequencyPenalty,
+                        presencePenalty: options.presencePenalty,
                         stopSequences: options.stopSequences,
+                        grammarStr: options.grammarStr,
+                        grammarRoot: options.grammarRoot,
+                        confidenceThreshold: options.confidenceThreshold,
                         onStreamCreated: { [weak self] stream in
                             self?.currentStream = stream
                         }
@@ -286,6 +297,31 @@ public actor EdgeVeda {
         currentStreamTask = nil
     }
 
+    // MARK: - Embeddings API
+
+    /// Compute embeddings for the given text
+    /// Returns a normalized float vector representing the semantic meaning of the text
+    ///
+    /// - Parameter text: Input text to embed
+    /// - Returns: EmbeddingResult containing the embedding vector
+    /// - Throws: EdgeVedaError if embedding computation fails
+    /// - Example:
+    /// ```swift
+    /// let result = try await edgeVeda.embed("Hello, world!")
+    /// print("Embedding dimensions: \(result.dimensions)")
+    /// print("First few values: \(result.embeddings.prefix(5))")
+    /// ```
+    public func embed(_ text: String) async throws -> EmbeddingResult {
+        guard let ctx = context else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+        
+        return try await Task {
+            let embeddings = try FFIBridge.embed(ctx: ctx, text: text)
+            return EmbeddingResult(embeddings: embeddings)
+        }.value
+    }
+
     // MARK: - Vision Inference
 
     /// Create and initialize a vision worker for image description
@@ -334,6 +370,58 @@ public actor EdgeVeda {
             prompt: prompt,
             params: params
         )
+    }
+
+    // MARK: - Whisper (Speech-to-Text)
+
+    /// Create and initialize a Whisper worker for speech-to-text transcription
+    /// - Parameter config: Whisper configuration including model path
+    /// - Returns: Initialized WhisperWorker ready for audio transcription
+    /// - Throws: EdgeVedaError if initialization fails
+    /// - Example:
+    /// ```swift
+    /// let config = WhisperConfig(modelPath: "/path/to/whisper-model.gguf")
+    /// let whisper = try await EdgeVeda.createWhisperWorker(config: config)
+    /// ```
+    public static func createWhisperWorker(config: WhisperConfig) async throws -> WhisperWorker {
+        let worker = WhisperWorker()
+        try await worker.initialize(config: config)
+        return worker
+    }
+
+    /// One-shot speech-to-text transcription - transcribe a single audio buffer
+    /// Creates a temporary worker, performs transcription, and cleans up automatically
+    /// For repeated transcriptions, use createWhisperWorker() to reuse the worker
+    ///
+    /// - Parameters:
+    ///   - config: Whisper configuration including model path
+    ///   - audioData: Audio samples as Float32 array (mono, typically 16kHz)
+    ///   - params: Transcription parameters (default: WhisperParams with sensible defaults)
+    /// - Returns: WhisperResult with transcribed text and timing information
+    /// - Throws: EdgeVedaError if transcription fails
+    /// - Example:
+    /// ```swift
+    /// let config = WhisperConfig(modelPath: "/path/to/whisper-model.gguf")
+    /// let result = try await EdgeVeda.transcribeAudio(
+    ///     config: config,
+    ///     audioData: audioSamples
+    /// )
+    /// print("Transcribed: \(result.text)")
+    /// ```
+    public static func transcribeAudio(
+        config: WhisperConfig,
+        audioData: [Float],
+        params: WhisperParams = .default
+    ) async throws -> WhisperResult {
+        let worker = WhisperWorker()
+        try await worker.initialize(config: config)
+        defer {
+            Task {
+                await worker.cleanup()
+            }
+        }
+        
+        return try await worker.transcribe(audioData: audioData, params: params)
     }
 
     // MARK: - Memory Management (iOS)

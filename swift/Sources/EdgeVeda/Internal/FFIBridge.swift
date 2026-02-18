@@ -36,7 +36,12 @@ internal enum FFIBridge {
         batchSize: Int,
         useMmap: Bool,
         useMlock: Bool,
-        seed: Int
+        seed: Int,
+        memoryLimitBytes: UInt64,
+        autoUnloadOnMemoryPressure: Bool,
+        flashAttn: Int,
+        kvCacheTypeK: Int,
+        kvCacheTypeV: Int
     ) throws -> ev_context {
         var config = ev_config()
         
@@ -48,12 +53,15 @@ internal enum FFIBridge {
         config.num_threads = Int32(threads)
         config.context_size = Int32(contextSize)
         config.batch_size = Int32(batchSize)
-        config.memory_limit_bytes = 0 // No limit by default
-        config.auto_unload_on_memory_pressure = false
+        config.memory_limit_bytes = Int(memoryLimitBytes)
+        config.auto_unload_on_memory_pressure = autoUnloadOnMemoryPressure
         config.gpu_layers = Int32(gpuLayers)
         config.use_mmap = useMmap
         config.use_mlock = useMlock
         config.seed = Int32(seed)
+        config.flash_attn = Int32(flashAttn)
+        config.kv_cache_type_k = Int32(kvCacheTypeK)
+        config.kv_cache_type_v = Int32(kvCacheTypeV)
         config.reserved = nil
 
         var error: ev_error_t = EV_SUCCESS
@@ -96,7 +104,10 @@ internal enum FFIBridge {
         repeatPenalty: Float,
         frequencyPenalty: Float,
         presencePenalty: Float,
-        stopSequences: [String]
+        stopSequences: [String],
+        grammarStr: String?,
+        grammarRoot: String?,
+        confidenceThreshold: Float
     ) throws -> String {
         var params = ev_generation_params()
         params.max_tokens = Int32(maxTokens)
@@ -106,6 +117,7 @@ internal enum FFIBridge {
         params.repeat_penalty = repeatPenalty
         params.frequency_penalty = frequencyPenalty
         params.presence_penalty = presencePenalty
+        params.confidence_threshold = confidenceThreshold
         params.reserved = nil
 
         // Convert stop sequences to C array
@@ -124,12 +136,29 @@ internal enum FFIBridge {
         var output: UnsafeMutablePointer<CChar>?
         let error: ev_error_t
         
-        // Call C function
-        error = prompt.withCString { promptPtr in
-            cStopSequences.withUnsafeBufferPointer { stopPtr in
-                var mutableParams = params
-                mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
-                return ev_generate(ctx, promptPtr, &mutableParams, &output)
+        // Call C function with grammar support
+        if let grammarStr = grammarStr {
+            error = grammarStr.withCString { grammarPtr in
+                let grammarRootPtr = grammarRoot?.withCString { $0 } ?? nil
+                return prompt.withCString { promptPtr in
+                    cStopSequences.withUnsafeBufferPointer { stopPtr in
+                        var mutableParams = params
+                        mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                        mutableParams.grammar_str = grammarPtr
+                        mutableParams.grammar_root = grammarRootPtr
+                        return ev_generate(ctx, promptPtr, &mutableParams, &output)
+                    }
+                }
+            }
+        } else {
+            error = prompt.withCString { promptPtr in
+                cStopSequences.withUnsafeBufferPointer { stopPtr in
+                    var mutableParams = params
+                    mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                    mutableParams.grammar_str = nil
+                    mutableParams.grammar_root = nil
+                    return ev_generate(ctx, promptPtr, &mutableParams, &output)
+                }
             }
         }
         
@@ -156,6 +185,9 @@ internal enum FFIBridge {
         frequencyPenalty: Float,
         presencePenalty: Float,
         stopSequences: [String],
+        grammarStr: String?,
+        grammarRoot: String?,
+        confidenceThreshold: Float,
         onStreamCreated: ((ev_stream) -> Void)? = nil,
         onToken: @escaping (String) -> Void
     ) async throws {
@@ -167,6 +199,7 @@ internal enum FFIBridge {
         params.repeat_penalty = repeatPenalty
         params.frequency_penalty = frequencyPenalty
         params.presence_penalty = presencePenalty
+        params.confidence_threshold = confidenceThreshold
         params.reserved = nil
 
         // Convert stop sequences to C array
@@ -184,12 +217,30 @@ internal enum FFIBridge {
 
         var error: ev_error_t = EV_SUCCESS
         
-        // Start streaming
-        let stream = prompt.withCString { promptPtr in
-            cStopSequences.withUnsafeBufferPointer { stopPtr in
-                var mutableParams = params
-                mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
-                return ev_generate_stream(ctx, promptPtr, &mutableParams, &error)
+        // Start streaming with grammar support
+        let stream: ev_stream?
+        if let grammarStr = grammarStr {
+            stream = grammarStr.withCString { grammarPtr in
+                let grammarRootPtr = grammarRoot?.withCString { $0 } ?? nil
+                return prompt.withCString { promptPtr in
+                    cStopSequences.withUnsafeBufferPointer { stopPtr in
+                        var mutableParams = params
+                        mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                        mutableParams.grammar_str = grammarPtr
+                        mutableParams.grammar_root = grammarRootPtr
+                        return ev_generate_stream(ctx, promptPtr, &mutableParams, &error)
+                    }
+                }
+            }
+        } else {
+            stream = prompt.withCString { promptPtr in
+                cStopSequences.withUnsafeBufferPointer { stopPtr in
+                    var mutableParams = params
+                    mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                    mutableParams.grammar_str = nil
+                    mutableParams.grammar_root = nil
+                    return ev_generate_stream(ctx, promptPtr, &mutableParams, &error)
+                }
             }
         }
         
@@ -221,6 +272,154 @@ internal enum FFIBridge {
     /// Cancel streaming generation
     static func cancelStream(_ stream: ev_stream) {
         ev_stream_cancel(stream)
+    }
+
+    /// Get extended token information from stream
+    static func getStreamTokenInfo(stream: ev_stream) throws -> (confidence: Float, avgConfidence: Float, needsCloudHandoff: Bool, tokenIndex: Int) {
+        var info = ev_stream_token_info()
+        let error = ev_stream_get_token_info(stream, &info)
+        
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: nil)
+        }
+        
+        return (
+            confidence: info.confidence,
+            avgConfidence: info.avg_confidence,
+            needsCloudHandoff: info.needs_cloud_handoff,
+            tokenIndex: Int(info.token_index)
+        )
+    }
+
+    // MARK: - Embeddings
+
+    /// Compute text embeddings
+    static func embed(ctx: ev_context, text: String) throws -> [Float] {
+        var result = ev_embed_result()
+        
+        let error = text.withCString { textPtr in
+            ev_embed(ctx, textPtr, &result)
+        }
+        
+        guard error == EV_SUCCESS else {
+            throw mapError(error, ctx: ctx)
+        }
+        
+        guard result.embeddings != nil else {
+            throw EdgeVedaError.generationFailed(reason: "No embeddings returned")
+        }
+        
+        // Copy embeddings to Swift array
+        let dimensions = Int(result.dimensions)
+        let embeddings = Array(UnsafeBufferPointer(start: result.embeddings, count: dimensions))
+        
+        // Free C memory
+        ev_free_embeddings(&result)
+        
+        return embeddings
+    }
+
+    // MARK: - Whisper (Speech-to-Text)
+
+    /// Initialize whisper context
+    static func initWhisperContext(
+        modelPath: String,
+        threads: Int,
+        useGpu: Bool
+    ) throws -> ev_whisper_context {
+        var config = ev_whisper_config()
+        config.num_threads = Int32(threads)
+        config.use_gpu = useGpu
+        config.reserved = nil
+
+        var error: ev_error_t = EV_SUCCESS
+        
+        let ctx = modelPath.withCString { pathPtr in
+            var mutableConfig = config
+            mutableConfig.model_path = pathPtr
+            return ev_whisper_init(&mutableConfig, &error)
+        }
+        
+        guard ctx != nil && error == EV_SUCCESS else {
+            throw mapWhisperError(error)
+        }
+        
+        return ctx!
+    }
+
+    /// Free whisper context
+    static func freeWhisperContext(_ ctx: ev_whisper_context) {
+        ev_whisper_free(ctx)
+    }
+
+    /// Check if whisper context is valid
+    static func isWhisperValid(_ ctx: ev_whisper_context) -> Bool {
+        return ev_whisper_is_valid(ctx)
+    }
+
+    /// Transcribe audio
+    static func transcribe(
+        ctx: ev_whisper_context,
+        audioData: [Float],
+        language: String?,
+        translate: Bool
+    ) throws -> [(text: String, startMs: Int64, endMs: Int64)] {
+        var params = ev_whisper_params()
+        params.n_threads = 0 // Use default from config
+        params.translate = translate
+        params.reserved = nil
+
+        var result: ev_whisper_result? = nil
+        
+        let error: ev_error_t
+        if let language = language {
+            error = language.withCString { langPtr in
+                audioData.withUnsafeBufferPointer { audioPtr in
+                    var mutableParams = params
+                    mutableParams.language = langPtr
+                    return ev_whisper_transcribe(
+                        ctx,
+                        audioPtr.baseAddress!,
+                        Int32(audioData.count),
+                        &mutableParams,
+                        &result
+                    )
+                }
+            }
+        } else {
+            error = audioData.withUnsafeBufferPointer { audioPtr in
+                var mutableParams = params
+                mutableParams.language = nil
+                return ev_whisper_transcribe(
+                    ctx,
+                    audioPtr.baseAddress!,
+                    Int32(audioData.count),
+                    &mutableParams,
+                    &result
+                )
+            }
+        }
+        
+        guard error == EV_SUCCESS, let result = result else {
+            throw mapWhisperError(error)
+        }
+        
+        defer { ev_whisper_free_result(result) }
+        
+        // Convert segments to Swift array
+        var segments: [(text: String, startMs: Int64, endMs: Int64)] = []
+        for i in 0..<Int(result.n_segments) {
+            let segment = result.segments[i]
+            if let text = segment.text {
+                segments.append((
+                    text: String(cString: text),
+                    startMs: segment.start_ms,
+                    endMs: segment.end_ms
+                ))
+            }
+        }
+        
+        return segments
     }
 
     // MARK: - Memory Management
@@ -515,6 +714,25 @@ internal enum FFIBridge {
     }
 
     private static func mapVisionError(_ error: ev_error_t, ctx: ev_vision_context?) -> EdgeVedaError {
+        let message = String(cString: ev_error_string(error))
+        
+        switch error {
+        case EV_ERROR_INVALID_PARAM:
+            return .invalidParameter(name: "unknown", value: message)
+        case EV_ERROR_OUT_OF_MEMORY:
+            return .outOfMemory
+        case EV_ERROR_MODEL_LOAD_FAILED:
+            return .loadFailed(reason: message)
+        case EV_ERROR_BACKEND_INIT_FAILED:
+            return .unsupportedBackend(.auto)
+        case EV_ERROR_INFERENCE_FAILED:
+            return .generationFailed(reason: message)
+        default:
+            return .unknown(message: message)
+        }
+    }
+
+    private static func mapWhisperError(_ error: ev_error_t) -> EdgeVedaError {
         let message = String(cString: ev_error_string(error))
         
         switch error {

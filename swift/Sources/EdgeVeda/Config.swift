@@ -42,6 +42,24 @@ public struct EdgeVedaConfig: Sendable {
     /// Verbose logging
     public let verbose: Bool
 
+    /// Memory limit in bytes (0 = no limit)
+    public let memoryLimitBytes: UInt64
+
+    /// Auto-unload model on memory pressure
+    public let autoUnloadOnMemoryPressure: Bool
+
+    /// Random seed for sampling (-1 = random)
+    public let seed: Int
+
+    /// Flash attention mode (-1 = auto, 0 = disabled, 1 = enabled)
+    public let flashAttn: Int
+
+    /// KV cache quantization type for keys (1 = F16, 8 = Q8_0)
+    public let kvCacheTypeK: Int
+
+    /// KV cache quantization type for values (1 = F16, 8 = Q8_0)
+    public let kvCacheTypeV: Int
+
     // MARK: - Initialization
 
     /// Create custom configuration
@@ -54,6 +72,12 @@ public struct EdgeVedaConfig: Sendable {
     ///   - useMemoryMapping: Enable mmap (default: true)
     ///   - lockMemory: Lock memory (default: false)
     ///   - verbose: Verbose logging (default: false)
+    ///   - memoryLimitBytes: Memory limit in bytes (default: 0 for no limit)
+    ///   - autoUnloadOnMemoryPressure: Auto-unload on memory pressure (default: false)
+    ///   - seed: Random seed (default: -1 for random)
+    ///   - flashAttn: Flash attention (-1 = auto, 0 = disabled, 1 = enabled, default: -1)
+    ///   - kvCacheTypeK: KV cache type for keys (1 = F16, 8 = Q8_0, default: 1)
+    ///   - kvCacheTypeV: KV cache type for values (1 = F16, 8 = Q8_0, default: 1)
     public init(
         backend: Backend = .auto,
         threads: Int = 0,
@@ -62,7 +86,13 @@ public struct EdgeVedaConfig: Sendable {
         batchSize: Int = 512,
         useMemoryMapping: Bool = true,
         lockMemory: Bool = false,
-        verbose: Bool = false
+        verbose: Bool = false,
+        memoryLimitBytes: UInt64 = 0,
+        autoUnloadOnMemoryPressure: Bool = false,
+        seed: Int = -1,
+        flashAttn: Int = -1,
+        kvCacheTypeK: Int = 1,
+        kvCacheTypeV: Int = 1
     ) {
         self.backend = backend
         self.threads = threads
@@ -72,6 +102,12 @@ public struct EdgeVedaConfig: Sendable {
         self.useMemoryMapping = useMemoryMapping
         self.lockMemory = lockMemory
         self.verbose = verbose
+        self.memoryLimitBytes = memoryLimitBytes
+        self.autoUnloadOnMemoryPressure = autoUnloadOnMemoryPressure
+        self.seed = seed
+        self.flashAttn = flashAttn
+        self.kvCacheTypeK = kvCacheTypeK
+        self.kvCacheTypeV = kvCacheTypeV
     }
 
     // MARK: - Presets
@@ -130,6 +166,21 @@ public struct GenerateOptions: Sendable {
     /// Stop sequences to end generation
     public let stopSequences: [String]
 
+    /// Frequency penalty (0.0 = no penalty, higher = penalize frequent tokens)
+    public let frequencyPenalty: Float
+
+    /// Presence penalty (0.0 = no penalty, higher = penalize tokens that appeared)
+    public let presencePenalty: Float
+
+    /// GBNF grammar string for constrained generation
+    public let grammarStr: String?
+
+    /// Grammar root rule name
+    public let grammarRoot: String?
+
+    /// Confidence threshold for cloud handoff (0.0 = disabled)
+    public let confidenceThreshold: Float
+
     // MARK: - Initialization
 
     /// Create custom generation options
@@ -140,13 +191,23 @@ public struct GenerateOptions: Sendable {
     ///   - topK: Top-K limit (default: 40)
     ///   - repeatPenalty: Repeat penalty (default: 1.1)
     ///   - stopSequences: Stop sequences (default: empty)
+    ///   - frequencyPenalty: Frequency penalty (default: 0.0)
+    ///   - presencePenalty: Presence penalty (default: 0.0)
+    ///   - grammarStr: GBNF grammar string (default: nil)
+    ///   - grammarRoot: Grammar root rule (default: nil)
+    ///   - confidenceThreshold: Confidence threshold for cloud handoff (default: 0.0)
     public init(
         maxTokens: Int = 512,
         temperature: Float = 0.7,
         topP: Float = 0.9,
         topK: Int = 40,
         repeatPenalty: Float = 1.1,
-        stopSequences: [String] = []
+        stopSequences: [String] = [],
+        frequencyPenalty: Float = 0.0,
+        presencePenalty: Float = 0.0,
+        grammarStr: String? = nil,
+        grammarRoot: String? = nil,
+        confidenceThreshold: Float = 0.0
     ) {
         self.maxTokens = maxTokens
         self.temperature = temperature
@@ -154,6 +215,11 @@ public struct GenerateOptions: Sendable {
         self.topK = topK
         self.repeatPenalty = repeatPenalty
         self.stopSequences = stopSequences
+        self.frequencyPenalty = frequencyPenalty
+        self.presencePenalty = presencePenalty
+        self.grammarStr = grammarStr
+        self.grammarRoot = grammarRoot
+        self.confidenceThreshold = confidenceThreshold
     }
 
     // MARK: - Presets
