@@ -2,7 +2,7 @@
 
 **A managed on-device AI runtime for Flutter — text generation, vision, speech-to-text, embeddings, RAG, and function calling, all running locally with zero cloud dependencies.**
 
-`~22,700 LOC | 50 C API functions | 32 Dart SDK files | 0 cloud dependencies`
+`~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)

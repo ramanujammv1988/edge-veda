@@ -124,7 +124,7 @@ class EdgeVedaConfig {
   /// Path to the GGUF model file
   final String modelPath;
 
-  /// Backend to use (auto, metal, vulkan, cpu)
+  /// Backend to use (auto, metal, cpu)
   final EvBackend backend;
 
   /// Number of CPU threads (0 = auto-detect)

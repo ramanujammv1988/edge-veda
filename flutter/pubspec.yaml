@@ -43,9 +43,6 @@ dev_dependencies:
 flutter:
   plugin:
     platforms:
-      android:
-        package: com.edgeveda.edge_veda
-        pluginClass: EdgeVedaPlugin
       ios:
         pluginClass: EdgeVedaPlugin
 

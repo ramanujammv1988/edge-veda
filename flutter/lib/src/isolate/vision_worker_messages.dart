@@ -30,7 +30,7 @@ class InitVisionCommand extends VisionWorkerCommand {
   /// Token context window size
   final int contextSize;
 
-  /// Use GPU acceleration (Metal on iOS, Vulkan on Android)
+  /// Use GPU acceleration (Metal on iOS)
   final bool useGpu;
 
   /// Memory limit in bytes (0 = no limit)
