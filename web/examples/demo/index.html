@@ -39,6 +39,7 @@
           <h2 class="top-title">Veda</h2>
           <div class="top-actions">
             <button class="icon-btn" onclick="resetChat()" title="New Chat">🔄</button>
+            <button class="icon-btn" onclick="runBenchmark()" title="Benchmark">📊</button>
             <button class="icon-btn" onclick="showModelSheet()" title="Models">📦</button>
           </div>
         </header>
@@ -55,6 +56,7 @@
           <div class="metric-chip"><span class="metric-label">TTFT</span><span id="metric-ttft" class="metric-value">-</span></div>
           <div class="metric-chip"><span class="metric-label">Speed</span><span id="metric-speed" class="metric-value">-</span></div>
           <div class="metric-chip"><span class="metric-label">Memory</span><span id="metric-memory" class="metric-value">-</span></div>
+          <div class="metric-chip"><span class="metric-label">Confidence</span><span id="metric-confidence" class="metric-value">-</span></div>
         </div>
 
         <!-- Persona picker -->
@@ -90,14 +92,124 @@
         </div>
       </div>
 
+      <!-- Voice Tab -->
+      <div id="tab-voice" class="tab-panel">
+        <header class="top-bar"><h2 class="top-title">Voice</h2></header>
+        <div class="voice-container">
+          <div class="voice-status-area">
+            <div id="voice-pulse" class="voice-pulse"></div>
+            <div id="voice-status-text" class="voice-status-text">Tap microphone to start</div>
+          </div>
+          <div id="voice-transcript" class="voice-transcript hidden">
+            <div class="transcript-label">Transcript</div>
+            <div id="transcript-text" class="transcript-text"></div>
+          </div>
+          <div class="voice-controls">
+            <button id="voice-btn" class="voice-btn" onclick="toggleVoiceRecording()">
+              <span class="voice-icon">🎤</span>
+            </button>
+            <div class="voice-hint">Speech-to-text with Whisper</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools Tab -->
+      <div id="tab-tools" class="tab-panel">
+        <header class="top-bar">
+          <h2 class="top-title">Tools</h2>
+          <div class="top-actions">
+            <button class="icon-btn" onclick="resetToolsChat()" title="Clear">🔄</button>
+          </div>
+        </header>
+
+        <!-- Tool Status -->
+        <div class="status-bar">
+          <span id="tools-status-text" class="status-text success">Tool calling ready</span>
+        </div>
+
+        <!-- Available Tools -->
+        <div class="tools-info">
+          <div class="section-subtitle">Available Tools</div>
+          <div class="tool-chips">
+            <div class="tool-chip">📅 get_time</div>
+            <div class="tool-chip">🔢 calculate</div>
+          </div>
+        </div>
+
+        <!-- Messages area -->
+        <div id="tools-messages" class="messages">
+          <div class="empty-state">
+            <div class="empty-icon">🔧</div>
+            <div class="empty-title">Function calling demo</div>
+            <div class="empty-sub">Try: "What time is it in Tokyo?" or "Calculate 42 * 137"</div>
+          </div>
+        </div>
+
+        <!-- Input bar -->
+        <div class="input-bar">
+          <textarea id="tools-input" class="prompt-input" placeholder="Ask about time or calculations..." rows="1" disabled></textarea>
+          <button id="tools-send-btn" class="send-btn" onclick="sendToolsMessage()" disabled>↑</button>
+        </div>
+      </div>
+
+      <!-- RAG Tab -->
+      <div id="tab-rag" class="tab-panel">
+        <header class="top-bar">
+          <h2 class="top-title">RAG</h2>
+          <div class="top-actions">
+            <button class="icon-btn" onclick="resetRagChat()" title="Clear">🔄</button>
+          </div>
+        </header>
+
+        <!-- Status bar -->
+        <div class="status-bar">
+          <span id="rag-status-text" class="status-text">Load documents to start</span>
+        </div>
+
+        <!-- Document area -->
+        <div class="rag-docs-area">
+          <div class="section-subtitle">Knowledge Base</div>
+          <div id="rag-docs-list" class="rag-docs-list">
+            <div class="rag-empty">No documents loaded</div>
+          </div>
+          <button class="btn-secondary" onclick="document.getElementById('rag-file-input').click()">
+            📄 Load Document
+          </button>
+          <input type="file" id="rag-file-input" accept=".txt,.md" style="display: none" onchange="loadRagDocument(event)">
+        </div>
+
+        <!-- Messages area -->
+        <div id="rag-messages" class="messages">
+          <div class="empty-state">
+            <div class="empty-icon">📚</div>
+            <div class="empty-title">Document Q&A</div>
+            <div class="empty-sub">Upload a text file and ask questions about it</div>
+          </div>
+        </div>
+
+        <!-- Input bar -->
+        <div class="input-bar">
+          <textarea id="rag-input" class="prompt-input" placeholder="Ask about your documents..." rows="1" disabled></textarea>
+          <button id="rag-send-btn" class="send-btn" onclick="sendRagMessage()" disabled>↑</button>
+        </div>
+      </div>
+
       <!-- Vision Tab -->
       <div id="tab-vision" class="tab-panel">
+        <header class="top-bar">
+          <h2 class="top-title">Vision</h2>
+          <div class="top-actions">
+            <button id="vision-camera-btn" class="icon-btn" onclick="toggleCamera()" title="Toggle Camera">📷</button>
+          </div>
+        </header>
         <div class="vision-container">
           <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+          <canvas id="camera-canvas" class="camera-canvas hidden"></canvas>
           <div id="vision-overlay" class="vision-overlay">
             <div class="overlay-content">
               <div class="overlay-icon">📷</div>
-              <p id="vision-status">Camera vision requires a device with WebGPU support</p>
+              <p id="vision-status">Camera vision requires WebGPU support</p>
+              <button class="btn-secondary" onclick="toggleCamera()">Enable Camera</button>
             </div>
           </div>
           <div id="vision-description" class="vision-description hidden">
@@ -141,6 +253,27 @@
             <div class="slider-hints"><span>Short</span><span>Long</span></div>
           </div>
 
+          <!-- Runtime Supervision -->
+          <div class="section-title">RUNTIME SUPERVISION</div>
+          <div class="settings-card">
+            <div class="toggle-row">
+              <span class="row-icon">🎯</span>
+              <span class="row-label">Cloud Handoff</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="handoff-toggle" onchange="updateHandoffThreshold()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="divider"></div>
+            <div class="slider-row">
+              <span class="row-icon">📊</span>
+              <span class="row-label">Confidence Threshold</span>
+              <span id="confidence-value" class="slider-value">0.7</span>
+            </div>
+            <input type="range" id="confidence-slider" class="slider" min="0.1" max="1.0" step="0.05" value="0.7" oninput="document.getElementById('confidence-value').textContent=this.value" disabled>
+            <div class="slider-hints"><span>Strict</span><span>Lenient</span></div>
+          </div>
+
           <!-- About -->
           <div class="section-title">ABOUT</div>
           <div class="settings-card">
@@ -161,6 +294,9 @@
     <!-- Bottom tabs -->
     <nav class="tab-bar">
       <button class="tab active" data-tab="chat" onclick="switchTab('chat')"><span class="tab-icon">💬</span><span class="tab-label">Chat</span></button>
+      <button class="tab" data-tab="voice" onclick="switchTab('voice')"><span class="tab-icon">🎤</span><span class="tab-label">Voice</span></button>
+      <button class="tab" data-tab="tools" onclick="switchTab('tools')"><span class="tab-icon">🔧</span><span class="tab-label">Tools</span></button>
+      <button class="tab" data-tab="rag" onclick="switchTab('rag')"><span class="tab-icon">📚</span><span class="tab-label">RAG</span></button>
       <button class="tab" data-tab="vision" onclick="switchTab('vision')"><span class="tab-icon">📷</span><span class="tab-label">Vision</span></button>
       <button class="tab" data-tab="settings" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span><span class="tab-label">Settings</span></button>
     </nav>
@@ -183,6 +319,29 @@
       </div>
       <div class="modal-section-title">AVAILABLE MODELS</div>
       <div id="model-list"></div>
+    </div>
+  </div>
+
+  <!-- Benchmark modal -->
+  <div id="benchmark-modal" class="modal hidden" onclick="hideBenchmarkModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-handle"></div>
+      <div class="modal-title-row">
+        <h3 class="modal-title">Benchmark</h3>
+        <button class="icon-btn" onclick="hideBenchmarkModal()">✕</button>
+      </div>
+      <div class="benchmark-content">
+        <div id="benchmark-progress" class="benchmark-progress hidden">
+          <div class="progress-text">Running benchmark... <span id="benchmark-run">0/10</span></div>
+          <div class="progress-bar-bg"><div id="benchmark-bar" class="progress-bar-fill"></div></div>
+        </div>
+        <div id="benchmark-results" class="benchmark-results hidden">
+          <div class="result-row"><span>Average TTFT</span><span id="result-ttft">-</span></div>
+          <div class="result-row"><span>Average Speed</span><span id="result-speed">-</span></div>
+          <div class="result-row"><span>Average Tokens</span><span id="result-tokens">-</span></div>
+        </div>
+        <button id="run-benchmark-btn" class="btn-primary-modal" onclick="startBenchmark()">Run 10 Iterations</button>
+      </div>
     </div>
   </div>
 
