@@ -25,8 +25,8 @@ Voice journal with speech-to-text, auto-summarization, and semantic search -- re
 
 1. Clone the repo and navigate to the example:
    ```bash
-   git clone <repo-url>
-   cd edge/examples/voice_journal
+   git clone https://github.com/ramanujammv1988/edge-veda.git
+   cd edge-veda/examples/voice_journal
    ```
 
 2. Install dependencies:
@@ -60,11 +60,11 @@ Three separate `EdgeVeda`/`WhisperSession` instances run independently, one per 
 
 | Model | Size | Purpose |
 |-------|------|---------|
-| whisper-base.en | 148 MB | Speech-to-text |
+| whisper-tiny.en | 77 MB | Speech-to-text |
 | Llama 3.2 1B | 636 MB | Summarization |
 | all-MiniLM-L6-v2 | 46 MB | Semantic search (384-dim vectors) |
 
-Total first-run download: ~830 MB
+Total first-run download: ~759 MB
 
 ## Adapting for Your App
 

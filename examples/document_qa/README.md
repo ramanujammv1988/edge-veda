@@ -27,8 +27,8 @@ On-device document Q&A powered by RAG -- ask questions about any PDF or text fil
 
 1. Clone the repo and navigate to the example:
    ```bash
-   git clone <repo-url>
-   cd edge/examples/document_qa
+   git clone https://github.com/ramanujammv1988/edge-veda.git
+   cd edge-veda/examples/document_qa
    ```
 
 2. Install dependencies:
