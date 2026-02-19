@@ -567,9 +567,10 @@ class EdgeVeda private constructor(
     override fun close() {
         if (closed.compareAndSet(false, true)) {
             try {
-                // Unregister lifecycle callbacks
+                // Unregister lifecycle callbacks and cancel any pending launched coroutines
                 unregisterLifecycleCallbacks()
-                
+                lifecycleScope.cancel()
+
                 if (initialized.get()) {
                     nativeBridge.unloadModel()
                     initialized.set(false)

@@ -4,6 +4,7 @@ import com.edgeveda.sdk.internal.NativeBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * WhisperSession - Persistent speech-to-text (STT) inference manager
@@ -37,20 +38,20 @@ import org.json.JSONObject
  * ```
  */
 class WhisperSession {
-    private var _isInitialized = false
-    private var backend = ""
+    private val _isInitialized = AtomicBoolean(false)
+    @Volatile private var backend = ""
 
     /**
      * Whether the whisper context is initialized and ready
      */
     val isInitialized: Boolean
-        @Synchronized get() = _isInitialized
+        get() = _isInitialized.get()
 
     /**
      * Backend name (e.g., "Metal", "CPU")
      */
     val backendName: String
-        @Synchronized get() = backend
+        get() = backend
 
     /**
      * Initialize the whisper context with STT model
@@ -62,8 +63,8 @@ class WhisperSession {
      * @return Backend name (e.g., "Metal", "CPU")
      * @throws EdgeVedaException if initialization fails
      */
-    suspend fun initialize(config: WhisperConfig): String = withContext(Dispatchers.IO) {
-        if (_isInitialized) {
+    suspend fun initialize(config: WhisperConfig): String = withContext(Dispatchers.Default) {
+        if (!_isInitialized.compareAndSet(false, true)) {
             throw EdgeVedaException.InvalidConfiguration(
                 "WhisperSession already initialized"
             )
@@ -77,11 +78,12 @@ class WhisperSession {
             }.toString()
 
             backend = NativeBridge.initWhisper(configJson)
-            _isInitialized = true
             backend
         } catch (e: EdgeVedaException) {
+            _isInitialized.set(false) // rollback on failure
             throw e
         } catch (e: Exception) {
+            _isInitialized.set(false) // rollback on failure
             throw EdgeVedaException.ModelLoadError(
                 "Failed to initialize whisper context: ${e.message}",
                 e
@@ -104,9 +106,9 @@ class WhisperSession {
     suspend fun transcribe(
         pcmSamples: FloatArray,
         params: WhisperTranscribeParams = WhisperTranscribeParams()
-    ): WhisperResult = withContext(Dispatchers.IO) {
-        if (!_isInitialized) {
-            throw EdgeVedaException.ModelLoadError(
+    ): WhisperResult = withContext(Dispatchers.Default) {
+        if (!_isInitialized.get()) {
+            throw EdgeVedaException.InvalidConfiguration(
                 "WhisperSession not initialized. Call initialize() first."
             )
         }
@@ -158,14 +160,14 @@ class WhisperSession {
      *
      * @throws EdgeVedaException if cleanup fails
      */
-    suspend fun cleanup() = withContext(Dispatchers.IO) {
-        if (!_isInitialized) {
+    suspend fun cleanup() = withContext(Dispatchers.Default) {
+        if (!_isInitialized.get()) {
             return@withContext
         }
 
         try {
             NativeBridge.freeWhisper()
-            _isInitialized = false
+            _isInitialized.set(false)
             backend = ""
         } catch (e: Exception) {
             throw EdgeVedaException.NativeError(

@@ -37,13 +37,11 @@ class CancelToken {
      * Notifies all registered listeners synchronously.
      */
     fun cancel() {
-        lock.withLock {
-            if (_isCancelled.getAndSet(true)) return
-            val listeners = _listeners.toList()
-            lock.unlock()
-            listeners.forEach { it() }
-            lock.lock()
-        }
+        if (_isCancelled.getAndSet(true)) return
+        // Collect listeners under the lock, then invoke them outside to avoid
+        // holding the lock while calling arbitrary code (and to stay exception-safe).
+        val listeners = lock.withLock { _listeners.toList() }
+        listeners.forEach { it() }
     }
 
     /**
@@ -51,15 +49,12 @@ class CancelToken {
      * If already cancelled, the listener is called immediately.
      */
     fun addListener(listener: () -> Unit) {
-        lock.withLock {
-            if (_isCancelled.get()) {
-                lock.unlock()
-                listener()
-                lock.lock()
-            } else {
-                _listeners.add(listener)
-            }
+        // Determine under the lock whether to call immediately or enqueue.
+        val callNow = lock.withLock {
+            if (_isCancelled.get()) true
+            else { _listeners.add(listener); false }
         }
+        if (callNow) listener()
     }
 
     /**
@@ -553,21 +548,20 @@ class ModelManager(private val context: Context) {
 
     /** Save model metadata to disk */
     private fun saveModelMetadata(model: DownloadableModelInfo) {
-        val metadataFile = File(getModelsDirectory(), "${model.id}_$METADATA_FILE_NAME")
-        val json = """
-            {
-                "id": "${model.id}",
-                "name": "${model.name}",
-                "sizeBytes": ${model.sizeBytes},
-                "description": ${if (model.description != null) "\"${model.description}\"" else "null"},
-                "downloadUrl": "${model.downloadUrl}",
-                "checksum": ${if (model.checksum != null) "\"${model.checksum}\"" else "null"},
-                "format": "${model.format}",
-                "quantization": ${if (model.quantization != null) "\"${model.quantization}\"" else "null"},
-                "downloadedAt": "${java.time.Instant.now()}"
-            }
-        """.trimIndent()
-        metadataFile.writeText(json)
+        // Use JSONObject for safe serialization — avoids malformed JSON when
+        // field values contain quotes, backslashes, or control characters.
+        val json = org.json.JSONObject().apply {
+            put("id", model.id)
+            put("name", model.name)
+            put("sizeBytes", model.sizeBytes)
+            putOpt("description", model.description)
+            put("downloadUrl", model.downloadUrl)
+            putOpt("checksum", model.checksum)
+            put("format", model.format)
+            putOpt("quantization", model.quantization)
+            put("downloadedAt", java.time.Instant.now().toString())
+        }.toString(2)
+        File(getModelsDirectory(), "${model.id}_$METADATA_FILE_NAME").writeText(json)
     }
 
     /** Delete model metadata */

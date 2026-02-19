@@ -8,7 +8,6 @@ import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.Date
 
 /**
  * Tracks battery drain rate for budget enforcement.
@@ -178,8 +177,8 @@ class BatteryDrainTracker(
         if (isTracking) return
         isTracking = true
 
-        // Record initial sample synchronously if possible
-        runBlocking(Dispatchers.Default) {
+        // Record initial sample asynchronously on the tracker's own scope
+        scope.launch {
             mutex.withLock { recordSampleInternal() }
         }
 
