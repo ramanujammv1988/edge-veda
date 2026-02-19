@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** Phase 22 Intent Engine Demo in progress. 22-01 and 22-02 complete, 22-03 pending.
+**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-01 complete (sd.cpp submodule + C API).
 
 ## Current Position
 
-Phase: 22 (Intent Engine Demo)
-Plan: 22-01 and 22-02 complete, 22-03 pending
+Phase: 23 (Add Image Generation Capabilities)
+Plan: 23-01 complete (1/4 plans done)
 Status: **In Progress**
-Last activity: 2026-02-19 - Completed 22-02: Dashboard UI (device cards, chat interface, action log)
+Last activity: 2026-02-19 - Completed 23-01: stable-diffusion.cpp submodule + ev_image_* C API
 
-Progress: [##################__] ~94% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 2/3 complete)
+Progress: [###################_] ~96% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 1/4 complete)
 
 ## Milestone Summary
 
@@ -170,11 +170,18 @@ Phase 21 (Standalone Sample Apps) - IN PROGRESS
   21-03 (Voice Journal) DONE
   Depends on: Phase 16 (RagPipeline, VectorIndex, embed(), ConfidenceInfo)
 
-Phase 22 (Intent Engine Demo) - IN PROGRESS
+Phase 22 (Intent Engine Demo) - COMPLETE
   22-01 (Service Layer: Models, Intent Service, HA Connector) DONE
   22-02 (Dashboard UI) DONE
-  22-03 (Validation) PENDING
+  22-03 (Validation + Human Verification) DONE
   Depends on: Phase 15 (ToolDefinition, ToolRegistry, sendWithTools, ChatTemplateFormat.qwen3)
+
+Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
+  23-01 (Submodule + C API) DONE
+  23-02 (FFI Bindings + XCFramework) PENDING
+  23-03 (ImageWorker Isolate + Dart API) PENDING
+  23-04 (Demo Screen + Human Verification) PENDING
+  Depends on: Phase 14 (submodule integration pattern)
 ```
 
 ## Remaining Work
@@ -188,6 +195,19 @@ Phase 22 (Intent Engine Demo) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Phase 23 Plan 1 decisions:
+- sd.cpp CMake target is 'stable-diffusion' (not 'sd'), linked with target_link_libraries PRIVATE
+- Shared ggml via if(NOT TARGET ggml) check in sd.cpp CMakeLists (no SD_USE_SYSTEM_GGML needed)
+- Thread-local g_active_image_ctx for progress callback bridge (sd_set_progress_callback is global, not per-context)
+- vae_decode_only=true + free_params_immediately=true for text-to-image only (saves memory)
+- Pixel data copied from sd.cpp into malloc'd buffer (clean ownership -- caller frees via ev_image_free_result)
+- SD_METAL=ON on Apple platforms; flash_attn + diffusion_flash_attn enabled when GPU active
+- iOS simulator forces CPU-only via #if TARGET_OS_SIMULATOR guard (same as whisper_engine.cpp)
+
+Phase 22 Plan 3 decisions:
+- README follows established sample app pattern (SDK Features, Quick Start, Architecture table, Adapting for Your App)
+- Human verification approved: all 9 phase success criteria confirmed on real iPhone device
 
 Phase 22 Plan 2 decisions:
 - Command interface pattern (single assistant response area, not full chat history) -- home control, not chat app
@@ -473,9 +493,9 @@ v1.1:
 
 ## Session Continuity
 
-Last session: 2026-02-19T00:04Z
-Stopped at: Completed 22-02-PLAN.md (Dashboard UI: device cards, chat interface, action log)
-Resume file: None
+Last session: 2026-02-19
+Stopped at: Completed 23-01-PLAN.md (sd.cpp submodule + ev_image_* C API)
+Resume file: .planning/phases/23-add-image-generation-capabilities/23-02-PLAN.md
 
 ---
 ### Roadmap Evolution
@@ -488,5 +508,6 @@ Resume file: None
 - Phase 20 added: Smart Model Advisor -- device-aware model recommendations with 4D scoring (fit, quality, speed, context), MemoryEstimator with calibrated bytes-per-parameter formulas, ModelAdvisor with use-case weighted scoring, optimal EdgeVedaConfig generation. Inspired by llm-checker.
 - Phase 21 added: Standalone Sample Apps -- 3 clone-and-run Flutter apps (Document Q&A, Health Advisor + RAG, Voice Journal with STT) for developer adoption
 - Phase 22 added: On-Device Intent Engine Demo -- Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, Home Assistant connector architecture
+- Phase 23 added: Add image generation capabilities
 
 *Phase 20 (Smart Model Advisor) COMPLETE: DeviceProfile with 27-entry iPhone DB, MemoryEstimator calibrated to real-world 400-550MB data, ModelAdvisor 4D scoring (fit/quality/speed/context) with use-case weighted recommendations. Settings screen shows tier badge + Recommended Models section with use-case selector chips and scored model cards. Human verified on real iPhone. Android work (Phases 5, 6, 7) deferred.*
