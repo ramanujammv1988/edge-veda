@@ -35,8 +35,11 @@ actor ResourceMonitor {
     // MARK: - Public Properties
     
     /// Current RSS (Resident Set Size) in megabytes.
+    ///
+    /// Returns the most recently sampled value without triggering a Mach `task_info`
+    /// syscall on every read. Call `sample()` explicitly when a fresh reading is needed
+    /// (e.g. at the start of a budget-check cycle).
     var currentRssMb: Double {
-        updateMemoryUsage()
         return samples.last ?? 0.0
     }
     

@@ -8,6 +8,11 @@ import Foundation
 actor LatencyTracker {
     private var samples: [Double] = []
     private let maxSamples = 100
+
+    // Sorted cache with dirty flag — rebuilt lazily on the first percentile access
+    // after new data arrives, instead of sorting on every p50/p95/p99 call.
+    private var sortedCache: [Double] = []
+    private var dirty = false
     
     /// Total number of samples recorded.
     var sampleCount: Int {
@@ -17,11 +22,13 @@ actor LatencyTracker {
     /// Record a latency sample in milliseconds.
     func record(_ latencyMs: Double) {
         samples.append(latencyMs)
-        
+
         // Keep only most recent samples
         if samples.count > maxSamples {
             samples.removeFirst()
         }
+
+        dirty = true
     }
     
     /// Get the 50th percentile (median) latency.
@@ -56,18 +63,27 @@ actor LatencyTracker {
     }
     
     /// Calculate a specific percentile.
+    ///
+    /// The sorted list is rebuilt only when `dirty` is set (i.e. after a new `record()` call),
+    /// avoiding an O(n log n) sort on every p50/p95/p99 access.
     private func percentile(_ p: Double) -> Double {
         guard !samples.isEmpty else { return 0.0 }
-        
-        let sorted = samples.sorted()
-        let index = Int((Double(sorted.count) * p).rounded(.down))
-        let safeIndex = Swift.min(index, sorted.count - 1)
-        
-        return sorted[safeIndex]
+
+        if dirty {
+            sortedCache = samples.sorted()
+            dirty = false
+        }
+
+        let index = Int((Double(sortedCache.count) * p).rounded(.down))
+        let safeIndex = Swift.min(index, sortedCache.count - 1)
+
+        return sortedCache[safeIndex]
     }
-    
+
     /// Reset all samples.
     func reset() {
         samples.removeAll()
+        sortedCache = []
+        dirty = false
     }
 }

@@ -16,11 +16,15 @@ internal enum FFIBridge {
     private static let cMemoryCallback: ev_memory_pressure_callback = { userDataPtr, currentBytes, limitBytes in
         guard let userDataPtr = userDataPtr else { return }
         
-        callbackLock.lock()
-        let key = NSValue(pointer: userDataPtr)
-        let callbackObj = memoryCallbacks.object(forKey: key) as? (UInt64, UInt64) -> Void
-        callbackLock.unlock()
-        
+        // Scope the lock with a do-block so defer fires before the callback is invoked.
+        // This is exception-safe (unlock always runs) and deadlock-safe (callback runs outside lock).
+        let callbackObj: ((UInt64, UInt64) -> Void)?
+        do {
+            callbackLock.lock()
+            defer { callbackLock.unlock() }
+            let key = NSValue(pointer: userDataPtr)
+            callbackObj = memoryCallbacks.object(forKey: key) as? (UInt64, UInt64) -> Void
+        }
         callbackObj?(UInt64(currentBytes), UInt64(limitBytes))
     }
 
@@ -44,11 +48,9 @@ internal enum FFIBridge {
         kvCacheTypeV: Int
     ) throws -> ev_context {
         var config = ev_config()
-        
-        // Set configuration
-        modelPath.withCString { pathPtr in
-            config.model_path = pathPtr
-        }
+
+        // Set configuration (model_path is set inside the withCString scope below;
+        // do not assign it here where the pointer would immediately become dangling)
         config.backend = backend.cValue
         config.num_threads = Int32(threads)
         config.context_size = Int32(contextSize)
@@ -138,17 +140,22 @@ internal enum FFIBridge {
         
         // Call C function with grammar support
         if let grammarStr = grammarStr {
+            // Nest grammarRoot.withCString inside grammarStr's scope so the pointer
+            // remains valid for the entire duration of the ev_generate call.
             error = grammarStr.withCString { grammarPtr in
-                let grammarRootPtr = grammarRoot?.withCString { $0 } ?? nil
-                return prompt.withCString { promptPtr in
-                    cStopSequences.withUnsafeBufferPointer { stopPtr in
-                        var mutableParams = params
-                        mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
-                        mutableParams.grammar_str = grammarPtr
-                        mutableParams.grammar_root = grammarRootPtr
-                        return ev_generate(ctx, promptPtr, &mutableParams, &output)
+                let invoke: (UnsafePointer<CChar>?) -> ev_error_t = { grammarRootPtr in
+                    prompt.withCString { promptPtr in
+                        cStopSequences.withUnsafeBufferPointer { stopPtr in
+                            var mutableParams = params
+                            mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                            mutableParams.grammar_str = grammarPtr
+                            mutableParams.grammar_root = grammarRootPtr
+                            return ev_generate(ctx, promptPtr, &mutableParams, &output)
+                        }
                     }
                 }
+                if let root = grammarRoot { return root.withCString { invoke($0) } }
+                else { return invoke(nil) }
             }
         } else {
             error = prompt.withCString { promptPtr in
@@ -220,17 +227,22 @@ internal enum FFIBridge {
         // Start streaming with grammar support
         let stream: ev_stream?
         if let grammarStr = grammarStr {
+            // Nest grammarRoot.withCString inside grammarStr's scope so the pointer
+            // remains valid for the entire duration of the ev_generate_stream call.
             stream = grammarStr.withCString { grammarPtr in
-                let grammarRootPtr = grammarRoot?.withCString { $0 } ?? nil
-                return prompt.withCString { promptPtr in
-                    cStopSequences.withUnsafeBufferPointer { stopPtr in
-                        var mutableParams = params
-                        mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
-                        mutableParams.grammar_str = grammarPtr
-                        mutableParams.grammar_root = grammarRootPtr
-                        return ev_generate_stream(ctx, promptPtr, &mutableParams, &error)
+                let invoke: (UnsafePointer<CChar>?) -> ev_stream? = { grammarRootPtr in
+                    prompt.withCString { promptPtr in
+                        cStopSequences.withUnsafeBufferPointer { stopPtr in
+                            var mutableParams = params
+                            mutableParams.stop_sequences = UnsafeMutablePointer(mutating: stopPtr.baseAddress)
+                            mutableParams.grammar_str = grammarPtr
+                            mutableParams.grammar_root = grammarRootPtr
+                            return ev_generate_stream(ctx, promptPtr, &mutableParams, &error)
+                        }
                     }
                 }
+                if let root = grammarRoot { return root.withCString { invoke($0) } }
+                else { return invoke(nil) }
             }
         } else {
             stream = prompt.withCString { promptPtr in
@@ -369,8 +381,11 @@ internal enum FFIBridge {
         params.translate = translate
         params.reserved = nil
 
-        var result: ev_whisper_result? = nil
-        
+        // Use a non-optional struct — matches the C output-parameter convention
+        // (same pattern as ev_embed_result in embed()). &result gives
+        // UnsafeMutablePointer<ev_whisper_result> as the C function expects.
+        var result = ev_whisper_result()
+
         let error: ev_error_t
         if let language = language {
             error = language.withCString { langPtr in
@@ -399,12 +414,12 @@ internal enum FFIBridge {
                 )
             }
         }
-        
-        guard error == EV_SUCCESS, let result = result else {
+
+        guard error == EV_SUCCESS else {
             throw mapWhisperError(error)
         }
-        
-        defer { ev_whisper_free_result(result) }
+
+        defer { ev_whisper_free_result(&result) }
         
         // Convert segments to Swift array
         var segments: [(text: String, startMs: Int64, endMs: Int64)] = []
