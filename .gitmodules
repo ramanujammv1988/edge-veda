@@ -4,3 +4,6 @@
 [submodule "core/third_party/whisper.cpp"]
 	path = core/third_party/whisper.cpp
 	url = https://github.com/ggml-org/whisper.cpp.git
+[submodule "core/third_party/stable-diffusion.cpp"]
+	path = core/third_party/stable-diffusion.cpp
+	url = https://github.com/leejet/stable-diffusion.cpp.git

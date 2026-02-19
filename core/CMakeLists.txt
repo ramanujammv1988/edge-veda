@@ -81,6 +81,7 @@ set(EDGE_VEDA_SOURCES
     src/memory_guard.cpp
     src/vision_engine.cpp
     src/whisper_engine.cpp
+    src/image_engine.cpp
 )
 
 # Header files
@@ -191,6 +192,27 @@ else()
     set(WHISPER_CPP_AVAILABLE FALSE)
 endif()
 
+# Include stable-diffusion.cpp as subdirectory (MUST come AFTER llama.cpp so ggml targets exist)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/stable-diffusion.cpp/CMakeLists.txt")
+    # stable-diffusion.cpp checks `if (NOT TARGET ggml)` and skips building its own ggml
+    # when the ggml target already exists from llama.cpp above.
+    # Setting SD_USE_SYSTEM_GGML is a fallback in case the target check changes.
+    set(SD_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+    # Metal configuration for sd.cpp on Apple platforms
+    if(IOS OR MACOS)
+        set(SD_METAL ON CACHE BOOL "" FORCE)
+    endif()
+
+    add_subdirectory(third_party/stable-diffusion.cpp)
+    set(SD_CPP_AVAILABLE TRUE)
+else()
+    message(WARNING "stable-diffusion.cpp not found in third_party/stable-diffusion.cpp - image generation disabled")
+    set(SD_CPP_AVAILABLE FALSE)
+endif()
+
 # Create library target
 if(EDGE_VEDA_BUILD_SHARED)
     add_library(edge_veda SHARED ${EDGE_VEDA_SOURCES} ${EDGE_VEDA_HEADERS})
@@ -237,6 +259,15 @@ function(configure_edge_veda_target target_name)
         target_compile_definitions(${target_name} PRIVATE EDGE_VEDA_WHISPER_ENABLED)
         target_include_directories(${target_name} PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/whisper.cpp/include
+        )
+    endif()
+
+    # Link stable-diffusion.cpp if available (shares ggml from llama.cpp)
+    if(SD_CPP_AVAILABLE)
+        target_link_libraries(${target_name} PRIVATE stable-diffusion)
+        target_compile_definitions(${target_name} PRIVATE EDGE_VEDA_SD_ENABLED)
+        target_include_directories(${target_name} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stable-diffusion.cpp/include
         )
     endif()
 
@@ -347,4 +378,5 @@ message(STATUS "  Vulkan backend: ${EDGE_VEDA_ENABLE_VULKAN}")
 message(STATUS "  CPU backend: ${EDGE_VEDA_ENABLE_CPU}")
 message(STATUS "  llama.cpp available: ${LLAMA_CPP_AVAILABLE}")
 message(STATUS "  whisper.cpp available: ${WHISPER_CPP_AVAILABLE}")
+message(STATUS "  stable-diffusion.cpp available: ${SD_CPP_AVAILABLE}")
 message(STATUS "")
