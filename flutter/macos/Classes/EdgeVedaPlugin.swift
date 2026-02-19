@@ -4,6 +4,7 @@ import AVFoundation
 import Photos
 import EventKit
 import IOKit.ps
+import os
 
 // MARK: - ThermalStreamHandler
 
