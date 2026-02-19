@@ -200,22 +200,13 @@ export async function loadWasmModule(
       ...importObject,
     };
 
-    // Compile and instantiate
-    let instance: WebAssembly.Instance;
-    let module: WebAssembly.Module;
-
-    if (WebAssembly.instantiateStreaming) {
-      // Use streaming compilation if available
-      const newResponse = await fetch(wasmPath);
-      const result = await WebAssembly.instantiateStreaming(newResponse, imports);
-      instance = result.instance;
-      module = result.module;
-    } else {
-      // Fallback to regular instantiation
-      const result = await WebAssembly.instantiate(wasmBytes, imports);
-      instance = result.instance;
-      module = result.module;
-    }
+    // Compile and instantiate using already-downloaded bytes.
+    // (instantiateStreaming is intentionally not used here because the WASM
+    // binary was already fetched above for progress tracking — using it would
+    // trigger a second download of a potentially multi-hundred-MB file.)
+    const result = await WebAssembly.instantiate(wasmBytes, imports);
+    const instance = result.instance;
+    const module = result.module;
 
     return {
       instance,

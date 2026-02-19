@@ -220,17 +220,17 @@ async function generate(message: WorkerGenerateMessage): Promise<void> {
       // Allocate memory for prompt
       const encoder = new TextEncoder();
       const promptBytes = encoder.encode(prompt);
-      const promptPtr = exports.malloc(promptBytes.length);
+      const promptPtr = exports.malloc(promptBytes.length) as number;
 
       const wasmMemory = new Uint8Array(state.wasmModule.memory.buffer);
       wasmMemory.set(promptBytes, promptPtr);
 
-      // Allocate output buffer
-      const outputBufferSize = maxTokens * 4; // Approximate
-      const outputPtr = exports.malloc(outputBufferSize);
+      // Allocate output buffer (4 bytes per token, UTF-8 worst case)
+      const outputBufferSize = maxTokens * 4;
+      const outputPtr = exports.malloc(outputBufferSize) as number;
 
-      // Call generate function
-      tokensGenerated = exports.generate(
+      // generate() returns an error code (0 = success), NOT a token count
+      const errorCode = exports.generate(
         promptPtr,
         promptBytes.length,
         outputPtr,
@@ -239,16 +239,20 @@ async function generate(message: WorkerGenerateMessage): Promise<void> {
         temperature,
         topP,
         topK
-      );
+      ) as number;
 
-      // Read generated text
-      const decoder = new TextDecoder();
-      const outputBytes = new Uint8Array(
-        state.wasmModule.memory.buffer,
-        outputPtr,
-        tokensGenerated * 4
-      );
-      generatedText = decoder.decode(outputBytes);
+      if (errorCode !== 0) {
+        exports.free(promptPtr);
+        exports.free(outputPtr);
+        throw new Error(`WASM generate failed: error code ${errorCode}`);
+      }
+
+      // Read null-terminated UTF-8 string from outputPtr
+      const memView = new Uint8Array(state.wasmModule.memory.buffer);
+      let end = outputPtr;
+      while (end < memView.length && memView[end] !== 0) end++;
+      generatedText = new TextDecoder().decode(memView.subarray(outputPtr, end));
+      tokensGenerated = generatedText.split(/\s+/).filter(Boolean).length;
 
       // Free memory
       exports.free(promptPtr);

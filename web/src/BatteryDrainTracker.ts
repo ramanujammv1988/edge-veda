@@ -64,6 +64,7 @@ export class BatteryDrainTracker {
   private _lastKnownLevel: number | null = null;
   private batteryManager: BatteryManager | null = null;
   private levelChangeHandler: EventListener | null = null;
+  private _destroyed = false;
 
   constructor() {
     // Attempt to use Battery Status API
@@ -210,6 +211,7 @@ export class BatteryDrainTracker {
 
   /** Stop tracking and release resources. */
   destroy(): void {
+    this._destroyed = true;
     if (this.batteryManager && this.levelChangeHandler) {
       this.batteryManager.removeEventListener('levelchange', this.levelChangeHandler);
       this.levelChangeHandler = null;
@@ -230,6 +232,7 @@ export class BatteryDrainTracker {
         nav
           .getBattery()
           .then((manager: BatteryManager) => {
+            if (this._destroyed) return;
             this.batteryManager = manager;
             this._isSupported = true;
 

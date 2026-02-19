@@ -1,15 +1,16 @@
 /**
- * NativeErrorCode — Maps C core / WASM ev_error_* integer codes to EdgeVedaError instances.
+ * NativeErrorCode — Maps C core / WASM ev_error_t integer codes to EdgeVedaError instances.
  *
  * When using the WASM backend, the compiled C core returns integer error codes
  * from its exported functions. This module provides a TypeScript enum mirroring
  * those codes and conversion utilities that translate them into typed
  * EdgeVedaError instances with appropriate EdgeVedaErrorCode values.
  *
- * Integer mapping (from core/include/edge_veda.h):
- *   0 = OK, 1 = MODEL_NOT_FOUND, 2 = MODEL_LOAD_FAILED, 3 = OUT_OF_MEMORY,
- *   4 = CONTEXT_OVERFLOW, 5 = INVALID_PARAMETER, 6 = GENERATION_FAILED,
- *   7 = CANCELLED, -1 = UNKNOWN
+ * Integer mapping (from core/include/edge_veda.h — ev_error_t):
+ *   0 = OK, -1 = INVALID_PARAMETER, -2 = OUT_OF_MEMORY, -3 = MODEL_LOAD_FAILED,
+ *   -4 = BACKEND_INIT_FAILED, -5 = INFERENCE_FAILED, -6 = CONTEXT_INVALID,
+ *   -7 = STREAM_ENDED, -8 = NOT_IMPLEMENTED, -9 = MEMORY_LIMIT_EXCEEDED,
+ *   -10 = UNSUPPORTED_BACKEND, -999 = UNKNOWN
  */
 
 import { EdgeVedaError, EdgeVedaErrorCode } from './types';
@@ -20,22 +21,28 @@ import { EdgeVedaError, EdgeVedaErrorCode } from './types';
 export enum NativeErrorCode {
   /** Operation completed successfully */
   OK = 0,
-  /** Model file not found at specified path or URL */
-  MODEL_NOT_FOUND = 1,
-  /** Model failed to load (corrupt, unsupported format, etc.) */
-  MODEL_LOAD_FAILED = 2,
-  /** Insufficient memory (WASM heap or system) to complete operation */
-  OUT_OF_MEMORY = 3,
-  /** Context window capacity exceeded */
-  CONTEXT_OVERFLOW = 4,
   /** Invalid parameter passed to native/WASM function */
-  INVALID_PARAMETER = 5,
-  /** Token generation failed */
-  GENERATION_FAILED = 6,
-  /** Operation was cancelled by user */
-  CANCELLED = 7,
+  INVALID_PARAMETER = -1,
+  /** Insufficient memory (WASM heap or system) to complete operation */
+  OUT_OF_MEMORY = -2,
+  /** Model failed to load (corrupt, unsupported format, etc.) */
+  MODEL_LOAD_FAILED = -3,
+  /** Backend (WebGPU/WASM) failed to initialise */
+  BACKEND_INIT_FAILED = -4,
+  /** Token inference failed */
+  INFERENCE_FAILED = -5,
+  /** KV context is in an invalid state */
+  CONTEXT_INVALID = -6,
+  /** Streaming ended (not an error — signals end of token stream) */
+  STREAM_ENDED = -7,
+  /** Feature not implemented in this build */
+  NOT_IMPLEMENTED = -8,
+  /** Memory limit exceeded */
+  MEMORY_LIMIT_EXCEEDED = -9,
+  /** Requested backend is not supported on this platform */
+  UNSUPPORTED_BACKEND = -10,
   /** Unknown or unmapped error */
-  UNKNOWN = -1,
+  UNKNOWN = -999,
 }
 
 /** Reverse lookup map for O(1) code-to-enum conversion */
@@ -74,18 +81,11 @@ export function nativeErrorToEdgeVedaError(
     case NativeErrorCode.OK:
       return null;
 
-    case NativeErrorCode.MODEL_NOT_FOUND:
+    case NativeErrorCode.INVALID_PARAMETER:
       return new EdgeVedaError(
-        EdgeVedaErrorCode.MODEL_NOT_FOUND,
-        `Model not found${ctx}`,
-        'Verify the model URL is accessible or the model is cached in IndexedDB.'
-      );
-
-    case NativeErrorCode.MODEL_LOAD_FAILED:
-      return new EdgeVedaError(
-        EdgeVedaErrorCode.MODEL_LOAD_FAILED,
-        `Model failed to load${ctx}`,
-        'The model file may be corrupt or in an unsupported format.'
+        EdgeVedaErrorCode.INVALID_CONFIG,
+        `Invalid parameter${ctx}`,
+        'Check that all configuration values are within valid ranges.'
       );
 
     case NativeErrorCode.OUT_OF_MEMORY:
@@ -95,31 +95,57 @@ export function nativeErrorToEdgeVedaError(
         'The WASM heap or browser memory limit was exceeded. Try a smaller model or reduce context size.'
       );
 
-    case NativeErrorCode.CONTEXT_OVERFLOW:
+    case NativeErrorCode.MODEL_LOAD_FAILED:
       return new EdgeVedaError(
-        EdgeVedaErrorCode.CONTEXT_OVERFLOW,
-        `Context overflow${ctx}`,
-        'The input exceeds the model context window. Reset context or reduce input length.'
+        EdgeVedaErrorCode.MODEL_LOAD_FAILED,
+        `Model failed to load${ctx}`,
+        'The model file may be corrupt or in an unsupported format.'
       );
 
-    case NativeErrorCode.INVALID_PARAMETER:
+    case NativeErrorCode.BACKEND_INIT_FAILED:
       return new EdgeVedaError(
-        EdgeVedaErrorCode.INVALID_CONFIG,
-        `Invalid parameter${ctx}`,
-        'Check that all configuration values are within valid ranges.'
+        EdgeVedaErrorCode.UNKNOWN_ERROR,
+        `Backend initialisation failed${ctx}`,
+        'WebGPU or WASM backend could not be initialised. Try falling back to a different device.'
       );
 
-    case NativeErrorCode.GENERATION_FAILED:
+    case NativeErrorCode.INFERENCE_FAILED:
       return new EdgeVedaError(
         EdgeVedaErrorCode.GENERATION_FAILED,
-        `Generation failed${ctx}`,
+        `Inference failed${ctx}`,
         'Token generation encountered an error. Try resetting context.'
       );
 
-    case NativeErrorCode.CANCELLED:
+    case NativeErrorCode.CONTEXT_INVALID:
       return new EdgeVedaError(
-        EdgeVedaErrorCode.CANCELLATION,
-        `Operation cancelled${ctx}`
+        EdgeVedaErrorCode.CONTEXT_OVERFLOW,
+        `Context invalid${ctx}`,
+        'The KV context is in an invalid state. Reset context before retrying.'
+      );
+
+    case NativeErrorCode.STREAM_ENDED:
+      // Not an error — signals natural end of token stream
+      return null;
+
+    case NativeErrorCode.NOT_IMPLEMENTED:
+      return new EdgeVedaError(
+        EdgeVedaErrorCode.UNKNOWN_ERROR,
+        `Feature not implemented${ctx}`,
+        'This feature is not available in the current WASM build.'
+      );
+
+    case NativeErrorCode.MEMORY_LIMIT_EXCEEDED:
+      return new EdgeVedaError(
+        EdgeVedaErrorCode.OUT_OF_MEMORY,
+        `Memory limit exceeded${ctx}`,
+        'The model exceeds available WASM heap. Try a smaller model or reduce context size.'
+      );
+
+    case NativeErrorCode.UNSUPPORTED_BACKEND:
+      return new EdgeVedaError(
+        EdgeVedaErrorCode.UNKNOWN_ERROR,
+        `Unsupported backend${ctx}`,
+        'The requested backend (WebGPU/WASM) is not supported on this platform.'
       );
 
     case NativeErrorCode.UNKNOWN:

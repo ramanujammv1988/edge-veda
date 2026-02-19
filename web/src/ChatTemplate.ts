@@ -29,8 +29,8 @@ export function formatMessages(template: ChatTemplate, messages: ChatMessage[]):
 }
 
 function formatLlama3(messages: ChatMessage[]): string {
-  let prompt = '';
-  
+  let prompt = '<|begin_of_text|>';
+
   for (const message of messages) {
     prompt += `<|start_header_id|>${message.role}<|end_header_id|>\n\n`;
     prompt += `${message.content}<|eot_id|>`;
@@ -57,22 +57,29 @@ function formatChatML(messages: ChatMessage[]): string {
 }
 
 function formatMistral(messages: ChatMessage[]): string {
-  let prompt = '';
-  
+  let prompt = '<s>';
+  let pendingSystem: string | undefined;
+
   for (const message of messages) {
     switch (message.role) {
       case ChatRole.SYSTEM:
-        // Mistral typically includes system messages at the start
-        prompt += `${message.content}\n\n`;
+        pendingSystem = message.content;
         break;
       case ChatRole.USER:
-        prompt += `[INST] ${message.content} [/INST]`;
+        prompt += '[INST]';
+        if (pendingSystem !== undefined) {
+          prompt += ` <<SYS>>\n${pendingSystem}\n<</SYS>>\n\n`;
+          pendingSystem = undefined;
+        } else {
+          prompt += ' ';
+        }
+        prompt += `${message.content} [/INST]`;
         break;
       case ChatRole.ASSISTANT:
         prompt += ` ${message.content}</s>`;
         break;
     }
   }
-  
+
   return prompt;
 }
