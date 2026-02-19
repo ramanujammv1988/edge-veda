@@ -8,6 +8,7 @@ import type {
   WorkerMessageType,
   WorkerInitMessage,
   WorkerGenerateMessage,
+  WorkerSetMemoryLimitMessage,
   EdgeVedaConfig,
   GenerateResult,
   StreamChunk,
@@ -433,6 +434,112 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         });
       }
       break;
+
+    case 'get_memory_usage': {
+      try {
+        const wasmModule = state.wasmModule;
+        let memStats: import('./types').MemoryStats;
+
+        if (wasmModule && typeof wasmModule.exports.ev_get_memory_usage === 'function') {
+          // ev_memory_stats layout on wasm32: 5 × uint32 (size_t = 4 bytes)
+          //   [0] current_bytes, [1] peak_bytes, [2] limit_bytes,
+          //   [3] model_bytes,   [4] context_bytes
+          const STATS_SIZE = 5 * 4;
+          const statsPtr = wasmModule.exports.malloc(STATS_SIZE) as number;
+
+          // Pass 0 as context ptr — WASM implementation returns global stats
+          wasmModule.exports.ev_get_memory_usage(0, statsPtr);
+
+          const u32 = new Uint32Array(wasmModule.memory.buffer);
+          const base = statsPtr >>> 2;
+          const currentBytes = u32[base]!;
+          const peakBytes = u32[base + 1]!;
+          const limitBytes = u32[base + 2]!;
+          const modelBytes = u32[base + 3]!;
+          const contextBytes = u32[base + 4]!;
+
+          wasmModule.exports.free(statsPtr);
+
+          const totalBytes = wasmModule.memory.buffer.byteLength;
+          memStats = {
+            used: currentBytes,
+            total: totalBytes,
+            percentage: totalBytes > 0 ? currentBytes / totalBytes : 0,
+            wasmHeapSize: totalBytes,
+            peakBytes,
+            limitBytes,
+            modelBytes,
+            contextBytes,
+          };
+        } else {
+          // Fallback: report WASM heap size only
+          const heapSize = wasmModule?.memory?.buffer?.byteLength ?? 0;
+          memStats = {
+            used: heapSize,
+            total: heapSize,
+            percentage: heapSize > 0 ? 1 : 0,
+            wasmHeapSize: heapSize,
+          };
+        }
+
+        sendMessage({
+          type: 'memory_usage_response' as WorkerMessageType.MEMORY_USAGE_RESPONSE,
+          id: message.id,
+          memoryStats: memStats,
+        });
+      } catch (error) {
+        sendMessage({
+          type: 'generate_error' as WorkerMessageType.GENERATE_ERROR,
+          id: message.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+      break;
+    }
+
+    case 'set_memory_limit': {
+      const limitMsg = message as WorkerSetMemoryLimitMessage;
+      try {
+        const exports = state.wasmModule?.exports;
+        if (exports && typeof exports.ev_set_memory_limit === 'function') {
+          const result = exports.ev_set_memory_limit(limitMsg.limitBytes) as number;
+          if (result !== 0) {
+            throw new Error(`ev_set_memory_limit failed: error code ${result}`);
+          }
+        }
+        sendMessage({
+          type: 'set_memory_limit_success' as WorkerMessageType.SET_MEMORY_LIMIT_SUCCESS,
+          id: limitMsg.id,
+        });
+      } catch (error) {
+        sendMessage({
+          type: 'generate_error' as WorkerMessageType.GENERATE_ERROR,
+          id: limitMsg.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+      break;
+    }
+
+    case 'memory_cleanup': {
+      try {
+        const exports = state.wasmModule?.exports;
+        if (exports && typeof exports.ev_memory_cleanup === 'function') {
+          exports.ev_memory_cleanup();
+        }
+        sendMessage({
+          type: 'memory_cleanup_success' as WorkerMessageType.MEMORY_CLEANUP_SUCCESS,
+          id: message.id,
+        });
+      } catch (error) {
+        sendMessage({
+          type: 'generate_error' as WorkerMessageType.GENERATE_ERROR,
+          id: message.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+      break;
+    }
 
     case 'terminate':
       // Clean up resources

@@ -129,6 +129,16 @@ export type {
 // Phase 5: Model Management exports
 export { ModelRegistry } from './ModelRegistry';
 
+// Model Advisor — browser capability detection and model recommendation
+export type { BrowserProfile } from './ModelAdvisor';
+export {
+  detectBrowserCapabilities,
+  estimateModelMemory,
+  recommendModels,
+} from './ModelAdvisor';
+
+// Typed exception hierarchy — re-exported via `export * from './types'` above
+
 // Phase 6: Camera Utilities exports
 export { CameraUtils } from './CameraUtils';
 
@@ -159,6 +169,7 @@ export class EdgeVeda {
   private workerRestartCooldownMs = 2000;
   private lastWorkerCrashTime = 0;
   private workerRecoveryInProgress = false;
+  private memoryPressureCallback: ((event: import('./types').MemoryPressureEvent) => void) | null = null;
 
   constructor(config: EdgeVedaConfig) {
     this.config = {
@@ -446,7 +457,7 @@ export class EdgeVeda {
       type: 'get_memory_usage' as WorkerMessageType.GET_MEMORY_USAGE,
     });
 
-    return response.stats;
+    return response.memoryStats;
   }
 
   /**
@@ -524,6 +535,60 @@ export class EdgeVeda {
     });
 
     return response.result;
+  }
+
+  /**
+   * Set a hard memory ceiling in bytes.
+   *
+   * Passes the limit to the WASM module via `ev_set_memory_limit`. The module
+   * will emit a memory-pressure notification (via `setMemoryPressureCallback`)
+   * when usage exceeds ~80 % of the limit.
+   *
+   * @param limitBytes Maximum memory the inference engine may use, in bytes.
+   *   Pass 0 to remove the limit.
+   */
+  async setMemoryLimit(limitBytes: number): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'set_memory_limit' as WorkerMessageType.SET_MEMORY_LIMIT,
+      limitBytes,
+    });
+  }
+
+  /**
+   * Register a callback for memory pressure events.
+   *
+   * The callback is invoked from the main thread whenever the worker posts a
+   * `memory_pressure` notification (triggered when usage exceeds 80 % of the
+   * configured limit). Replaces any previously registered callback.
+   *
+   * Pass `null` to remove the current callback.
+   *
+   * @param callback Called with a `MemoryPressureEvent` when pressure is detected.
+   */
+  setMemoryPressureCallback(
+    callback: ((event: import('./types').MemoryPressureEvent) => void) | null
+  ): void {
+    this.memoryPressureCallback = callback;
+  }
+
+  /**
+   * Ask the WASM engine to release any cached allocations it can safely free.
+   *
+   * Maps to `ev_memory_cleanup`. This is a best-effort operation — the engine
+   * decides which internal buffers to release.
+   */
+  async memoryCleanup(): Promise<void> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    await this.sendWorkerMessage({
+      type: 'memory_cleanup' as WorkerMessageType.MEMORY_CLEANUP,
+    });
   }
 
   /**
@@ -828,6 +893,27 @@ export class EdgeVeda {
       case 'embed_error':
         request.reject(new Error(message.error));
         this.pendingRequests.delete(message.id);
+        break;
+
+      case 'set_memory_limit_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'memory_cleanup_success':
+        request.resolve({});
+        this.pendingRequests.delete(message.id);
+        break;
+
+      case 'memory_pressure':
+        // Pressure notifications are unsolicited — no pending request to resolve
+        if (this.memoryPressureCallback) {
+          try {
+            this.memoryPressureCallback((message as any).event);
+          } catch (error) {
+            console.warn('[EdgeVeda] Error in memory pressure callback:', error);
+          }
+        }
         break;
 
       default:

@@ -311,6 +311,11 @@ export enum WorkerMessageType {
   EMBED = 'embed',
   EMBED_SUCCESS = 'embed_success',
   EMBED_ERROR = 'embed_error',
+  SET_MEMORY_LIMIT = 'set_memory_limit',
+  SET_MEMORY_LIMIT_SUCCESS = 'set_memory_limit_success',
+  MEMORY_CLEANUP = 'memory_cleanup',
+  MEMORY_CLEANUP_SUCCESS = 'memory_cleanup_success',
+  MEMORY_PRESSURE = 'memory_pressure',
 }
 
 /**
@@ -489,6 +494,43 @@ export interface WorkerEmbedErrorMessage extends WorkerMessageBase {
 }
 
 /**
+ * Set memory limit message to worker
+ */
+export interface WorkerSetMemoryLimitMessage extends WorkerMessageBase {
+  type: WorkerMessageType.SET_MEMORY_LIMIT;
+  limitBytes: number;
+}
+
+/**
+ * Set memory limit success response
+ */
+export interface WorkerSetMemoryLimitSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.SET_MEMORY_LIMIT_SUCCESS;
+}
+
+/**
+ * Memory cleanup message to worker
+ */
+export interface WorkerMemoryCleanupMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MEMORY_CLEANUP;
+}
+
+/**
+ * Memory cleanup success response
+ */
+export interface WorkerMemoryCleanupSuccessMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MEMORY_CLEANUP_SUCCESS;
+}
+
+/**
+ * Memory pressure notification from worker
+ */
+export interface WorkerMemoryPressureMessage extends WorkerMessageBase {
+  type: WorkerMessageType.MEMORY_PRESSURE;
+  event: MemoryPressureEvent;
+}
+
+/**
  * Union of all worker messages
  */
 export type WorkerMessage =
@@ -513,7 +555,12 @@ export type WorkerMessage =
   | WorkerTerminateMessage
   | WorkerEmbedMessage
   | WorkerEmbedSuccessMessage
-  | WorkerEmbedErrorMessage;
+  | WorkerEmbedErrorMessage
+  | WorkerSetMemoryLimitMessage
+  | WorkerSetMemoryLimitSuccessMessage
+  | WorkerMemoryCleanupMessage
+  | WorkerMemoryCleanupSuccessMessage
+  | WorkerMemoryPressureMessage;
 
 /**
  * Model metadata stored in cache
@@ -537,15 +584,20 @@ export interface CachedModel {
 
 /**
  * Memory usage statistics
+ *
+ * Core fields (`used`, `total`, `percentage`) are always populated.
+ * Fields that map to C `ev_memory_stats` (`peakBytes`, `limitBytes`,
+ * `modelBytes`, `contextBytes`) are populated when the WASM module
+ * exports `ev_get_memory_usage`.
  */
 export interface MemoryStats {
   /**
-   * Bytes currently used by the model and context
+   * Bytes currently used by the model and context (maps to ev_memory_stats.current_bytes)
    */
   used: number;
 
   /**
-   * Total memory available (estimated)
+   * Total memory available (estimated from browser APIs)
    */
   total: number;
 
@@ -563,6 +615,42 @@ export interface MemoryStats {
    * GPU memory usage if using WebGPU
    */
   gpuMemoryUsage?: number;
+
+  /**
+   * Peak memory usage observed since initialization (ev_memory_stats.peak_bytes)
+   */
+  peakBytes?: number;
+
+  /**
+   * Configured memory ceiling in bytes, 0 = no limit (ev_memory_stats.limit_bytes)
+   */
+  limitBytes?: number;
+
+  /**
+   * Bytes consumed by model weights (ev_memory_stats.model_bytes)
+   */
+  modelBytes?: number;
+
+  /**
+   * Bytes consumed by the KV context cache (ev_memory_stats.context_bytes)
+   */
+  contextBytes?: number;
+}
+
+/**
+ * Event emitted when memory usage crosses a pressure threshold.
+ *
+ * Delivered to callbacks registered via `EdgeVeda.setMemoryPressureCallback()`.
+ */
+export interface MemoryPressureEvent {
+  /** Current memory usage in bytes */
+  currentBytes: number;
+  /** Configured memory limit in bytes */
+  limitBytes: number;
+  /** Ratio of currentBytes to limitBytes (0–1+) */
+  pressureRatio: number;
+  /** Timestamp when the event was generated */
+  timestamp: Date;
 }
 
 /**
@@ -630,6 +718,8 @@ export interface DownloadableModelInfo {
   format: string;
   /** Quantization type (e.g., 'Q4_K_M', 'Q8_0', 'F16') */
   quantization: string;
+  /** Model category — used to group models in the registry */
+  modelType?: 'text' | 'vision' | 'mmproj' | 'whisper' | 'embedding';
 }
 
 /**
@@ -679,6 +769,46 @@ export class EdgeVedaError extends Error {
     this.name = 'EdgeVedaError';
     this.code = code;
     this.details = details;
+  }
+}
+
+/**
+ * Thrown when the EdgeVeda engine fails to initialize (WASM load, backend init, etc.)
+ */
+export class InitializationError extends EdgeVedaError {
+  constructor(message: string, details?: string) {
+    super(EdgeVedaErrorCode.UNKNOWN_ERROR, message, details);
+    this.name = 'InitializationError';
+  }
+}
+
+/**
+ * Thrown when a model file cannot be loaded (corrupt, unsupported format, download failure, etc.)
+ */
+export class ModelLoadError extends EdgeVedaError {
+  constructor(message: string, details?: string) {
+    super(EdgeVedaErrorCode.MODEL_LOAD_FAILED, message, details);
+    this.name = 'ModelLoadError';
+  }
+}
+
+/**
+ * Thrown when token generation fails (WASM inference error, context overflow, etc.)
+ */
+export class GenerationError extends EdgeVedaError {
+  constructor(message: string, details?: string) {
+    super(EdgeVedaErrorCode.GENERATION_FAILED, message, details);
+    this.name = 'GenerationError';
+  }
+}
+
+/**
+ * Thrown when a memory limit is exceeded or memory cannot be allocated.
+ */
+export class MemoryError extends EdgeVedaError {
+  constructor(message: string, details?: string) {
+    super(EdgeVedaErrorCode.OUT_OF_MEMORY, message, details);
+    this.name = 'MemoryError';
   }
 }
 
