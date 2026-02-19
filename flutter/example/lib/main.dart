@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'image_screen.dart';
 import 'model_selection_modal.dart';
 import 'settings_screen.dart';
 import 'stt_screen.dart';
@@ -59,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const ChatScreen(),
           VisionScreen(isActive: _currentIndex == 1),
           const SttScreen(),
+          const ImageScreen(),
           const SettingsScreen(),
         ],
       ),
@@ -83,6 +85,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.mic_none),
             selectedIcon: Icon(Icons.mic),
             label: 'STT',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.image_outlined),
+            selectedIcon: Icon(Icons.image),
+            label: 'Image',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
