@@ -11,11 +11,9 @@
 ---
 
 <p align="center">
-  <a href="docs/images/app_demo.mp4">
-    <img src="docs/images/app_rag_demo.png" width="300" alt="Watch demo video">
-  </a>
+  <img src="docs/images/app_demo.gif" width="300" alt="On-device Document Q&A demo">
 </p>
-<p align="center"><em>Document Q&A running entirely on-device — no cloud, no API keys (<a href="docs/images/app_demo.mp4">watch video</a>)</em></p>
+<p align="center"><em>Asking questions about a medical report — RAG retrieval + LLM generation, entirely on-device (<a href="docs/images/app_demo.mp4">full video</a>)</em></p>
 
 ---
 
