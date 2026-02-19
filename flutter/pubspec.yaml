@@ -1,8 +1,8 @@
 name: edge_veda
 description: >-
-  On-device AI runtime for Flutter. Text, vision, speech-to-text, embeddings,
-  RAG, and function calling with Metal GPU acceleration. Zero cloud dependencies.
-version: 2.1.1
+  On-device AI runtime for Flutter. Text, vision, speech-to-text, image generation,
+  embeddings, RAG, and function calling with Metal GPU acceleration. Zero cloud dependencies.
+version: 2.1.2
 homepage: https://github.com/ramanujammv1988/edge-veda
 repository: https://github.com/ramanujammv1988/edge-veda
 issue_tracker: https://github.com/ramanujammv1988/edge-veda/issues
