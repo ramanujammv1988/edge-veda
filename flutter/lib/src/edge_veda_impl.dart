@@ -33,7 +33,11 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import 'package:image/image.dart' as img;
+
 import 'ffi/bindings.dart';
+import 'isolate/image_worker.dart';
+import 'isolate/image_worker_messages.dart';
 import 'isolate/worker_isolate.dart';
 import 'types.dart' show
     EdgeVedaConfig,
@@ -51,7 +55,11 @@ import 'types.dart' show
     VisionConfig,
     VisionException,
     EmbeddingResult,
-    EmbeddingException;
+    EmbeddingException,
+    ImageGenerationConfig,
+    ImageGenerationException,
+    ImageProgress,
+    ImageResult;
 
 /// Main Edge Veda SDK class for on-device AI inference
 ///
@@ -77,6 +85,12 @@ class EdgeVeda {
   /// Vision configuration (stored for isolate transfer)
   VisionConfig? _visionConfig;
 
+  /// Worker isolate for image generation (Stable Diffusion)
+  ImageWorker? _imageWorker;
+
+  /// Whether image generation has been initialized
+  bool _isImageInitialized = false;
+
   // Note: NO Pointer storage here - pointers can't transfer between isolates
 
   /// Whether the SDK is initialized
@@ -87,6 +101,9 @@ class EdgeVeda {
 
   /// Whether vision is initialized
   bool get isVisionInitialized => _isVisionInitialized;
+
+  /// Whether image generation is initialized
+  bool get isImageInitialized => _isImageInitialized;
 
   /// Current configuration
   EdgeVedaConfig? get config => _config;
@@ -766,6 +783,7 @@ class EdgeVeda {
   /// After calling dispose(), you must call [init] again before using the SDK.
   Future<void> dispose() async {
     await disposeVision();
+    await disposeImageGeneration();
     if (_worker != null) {
       await _worker!.dispose();
       _worker = null;
@@ -1006,6 +1024,222 @@ class EdgeVeda {
   Future<void> disposeVision() async {
     _isVisionInitialized = false;
     _visionConfig = null;
+  }
+
+  // ===========================================================================
+  // Image Generation (Phase 23 - Stable Diffusion)
+  // ===========================================================================
+
+  /// Initialize image generation with a Stable Diffusion model
+  ///
+  /// This loads the SD model into a persistent worker isolate (~2GB, takes
+  /// 30-60 seconds). The model stays loaded for subsequent [generateImage]
+  /// calls until [disposeImageGeneration] is called.
+  ///
+  /// This is independent of text inference -- both can be active at once,
+  /// though memory usage will be high (~2.5GB+ combined).
+  ///
+  /// Example:
+  /// ```dart
+  /// await edgeVeda.initImageGeneration(
+  ///   modelPath: '/path/to/sd-v2-1-turbo-q8.gguf',
+  /// );
+  /// ```
+  Future<void> initImageGeneration({
+    required String modelPath,
+    int numThreads = 0,
+    bool useGpu = true,
+  }) async {
+    if (_isImageInitialized) {
+      throw const ImageGenerationException(
+        'Image generation already initialized. Call disposeImageGeneration() first.',
+      );
+    }
+
+    // Validate model file exists
+    if (modelPath.isEmpty) {
+      throw const ImageGenerationException('Model path cannot be empty');
+    }
+    final file = File(modelPath);
+    if (!await file.exists()) {
+      throw ImageGenerationException('SD model file not found: $modelPath');
+    }
+
+    // Spawn and initialize worker
+    _imageWorker = ImageWorker();
+    try {
+      await _imageWorker!.spawn();
+      await _imageWorker!.initImage(
+        modelPath: modelPath,
+        numThreads: numThreads,
+        useGpu: useGpu,
+      );
+    } catch (e) {
+      // Clean up on failure
+      try {
+        await _imageWorker?.dispose();
+      } catch (_) {}
+      _imageWorker = null;
+      if (e is ImageGenerationException) rethrow;
+      throw ImageGenerationException(
+        'Image generation initialization failed',
+        details: e.toString(),
+        originalError: e,
+      );
+    }
+
+    _isImageInitialized = true;
+  }
+
+  /// Generate an image from a text prompt
+  ///
+  /// Returns PNG-encoded bytes as [Uint8List]. The SD model must be loaded
+  /// first via [initImageGeneration].
+  ///
+  /// The optional [onProgress] callback fires for each denoising step,
+  /// providing step number and total steps for progress UI.
+  ///
+  /// Example:
+  /// ```dart
+  /// final pngBytes = await edgeVeda.generateImage(
+  ///   'a sunset over mountains, oil painting style',
+  ///   config: ImageGenerationConfig(steps: 4, seed: 42),
+  ///   onProgress: (progress) {
+  ///     print('Step ${progress.step}/${progress.totalSteps}');
+  ///   },
+  /// );
+  ///
+  /// // Save or display the PNG image
+  /// await File('output.png').writeAsBytes(pngBytes);
+  /// ```
+  Future<Uint8List> generateImage(
+    String prompt, {
+    ImageGenerationConfig? config,
+    void Function(ImageProgress)? onProgress,
+  }) async {
+    if (!_isImageInitialized || _imageWorker == null) {
+      throw const ImageGenerationException(
+        'Image generation not initialized. Call initImageGeneration() first.',
+      );
+    }
+
+    if (prompt.isEmpty) {
+      throw const ImageGenerationException('Prompt cannot be empty');
+    }
+
+    config ??= const ImageGenerationConfig();
+
+    final stream = _imageWorker!.generateImage(
+      prompt: prompt,
+      negativePrompt: config.negativePrompt,
+      width: config.width,
+      height: config.height,
+      steps: config.steps,
+      cfgScale: config.cfgScale,
+      seed: config.seed,
+      sampler: config.sampler.value,
+      schedule: config.schedule.value,
+    );
+
+    ImageCompleteResponse? completeResponse;
+
+    await for (final response in stream) {
+      if (response is ImageProgressResponse && onProgress != null) {
+        onProgress(ImageProgress(
+          step: response.step,
+          totalSteps: response.totalSteps,
+          elapsedSeconds: response.elapsedSeconds,
+        ));
+      } else if (response is ImageCompleteResponse) {
+        completeResponse = response;
+      }
+    }
+
+    if (completeResponse == null) {
+      throw const ImageGenerationException('Image generation produced no result');
+    }
+
+    // Convert raw RGB pixels to PNG using the `image` package
+    final rawImage = img.Image.fromBytes(
+      width: completeResponse.width,
+      height: completeResponse.height,
+      bytes: completeResponse.pixelData.buffer,
+      numChannels: completeResponse.channels,
+    );
+    return Uint8List.fromList(img.encodePng(rawImage));
+  }
+
+  /// Generate an image and return raw pixel data (no PNG encoding)
+  ///
+  /// Use this when you need the raw RGB bytes instead of PNG, for example
+  /// when displaying directly in a Canvas or passing to another processing
+  /// pipeline. Returns an [ImageResult] with pixel data and metadata.
+  Future<ImageResult> generateImageRaw(
+    String prompt, {
+    ImageGenerationConfig? config,
+    void Function(ImageProgress)? onProgress,
+  }) async {
+    if (!_isImageInitialized || _imageWorker == null) {
+      throw const ImageGenerationException(
+        'Image generation not initialized. Call initImageGeneration() first.',
+      );
+    }
+
+    if (prompt.isEmpty) {
+      throw const ImageGenerationException('Prompt cannot be empty');
+    }
+
+    config ??= const ImageGenerationConfig();
+
+    final stream = _imageWorker!.generateImage(
+      prompt: prompt,
+      negativePrompt: config.negativePrompt,
+      width: config.width,
+      height: config.height,
+      steps: config.steps,
+      cfgScale: config.cfgScale,
+      seed: config.seed,
+      sampler: config.sampler.value,
+      schedule: config.schedule.value,
+    );
+
+    ImageCompleteResponse? completeResponse;
+
+    await for (final response in stream) {
+      if (response is ImageProgressResponse && onProgress != null) {
+        onProgress(ImageProgress(
+          step: response.step,
+          totalSteps: response.totalSteps,
+          elapsedSeconds: response.elapsedSeconds,
+        ));
+      } else if (response is ImageCompleteResponse) {
+        completeResponse = response;
+      }
+    }
+
+    if (completeResponse == null) {
+      throw const ImageGenerationException('Image generation produced no result');
+    }
+
+    return ImageResult(
+      pixelData: completeResponse.pixelData,
+      width: completeResponse.width,
+      height: completeResponse.height,
+      channels: completeResponse.channels,
+      generationTimeMs: completeResponse.generationTimeMs,
+    );
+  }
+
+  /// Dispose image generation resources
+  ///
+  /// Frees the SD model and terminates the image worker isolate.
+  /// Does not affect text inference, vision, or STT.
+  Future<void> disposeImageGeneration() async {
+    if (_imageWorker != null) {
+      await _imageWorker!.dispose();
+      _imageWorker = null;
+    }
+    _isImageInitialized = false;
   }
 
   // ===========================================================================

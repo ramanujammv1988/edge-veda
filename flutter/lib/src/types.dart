@@ -1,6 +1,8 @@
 /// Public types and configuration classes for Edge Veda SDK
 library;
 
+import 'dart:typed_data';
+
 /// Configuration for initializing Edge Veda SDK
 class EdgeVedaConfig {
   /// Path to the model file (GGUF format)
@@ -803,4 +805,145 @@ class ConfidenceInfo {
 /// Exception thrown when embedding operation fails
 class EmbeddingException extends EdgeVedaException {
   const EmbeddingException(super.message, {super.details, super.originalError});
+}
+
+// =============================================================================
+// Image Generation Types (Phase 23 - Stable Diffusion)
+// =============================================================================
+
+/// Sampler types for diffusion denoising
+///
+/// Maps to ev_image_sampler_t enum in edge_veda.h.
+enum ImageSampler {
+  eulerA(0),
+  euler(1),
+  dpmPlusPlus2m(2),
+  dpmPlusPlus2sA(3),
+  lcm(4);
+
+  const ImageSampler(this.value);
+  final int value;
+}
+
+/// Schedule types for noise scheduling
+///
+/// Maps to ev_image_schedule_t enum in edge_veda.h.
+enum ImageSchedule {
+  defaultSchedule(0),
+  discrete(1),
+  karras(2),
+  ays(3);
+
+  const ImageSchedule(this.value);
+  final int value;
+}
+
+/// Configuration for image generation
+///
+/// Provides sensible defaults for SD Turbo (512x512, 4 steps, 1.0 cfg, euler_a).
+/// All parameters can be overridden per-generation.
+class ImageGenerationConfig {
+  /// Negative prompt to avoid certain features (null = none)
+  final String? negativePrompt;
+
+  /// Image width in pixels
+  final int width;
+
+  /// Image height in pixels
+  final int height;
+
+  /// Number of denoising steps (4 for turbo, 20-50 for standard SD)
+  final int steps;
+
+  /// Classifier-free guidance scale (1.0 for turbo, 7.5 for standard SD)
+  final double cfgScale;
+
+  /// Random seed (-1 = random)
+  final int seed;
+
+  /// Sampler type for diffusion denoising
+  final ImageSampler sampler;
+
+  /// Schedule type for noise scheduling
+  final ImageSchedule schedule;
+
+  const ImageGenerationConfig({
+    this.negativePrompt,
+    this.width = 512,
+    this.height = 512,
+    this.steps = 4,
+    this.cfgScale = 1.0,
+    this.seed = -1,
+    this.sampler = ImageSampler.eulerA,
+    this.schedule = ImageSchedule.defaultSchedule,
+  });
+
+  @override
+  String toString() =>
+      'ImageGenerationConfig(${width}x$height, steps: $steps, cfg: $cfgScale, sampler: ${sampler.name})';
+}
+
+/// Progress update during image generation
+///
+/// Fired once per denoising step. Use [progress] for a 0.0-1.0 value.
+class ImageProgress {
+  /// Current step number (1-based)
+  final int step;
+
+  /// Total number of denoising steps
+  final int totalSteps;
+
+  /// Elapsed time in seconds since generation started
+  final double elapsedSeconds;
+
+  const ImageProgress({
+    required this.step,
+    required this.totalSteps,
+    required this.elapsedSeconds,
+  });
+
+  /// Progress as a fraction (0.0 to 1.0)
+  double get progress => totalSteps > 0 ? step / totalSteps : 0.0;
+
+  @override
+  String toString() =>
+      'ImageProgress(step: $step/$totalSteps, ${(progress * 100).toStringAsFixed(0)}%, ${elapsedSeconds.toStringAsFixed(1)}s)';
+}
+
+/// Result of image generation containing raw pixel data
+///
+/// The [pixelData] field contains raw RGB bytes (width * height * channels).
+/// Use the `image` package or similar to encode to PNG/JPEG if needed.
+class ImageResult {
+  /// Raw pixel data (RGB bytes)
+  final Uint8List pixelData;
+
+  /// Image width in pixels
+  final int width;
+
+  /// Image height in pixels
+  final int height;
+
+  /// Number of color channels (3 for RGB)
+  final int channels;
+
+  /// Total generation time in milliseconds
+  final double generationTimeMs;
+
+  const ImageResult({
+    required this.pixelData,
+    required this.width,
+    required this.height,
+    required this.channels,
+    required this.generationTimeMs,
+  });
+
+  @override
+  String toString() =>
+      'ImageResult(${width}x$height, channels: $channels, ${generationTimeMs.toStringAsFixed(0)}ms)';
+}
+
+/// Exception thrown when image generation fails
+class ImageGenerationException extends EdgeVedaException {
+  const ImageGenerationException(super.message, {super.details, super.originalError});
 }
