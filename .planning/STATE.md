@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-02 complete (XCFramework + FFI bindings).
+**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-03 complete (ImageWorker + Dart API).
 
 ## Current Position
 
 Phase: 23 (Add Image Generation Capabilities)
-Plan: 23-02 complete (2/4 plans done)
+Plan: 23-03 complete (3/4 plans done)
 Status: **In Progress**
-Last activity: 2026-02-19 - Completed 23-02: XCFramework rebuild + podspec + Dart FFI bindings
+Last activity: 2026-02-19 - Completed 23-03: ImageWorker isolate + generateImage API + types + model registry
 
-Progress: [###################_] ~96% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 2/4 complete)
+Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4 complete)
 
 ## Milestone Summary
 
@@ -179,7 +179,7 @@ Phase 22 (Intent Engine Demo) - COMPLETE
 Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
   23-01 (Submodule + C API) DONE
   23-02 (FFI Bindings + XCFramework) DONE
-  23-03 (ImageWorker Isolate + Dart API) PENDING
+  23-03 (ImageWorker Isolate + Dart API) DONE
   23-04 (Demo Screen + Human Verification) PENDING
   Depends on: Phase 14 (submodule integration pattern)
 ```
@@ -195,6 +195,12 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Phase 23 Plan 3 decisions:
+- NativeCallable.listener used for C progress callbacks into Dart isolate (per-step progress updates)
+- PNG encoding done in Dart via image package (simple, portable, no C-side stb_image_write needed)
+- generateImageRaw() added alongside generateImage() for raw RGB access without PNG overhead
+- SD model registered with capabilities: ['imageGeneration'] and family: 'stable-diffusion'
 
 Phase 23 Plan 2 decisions:
 - XCFramework grows from ~8MB to ~31MB per slice with sd.cpp (binary size limit raised to 40MB)
@@ -500,8 +506,8 @@ v1.1:
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 23-02-PLAN.md (XCFramework rebuild + FFI bindings + podspec)
-Resume file: .planning/phases/23-add-image-generation-capabilities/23-03-PLAN.md
+Stopped at: Completed 23-03-PLAN.md (ImageWorker isolate + generateImage API + types + model registry)
+Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
 
 ---
 ### Roadmap Evolution
