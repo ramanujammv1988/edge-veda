@@ -141,6 +141,9 @@ echo "=== Building for macOS x86_64 (Intel) ==="
 BUILD_MACOS_X86="$BUILD_DIR/macos-x86_64"
 mkdir -p "$BUILD_MACOS_X86"
 
+# NOTE: Metal is enabled for x86_64 builds. All Intel Macs that support
+# macOS 11+ have Metal-capable GPUs, and the ggml runtime falls back to
+# CPU automatically if Metal device creation fails at runtime.
 cmake -B "$BUILD_MACOS_X86" \
     -S "$CORE_DIR" \
     -G Ninja \
