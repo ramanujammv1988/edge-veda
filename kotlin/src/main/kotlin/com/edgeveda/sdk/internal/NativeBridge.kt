@@ -17,7 +17,6 @@ import kotlinx.coroutines.ensureActive
 internal class NativeBridge {
 
     private val disposed = AtomicBoolean(false)
-    private val streamCancelFlag = AtomicBoolean(false)
     private var nativeHandle: Long = 0L
 
     init {
@@ -144,7 +143,7 @@ internal class NativeBridge {
     fun freeStream(streamHandle: Long) {
         if (streamHandle != 0L) {
             try {
-                nativeStreamFree(streamHandle)
+                nativeStreamFree(nativeHandle, streamHandle)
             } catch (e: Exception) {
                 // Log but don't throw in cleanup
                 System.err.println("Error freeing stream: ${e.message}")
@@ -189,20 +188,9 @@ internal class NativeBridge {
     }
 
     /**
-     * Cancel the current streaming generation.
+     * Cancel ongoing generation immediately at the native level via ev_stream_cancel().
      *
-     * Sets an atomic flag that is checked in the StreamCallbackBridge.onToken()
-     * callback. When the flag is set, the callback throws a CancellationException
-     * which aborts the native generation loop.
-     */
-    fun cancelCurrentStream() {
-        streamCancelFlag.set(true)
-    }
-
-    /**
-     * Cancel ongoing generation immediately at the native level.
-     *
-     * @return true if cancellation was successful, false otherwise
+     * @return true if a stream was found and cancel was requested, false if idle
      */
     fun cancel(): Boolean {
         checkNotDisposed()
@@ -421,14 +409,11 @@ internal class NativeBridge {
         val infoArray = nativeGetModelInfo(nativeHandle)
             ?: throw EdgeVedaException.GenerationError("Failed to retrieve model information")
 
-        // Convert array to map (assumes array contains key-value pairs)
-        val infoMap = mutableMapOf<String, String>()
-        var i = 0
-        while (i < infoArray.size - 1) {
-            infoMap[infoArray[i]] = infoArray[i + 1]
-            i += 2
-        }
-        return infoMap
+        // JNI returns a flat 6-element array: [name, architecture, num_params,
+        // context_length, embedding_dim, num_layers]. Map to named keys.
+        val keys = listOf("name", "architecture", "num_parameters",
+                          "context_length", "embedding_dim", "num_layers")
+        return keys.zip(infoArray.toList()).toMap()
     }
 
     /**
@@ -510,7 +495,7 @@ internal class NativeBridge {
 
     private external fun nativeStreamNext(streamHandle: Long): String?
 
-    private external fun nativeStreamFree(streamHandle: Long)
+    private external fun nativeStreamFree(handle: Long, streamHandle: Long)
 
     private external fun nativeGetMemoryUsage(handle: Long): Long
 
@@ -766,8 +751,9 @@ internal class NativeBridge {
                     throw EdgeVedaException.ModelLoadError("Vision context validation failed")
                 }
                 
-                // Return backend name (hardcoded for now, could be queried from native)
-                return "Vulkan"
+                // Query the actual backend in use from the native layer
+                val detectedBackend = nativeDetectBackend()
+                return nativeGetBackendName(detectedBackend)
             }
         }
 

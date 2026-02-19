@@ -88,6 +88,8 @@ struct EdgeVedaInstance {
     std::mutex mutex;
     bool initialized = false;
     std::string last_error;
+    // Active stream handle for native-level cancellation (null when idle)
+    ev_stream active_stream = nullptr;
 };
 
 /**
@@ -293,7 +295,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerate(
         ev_generation_params_default(&params);
         
         if (max_tokens > 0) params.max_tokens = max_tokens;
-        if (temperature > 0) params.temperature = temperature;
+        if (temperature >= 0) params.temperature = temperature;
         if (top_p > 0) params.top_p = top_p;
         if (top_k > 0) params.top_k = top_k;
         if (repeat_penalty > 0) params.repeat_penalty = repeat_penalty;
@@ -383,7 +385,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamCreate(
         ev_generation_params_default(&params);
         
         if (max_tokens > 0) params.max_tokens = max_tokens;
-        if (temperature > 0) params.temperature = temperature;
+        if (temperature >= 0) params.temperature = temperature;
         if (top_p > 0) params.top_p = top_p;
         if (top_k > 0) params.top_k = top_k;
         if (repeat_penalty > 0) params.repeat_penalty = repeat_penalty;
@@ -408,6 +410,8 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamCreate(
             return 0;
         }
 
+        // Track the active stream for native-level cancellation
+        instance->active_stream = stream;
         LOGI("Stream created successfully (handle: %p)", stream);
         return reinterpret_cast<jlong>(stream);
 
@@ -469,11 +473,14 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamNext(
 
 /**
  * Free a stream and release its resources.
+ * Also clears the active_stream pointer on the owning instance so that
+ * a subsequent nativeCancel() call does not operate on freed memory.
  */
 JNIEXPORT void JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamFree(
     JNIEnv* /* env */,
     jobject /* this */,
+    jlong handle,
     jlong stream_handle
 ) {
     ev_stream stream = reinterpret_cast<ev_stream>(stream_handle);
@@ -484,6 +491,15 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeStreamFree(
     try {
         LOGI("Freeing stream (handle: %p)", stream);
         ev_stream_free(stream);
+
+        // Clear the active stream reference on the owning instance
+        auto* instance = get_instance(handle);
+        if (instance) {
+            std::lock_guard<std::mutex> lock(instance->mutex);
+            if (instance->active_stream == stream) {
+                instance->active_stream = nullptr;
+            }
+        }
     } catch (const std::exception& e) {
         LOGE("Failed to free stream: %s", e.what());
     }
@@ -554,7 +570,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeGenerateStream(
         ev_generation_params_default(&params);
         
         if (max_tokens > 0) params.max_tokens = max_tokens;
-        if (temperature > 0) params.temperature = temperature;
+        if (temperature >= 0) params.temperature = temperature;
         if (top_p > 0) params.top_p = top_p;
         if (top_k > 0) params.top_k = top_k;
         if (repeat_penalty > 0) params.repeat_penalty = repeat_penalty;
@@ -1057,9 +1073,8 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeSetVerbose(
  * ========================================================================= */
 
 /**
- * Cancel ongoing generation (immediate native-level cancellation).
- * NOTE: ev_cancel() does not exist in core API. This functionality would need
- * to be implemented at the stream level using ev_stream_cancel().
+ * Cancel ongoing generation by calling ev_stream_cancel() on the active stream.
+ * Requests the native streaming loop to stop after the current token.
  */
 JNIEXPORT jboolean JNICALL
 Java_com_edgeveda_sdk_internal_NativeBridge_nativeCancel(
@@ -1068,14 +1083,19 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeCancel(
     jlong handle
 ) {
     auto* instance = get_instance(handle);
-    if (!instance || !instance->context) {
+    if (!instance) {
         return JNI_FALSE;
     }
 
-    // ev_cancel() does not exist in core C API
-    // Cancellation must be handled at stream level via ev_stream_cancel()
-    LOGE("nativeCancel: ev_cancel() not implemented in core API");
-    return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(instance->mutex);
+    if (!instance->active_stream) {
+        LOGI("nativeCancel: no active stream to cancel");
+        return JNI_FALSE;
+    }
+
+    ev_stream_cancel(instance->active_stream);
+    LOGI("nativeCancel: ev_stream_cancel() called on active stream");
+    return JNI_TRUE;
 }
 
 /* ============================================================================
@@ -1623,7 +1643,7 @@ Java_com_edgeveda_sdk_internal_NativeBridge_nativeVisionDescribe(
         ev_generation_params_default(&params);
         
         if (max_tokens > 0) params.max_tokens = max_tokens;
-        if (temperature > 0) params.temperature = temperature;
+        if (temperature >= 0) params.temperature = temperature;
         if (top_p > 0) params.top_p = top_p;
         if (top_k > 0) params.top_k = top_k;
         if (repeat_penalty > 0) params.repeat_penalty = repeat_penalty;

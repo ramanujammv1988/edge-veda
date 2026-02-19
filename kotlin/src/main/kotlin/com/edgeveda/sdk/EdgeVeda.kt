@@ -137,6 +137,8 @@ class EdgeVeda private constructor(
             currentGenerationJob.set(job)
             try {
                 nativeBridge.generate(prompt, options)
+            } catch (e: EdgeVedaException) {
+                throw e
             } catch (e: Exception) {
                 throw EdgeVedaException.GenerationError("Generation failed: ${e.message}", e)
             } finally {
@@ -252,9 +254,8 @@ class EdgeVeda private constructor(
     /**
      * Cancel an ongoing generation.
      *
-     * Cancels any active generation or stream operation. For streaming, this sets
-     * a cancel flag in the native bridge that aborts token delivery at the JNI
-     * callback level, then cancels the Kotlin coroutine Jobs.
+     * Issues a native-level stream cancel via ev_stream_cancel(), then cancels
+     * the active Kotlin coroutine Jobs so the Flow collector stops receiving tokens.
      *
      * @throws IllegalStateException if not initialized or closed
      */
@@ -262,9 +263,9 @@ class EdgeVeda private constructor(
         checkInitialized()
 
         withContext(Dispatchers.Default) {
-            // Signal the native bridge to abort token delivery in the stream callback
-            nativeBridge.cancelCurrentStream()
-            // Cancel both generation and stream jobs if they exist
+            // Signal the C++ streaming loop to stop after the current token
+            nativeBridge.cancel()
+            // Cancel both generation and stream coroutines
             currentGenerationJob.getAndSet(null)?.cancel()
             currentStreamJob.getAndSet(null)?.cancel()
         }
@@ -314,15 +315,9 @@ class EdgeVeda private constructor(
      */
     suspend fun tokenize(text: String): IntArray {
         checkInitialized()
-
-        return withContext(Dispatchers.Default) {
-            try {
-                nativeBridge.tokenize(text)
-                    ?: throw EdgeVedaException.GenerationError("Tokenization returned null")
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Tokenization failed: ${e.message}", e)
-            }
-        }
+        throw EdgeVedaException.UnsupportedOperationError(
+            "tokenize() is not yet supported by the native layer"
+        )
     }
 
     /**
@@ -340,15 +335,9 @@ class EdgeVeda private constructor(
      */
     suspend fun detokenize(tokens: IntArray): String {
         checkInitialized()
-
-        return withContext(Dispatchers.Default) {
-            try {
-                nativeBridge.detokenize(tokens)
-                    ?: throw EdgeVedaException.GenerationError("Detokenization returned null")
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Detokenization failed: ${e.message}", e)
-            }
-        }
+        throw EdgeVedaException.UnsupportedOperationError(
+            "detokenize() is not yet supported by the native layer"
+        )
     }
 
     /**
@@ -364,7 +353,9 @@ class EdgeVeda private constructor(
         checkInitialized()
         val size = nativeBridge.getContextSize()
         if (size < 0) {
-            throw EdgeVedaException.GenerationError("Failed to retrieve context size")
+            throw EdgeVedaException.UnsupportedOperationError(
+                "getContextSize() is not yet supported by the native layer"
+            )
         }
         return size
     }
@@ -383,7 +374,9 @@ class EdgeVeda private constructor(
         checkInitialized()
         val used = nativeBridge.getContextUsed()
         if (used < 0) {
-            throw EdgeVedaException.GenerationError("Failed to retrieve context usage")
+            throw EdgeVedaException.UnsupportedOperationError(
+                "getContextUsed() is not yet supported by the native layer"
+            )
         }
         return used
     }
@@ -404,18 +397,9 @@ class EdgeVeda private constructor(
      */
     suspend fun saveSession(path: String): Boolean {
         checkInitialized()
-
-        if (path.isEmpty()) {
-            throw EdgeVedaException.GenerationError("Session path cannot be empty")
-        }
-
-        return withContext(Dispatchers.IO) {
-            try {
-                nativeBridge.saveSession(path)
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Failed to save session: ${e.message}", e)
-            }
-        }
+        throw EdgeVedaException.UnsupportedOperationError(
+            "saveSession() is not yet supported by the native layer"
+        )
     }
 
     /**
@@ -432,18 +416,9 @@ class EdgeVeda private constructor(
      */
     suspend fun loadSession(path: String): Boolean {
         checkInitialized()
-
-        if (path.isEmpty()) {
-            throw EdgeVedaException.GenerationError("Session path cannot be empty")
-        }
-
-        return withContext(Dispatchers.IO) {
-            try {
-                nativeBridge.loadSession(path)
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Failed to load session: ${e.message}", e)
-            }
-        }
+        throw EdgeVedaException.UnsupportedOperationError(
+            "loadSession() is not yet supported by the native layer"
+        )
     }
 
     /**
@@ -465,14 +440,10 @@ class EdgeVeda private constructor(
      */
     suspend fun setSystemPrompt(systemPrompt: String): Boolean {
         checkInitialized()
-
-        return withContext(Dispatchers.Default) {
-            try {
-                nativeBridge.setSystemPrompt(systemPrompt)
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Failed to set system prompt: ${e.message}", e)
-            }
-        }
+        throw EdgeVedaException.UnsupportedOperationError(
+            "setSystemPrompt() is not yet supported by the native layer. " +
+            "Use ChatSession with a SystemPromptPreset or SystemPromptPreset.Custom instead."
+        )
     }
 
     /**
@@ -533,29 +504,9 @@ class EdgeVeda private constructor(
      */
     suspend fun runBenchmark(numThreads: Int = 4, numTokens: Int = 512): BenchmarkResult {
         checkInitialized()
-
-        if (numThreads < 1 || numThreads > 32) {
-            throw EdgeVedaException.InvalidConfiguration("numThreads must be between 1 and 32")
-        }
-
-        if (numTokens < 1 || numTokens > 4096) {
-            throw EdgeVedaException.InvalidConfiguration("numTokens must be between 1 and 4096")
-        }
-
-        return withContext(Dispatchers.Default) {
-            try {
-                val result = nativeBridge.bench(numThreads, numTokens)
-                    ?: throw EdgeVedaException.GenerationError("Benchmark returned null")
-
-                BenchmarkResult(
-                    tokensPerSecond = result.getOrNull(0) ?: 0.0,
-                    timeMs = result.getOrNull(1) ?: 0.0,
-                    tokensProcessed = result.getOrNull(2)?.toInt() ?: 0
-                )
-            } catch (e: Exception) {
-                throw EdgeVedaException.GenerationError("Benchmark failed: ${e.message}", e)
-            }
-        }
+        throw EdgeVedaException.UnsupportedOperationError(
+            "runBenchmark() is not yet supported by the native layer"
+        )
     }
 
     /**

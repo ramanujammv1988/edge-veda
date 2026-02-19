@@ -74,7 +74,7 @@ data class BenchmarkResult(
  * @property useGpu Enable GPU acceleration if available (default: true)
  * @property useMmap Use memory mapping for model loading (default: true)
  * @property useMlock Lock model in RAM to prevent swapping (default: false)
- * @property temperature Sampling temperature for generation (default: 0.7)
+ * @property temperature Sampling temperature for generation (default: 0.7; 0.0 = greedy/deterministic)
  * @property topP Top-p (nucleus) sampling parameter (default: 0.9)
  * @property topK Top-k sampling parameter (default: 40)
  * @property repeatPenalty Penalty for repeating tokens (default: 1.1)
@@ -100,7 +100,7 @@ data class EdgeVedaConfig(
         require(maxTokens > 0) { "maxTokens must be > 0" }
         require(contextSize > 0) { "contextSize must be > 0" }
         require(batchSize > 0) { "batchSize must be > 0" }
-        require(temperature > 0) { "temperature must be > 0" }
+        require(temperature >= 0) { "temperature must be >= 0 (0.0 = deterministic/greedy)" }
         require(topP in 0.0f..1.0f) { "topP must be between 0 and 1" }
         require(topK > 0) { "topK must be > 0" }
         require(repeatPenalty >= 0) { "repeatPenalty must be >= 0" }

@@ -4,6 +4,7 @@ import com.edgeveda.sdk.internal.NativeBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * VisionWorker - Persistent vision inference manager
@@ -41,14 +42,14 @@ import org.json.JSONObject
  */
 class VisionWorker {
     private val frameQueue = FrameQueue()
-    private var _isInitialized = false
-    private var backend = ""
+    private val _isInitialized = AtomicBoolean(false)
+    @Volatile private var backend = ""
 
     /**
      * Whether the vision context is initialized and ready
      */
     val isInitialized: Boolean
-        get() = _isInitialized
+        get() = _isInitialized.get()
 
     /**
      * Number of frames dropped due to backpressure
@@ -72,8 +73,8 @@ class VisionWorker {
      * @return Backend name (e.g., "Vulkan", "CPU")
      * @throws EdgeVedaException if initialization fails
      */
-    suspend fun initialize(config: VisionConfig): String = withContext(Dispatchers.IO) {
-        if (_isInitialized) {
+    suspend fun initialize(config: VisionConfig): String = withContext(Dispatchers.Default) {
+        if (!_isInitialized.compareAndSet(false, true)) {
             throw EdgeVedaException.InvalidConfiguration(
                 "VisionWorker already initialized"
             )
@@ -90,12 +91,14 @@ class VisionWorker {
                 put("useMmap", config.useMmap)
             }.toString()
 
-            backend = NativeBridge.initVision(configJson)
-            _isInitialized = true
-            backend
+            val detectedBackend = NativeBridge.initVision(configJson)
+            backend = detectedBackend
+            detectedBackend
         } catch (e: EdgeVedaException) {
+            _isInitialized.set(false) // rollback on failure
             throw e
         } catch (e: Exception) {
+            _isInitialized.set(false) // rollback on failure
             throw EdgeVedaException.ModelLoadError(
                 "Failed to initialize vision context: ${e.message}",
                 e
@@ -116,8 +119,8 @@ class VisionWorker {
      * @throws EdgeVedaException if worker is not initialized
      */
     fun enqueueFrame(rgb: ByteArray, width: Int, height: Int): Boolean {
-        if (!_isInitialized) {
-            throw EdgeVedaException.ModelLoadError(
+        if (!_isInitialized.get()) {
+            throw EdgeVedaException.InvalidConfiguration(
                 "VisionWorker not initialized. Call initialize() first."
             )
         }
@@ -141,8 +144,8 @@ class VisionWorker {
         prompt: String = "Describe what you see.",
         params: VisionGenerationParams = VisionGenerationParams()
     ): VisionResult? {
-        if (!_isInitialized) {
-            throw EdgeVedaException.ModelLoadError(
+        if (!_isInitialized.get()) {
+            throw EdgeVedaException.InvalidConfiguration(
                 "VisionWorker not initialized. Call initialize() first."
             )
         }
@@ -186,8 +189,8 @@ class VisionWorker {
         prompt: String = "Describe what you see.",
         params: VisionGenerationParams = VisionGenerationParams()
     ): VisionResult {
-        if (!_isInitialized) {
-            throw EdgeVedaException.ModelLoadError(
+        if (!_isInitialized.get()) {
+            throw EdgeVedaException.InvalidConfiguration(
                 "VisionWorker not initialized. Call initialize() first."
             )
         }
@@ -204,7 +207,7 @@ class VisionWorker {
         height: Int,
         prompt: String,
         params: VisionGenerationParams
-    ): VisionResult = withContext(Dispatchers.IO) {
+    ): VisionResult = withContext(Dispatchers.Default) {
         try {
             // Allocate DirectByteBuffer for zero-copy JNI transfer
             val buffer = java.nio.ByteBuffer.allocateDirect(rgb.size)
@@ -290,14 +293,14 @@ class VisionWorker {
      *
      * @throws EdgeVedaException if cleanup fails
      */
-    suspend fun cleanup() = withContext(Dispatchers.IO) {
-        if (!_isInitialized) {
+    suspend fun cleanup() = withContext(Dispatchers.Default) {
+        if (!_isInitialized.get()) {
             return@withContext
         }
 
         try {
             NativeBridge.freeVision()
-            _isInitialized = false
+            _isInitialized.set(false)
             frameQueue.reset()
             backend = ""
         } catch (e: Exception) {

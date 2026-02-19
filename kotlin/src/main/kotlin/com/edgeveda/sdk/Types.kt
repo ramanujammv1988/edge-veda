@@ -22,7 +22,7 @@ data class GenerateOptions(
 ) {
     init {
         maxTokens?.let { require(it > 0) { "maxTokens must be > 0" } }
-        temperature?.let { require(it > 0) { "temperature must be > 0" } }
+        temperature?.let { require(it >= 0) { "temperature must be >= 0 (0.0 = deterministic/greedy)" } }
         topP?.let { require(it in 0.0f..1.0f) { "topP must be between 0 and 1" } }
         topK?.let { require(it > 0) { "topK must be > 0" } }
         repeatPenalty?.let { require(it >= 0) { "repeatPenalty must be >= 0" } }

@@ -2,6 +2,7 @@ package com.edgeveda.sdk
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Manages a multi-turn chat conversation with context tracking
@@ -12,13 +13,12 @@ class ChatSession(
     private val maxContextLength: Int = 2048,
     private val template: ChatTemplate = ChatTemplate.LLAMA3
 ) {
-    private val messages = mutableListOf<ChatMessage>()
-    private val systemPromptText: String? = systemPrompt.text
+    private val messages = CopyOnWriteArrayList<ChatMessage>()
+    private val systemPromptText: String = systemPrompt.text
     
     init {
-        // Add system prompt if provided
-        systemPromptText?.let {
-            messages.add(ChatMessage(ChatRole.SYSTEM, it))
+        if (systemPromptText.isNotEmpty()) {
+            messages.add(ChatMessage(ChatRole.SYSTEM, systemPromptText))
         }
     }
     
@@ -29,18 +29,20 @@ class ChatSession(
      * @return The assistant's response
      */
     suspend fun send(message: String, options: GenerateOptions = GenerateOptions()): String {
-        // Add user message
-        messages.add(ChatMessage(ChatRole.USER, message))
-        
-        // Format the prompt
-        val prompt = formatPrompt()
-        
-        // Generate response
+        val userMsg = ChatMessage(ChatRole.USER, message)
+
+        // Build the prompt from a snapshot that includes the new user message,
+        // without committing it to history yet (guards against history corruption
+        // if generation fails).
+        val prompt = template.format(messages.toList() + userMsg)
+
+        // Generate response — may throw; history is unchanged if it does
         val response = edgeVeda.generate(prompt, options)
-        
-        // Add assistant response
+
+        // Commit both messages only on success
+        messages.add(userMsg)
         messages.add(ChatMessage(ChatRole.ASSISTANT, response))
-        
+
         return response
     }
     
@@ -51,20 +53,20 @@ class ChatSession(
      * @return A flow of response tokens
      */
     fun sendStream(message: String, options: GenerateOptions = GenerateOptions()): Flow<String> = flow {
-        // Add user message
-        messages.add(ChatMessage(ChatRole.USER, message))
-        
-        // Format the prompt
-        val prompt = formatPrompt()
+        val userMsg = ChatMessage(ChatRole.USER, message)
+
+        // Build prompt from snapshot + new message without touching history yet
+        val prompt = template.format(messages.toList() + userMsg)
         val fullResponse = StringBuilder()
-        
-        // Stream tokens
+
+        // Stream tokens — history is unchanged if collection fails or is cancelled
         edgeVeda.generateStream(prompt, options).collect { token ->
             fullResponse.append(token)
             emit(token)
         }
-        
-        // Add complete assistant response
+
+        // Commit both messages only after the stream completes successfully
+        messages.add(userMsg)
         messages.add(ChatMessage(ChatRole.ASSISTANT, fullResponse.toString()))
     }
     
@@ -73,12 +75,11 @@ class ChatSession(
      */
     suspend fun reset() {
         messages.clear()
-        
-        // Re-add system prompt if it exists
-        systemPromptText?.let {
-            messages.add(ChatMessage(ChatRole.SYSTEM, it))
+
+        if (systemPromptText.isNotEmpty()) {
+            messages.add(ChatMessage(ChatRole.SYSTEM, systemPromptText))
         }
-        
+
         // Reset the EdgeVeda context
         edgeVeda.resetContext()
     }
@@ -90,13 +91,11 @@ class ChatSession(
         get() = messages.count { it.role == ChatRole.USER }
     
     /**
-     * Returns the estimated context usage as a percentage (0.0 to 1.0)
+     * Returns the estimated context usage as a percentage (0.0 to 1.0).
+     * Uses a rough heuristic of ~4 characters per token; capped at 1.0.
      */
     val contextUsage: Double
-        get() {
-            val totalTokens = estimateTokens()
-            return totalTokens.toDouble() / maxContextLength.toDouble()
-        }
+        get() = (estimateTokens().toDouble() / maxContextLength.toDouble()).coerceIn(0.0, 1.0)
     
     /**
      * Returns all messages in the conversation
@@ -110,15 +109,9 @@ class ChatSession(
      * @return The last N messages
      */
     fun lastMessages(count: Int): List<ChatMessage> {
-        val startIndex = maxOf(0, messages.size - count)
-        return messages.subList(startIndex, messages.size)
-    }
-    
-    /**
-     * Formats all messages into a prompt using the chat template
-     */
-    private fun formatPrompt(): String {
-        return template.format(messages)
+        val snapshot = messages.toList()
+        val startIndex = maxOf(0, snapshot.size - count)
+        return snapshot.subList(startIndex, snapshot.size)
     }
     
     /**
