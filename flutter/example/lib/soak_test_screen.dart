@@ -1,13 +1,20 @@
 import 'dart:async';
 import 'dart:io' show File, Platform;
+import 'dart:typed_data' show Uint8List;
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 
+// camera package only supports iOS/Android at runtime.
+// The Dart code compiles on all platforms; usage is guarded by _cameraSupported.
+import 'package:camera/camera.dart';
+
 import 'app_theme.dart';
+
+/// Whether the camera package is supported on this platform.
+bool get _cameraSupported => Platform.isIOS || Platform.isAndroid;
 
 /// 20-minute sustained vision inference benchmark with live metrics.
 ///
@@ -114,10 +121,12 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       );
       if (!mounted) return;
 
-      // Step 3: Initialize camera
-      setState(() => _statusMessage = 'Initializing camera...');
-      await _initializeCamera();
-      if (!mounted) return;
+      // Step 3: Initialize camera (iOS/Android only)
+      if (_cameraSupported) {
+        setState(() => _statusMessage = 'Initializing camera...');
+        await _initializeCamera();
+        if (!mounted) return;
+      }
 
       // Step 4: Create PerfTrace file
       final docsDir = await getApplicationDocumentsDirectory();
@@ -204,7 +213,12 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
         _statusMessage = 'Running...';
       });
 
-      _startCameraStream();
+      if (_cameraSupported) {
+        _startCameraStream();
+      } else {
+        // macOS: run text-only soak test loop instead of camera-based vision
+        _runTextSoakLoop();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -351,6 +365,61 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       }
     } catch (e) {
       debugPrint('Error stopping camera stream: $e');
+    }
+  }
+
+  // ── macOS Text Soak Loop ────────────────────────────────────────────────
+
+  /// On macOS (no camera), run a continuous text inference loop as the soak test.
+  Future<void> _runTextSoakLoop() async {
+    const prompts = [
+      'Explain quantum computing in simple terms.',
+      'Write a short poem about the ocean.',
+      'What are the benefits of on-device AI?',
+      'Describe how neural networks learn.',
+      'What is the difference between RAM and storage?',
+    ];
+    var promptIndex = 0;
+
+    while (_isRunning && mounted) {
+      final prompt = prompts[promptIndex % prompts.length];
+      promptIndex++;
+
+      final stopwatch = Stopwatch()..start();
+
+      try {
+        // Use the vision worker's underlying model for text-only inference
+        final result = await _visionWorker.describeFrame(
+          Uint8List(0), // empty image — will run text-only
+          0,
+          0,
+          prompt: prompt,
+          maxTokens: 100,
+        );
+
+        stopwatch.stop();
+        final totalMs = stopwatch.elapsedMilliseconds.toDouble();
+
+        _scheduler?.reportLatency(WorkloadId.vision, totalMs);
+
+        _trace?.record(stage: 'text_inference', value: totalMs, extra: {
+          'generated_tokens': result.generatedTokens,
+        });
+        _trace?.nextFrame();
+
+        _frameCount++;
+        _totalTokens += result.generatedTokens;
+        _lastLatencyMs = totalMs;
+        _totalLatencyMs += totalMs;
+        _avgLatencyMs = _totalLatencyMs / _frameCount;
+        _lastDescription = result.description;
+
+        if (mounted) setState(() {});
+      } catch (e) {
+        debugPrint('Text soak error: $e');
+        // Brief pause before retrying
+        await Future.delayed(const Duration(seconds: 1));
+      }
     }
   }
 
@@ -565,8 +634,9 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       ),
       body: Column(
         children: [
-          // Camera preview (compact)
-          if (_cameraController != null &&
+          // Camera preview (compact, iOS/Android only)
+          if (_cameraSupported &&
+              _cameraController != null &&
               _cameraController!.value.isInitialized)
             SizedBox(
               height: 200,
@@ -579,6 +649,21 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
                     height: _cameraController!.value.previewSize!.width,
                     child: CameraPreview(_cameraController!),
                   ),
+                ),
+              ),
+            ),
+
+          // macOS: show text soak info instead of camera
+          if (!_cameraSupported && _isRunning)
+            Container(
+              height: 80,
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: AppTheme.surface,
+              child: const Center(
+                child: Text(
+                  'Text inference soak test (camera not available on macOS)',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
                 ),
               ),
             ),

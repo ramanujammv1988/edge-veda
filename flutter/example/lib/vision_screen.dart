@@ -1,22 +1,26 @@
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
+import 'package:file_picker/file_picker.dart';
+
+// camera package only supports iOS/Android at runtime.
+// The Dart code compiles on all platforms; usage is guarded by _cameraSupported.
+import 'package:camera/camera.dart';
 
 import 'app_theme.dart';
 
-/// Vision tab with continuous camera scanning and description overlay
+/// Whether the camera package is supported on this platform.
+bool get _cameraSupported => Platform.isIOS || Platform.isAndroid;
+
+/// Vision tab with continuous camera scanning and description overlay.
 ///
-/// Uses a persistent VisionWorker isolate (model loaded once) and FrameQueue
-/// with drop-newest backpressure for production-grade vision inference.
+/// On iOS/Android: Uses a persistent VisionWorker isolate and FrameQueue
+/// with drop-newest backpressure for production-grade continuous vision.
 ///
-/// Implements a Google Lens-style continuous scanning UX:
-/// - Camera feeds frames through FrameQueue (backpressure handles throttling)
-/// - Description overlay at bottom of camera view (AR-style)
-/// - Subtle pulsing indicator during inference
-/// - Vision model downloads on first open, then initializes camera
+/// On macOS: Camera is not supported. Uses file-picker-based image input
+/// for single-shot vision inference instead.
 class VisionScreen extends StatefulWidget {
   /// Whether this tab is currently visible to the user.
   /// When false, the camera stream is paused to save GPU/battery.
@@ -42,8 +46,12 @@ class _VisionScreenState extends State<VisionScreen>
   double _downloadProgress = 0.0;
   String _statusMessage = 'Preparing vision...';
 
-  // Camera
+  // Camera (iOS/Android only)
   CameraController? _cameraController;
+
+  // File-based input (macOS fallback)
+  bool _isProcessingFile = false;
+  Uint8List? _selectedImageBytes;
 
   // Model paths
   String? _modelPath;
@@ -106,11 +114,12 @@ class _VisionScreenState extends State<VisionScreen>
 
       if (!mounted) return;
 
-      // Step 2: Initialize camera
-      setState(() => _statusMessage = 'Initializing camera...');
-      await _initializeCamera();
-
-      if (!mounted) return;
+      // Step 2: Initialize camera (iOS/Android only)
+      if (_cameraSupported) {
+        setState(() => _statusMessage = 'Initializing camera...');
+        await _initializeCamera();
+        if (!mounted) return;
+      }
 
       // Step 3: Spawn persistent vision worker and load model once
       setState(() => _statusMessage = 'Loading vision model...');
@@ -127,11 +136,15 @@ class _VisionScreenState extends State<VisionScreen>
 
       setState(() {
         _isVisionReady = true;
-        _statusMessage = 'Vision ready';
+        _statusMessage = _cameraSupported
+            ? 'Vision ready'
+            : 'Vision ready — pick an image to describe';
       });
 
-      // Step 4: Start continuous scanning
-      _startCameraStream();
+      // Step 4: Start continuous scanning (camera platforms only)
+      if (_cameraSupported) {
+        _startCameraStream();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -140,6 +153,73 @@ class _VisionScreenState extends State<VisionScreen>
         });
       }
       debugPrint('Vision init error: $e');
+    }
+  }
+
+  /// macOS: Pick an image file and run single-shot vision inference.
+  Future<void> _pickAndDescribeImage() async {
+    if (_isProcessingFile || !_isVisionReady) return;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final filePath = result.files.single.path;
+    if (filePath == null) return;
+
+    setState(() {
+      _isProcessingFile = true;
+      _description = null;
+      _statusMessage = 'Analyzing image...';
+    });
+
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      // Decode image to get dimensions for the worker
+      final image = await decodeImageFromList(bytes);
+      final width = image.width;
+      final height = image.height;
+
+      // Convert to RGB888 for the vision worker
+      final byteData = await image.toByteData();
+      if (byteData == null) throw Exception('Failed to read image data');
+
+      // byteData is RGBA, convert to RGB
+      final rgba = byteData.buffer.asUint8List();
+      final rgb = Uint8List(width * height * 3);
+      for (var i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+        rgb[j] = rgba[i];
+        rgb[j + 1] = rgba[i + 1];
+        rgb[j + 2] = rgba[i + 2];
+      }
+
+      final desc = await _visionWorker.describeFrame(
+        rgb,
+        width,
+        height,
+        prompt: 'Describe what you see in this image in one sentence.',
+        maxTokens: 100,
+      );
+
+      if (mounted) {
+        setState(() {
+          _selectedImageBytes = bytes;
+          _description = desc.description;
+          _isProcessingFile = false;
+          _statusMessage = 'Vision ready — pick another image';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessingFile = false;
+          _statusMessage = 'Error: $e';
+        });
+      }
+      debugPrint('File vision error: $e');
     }
   }
 
@@ -356,6 +436,12 @@ class _VisionScreenState extends State<VisionScreen>
 
   @override
   Widget build(BuildContext context) {
+    // macOS: file-picker-based UI (no camera)
+    if (!_cameraSupported) {
+      return _buildDesktopVisionUI();
+    }
+
+    // iOS/Android: camera-based continuous scanning UI
     return Scaffold(
       body: Stack(
         children: [
@@ -408,6 +494,95 @@ class _VisionScreenState extends State<VisionScreen>
                     ],
                   ),
                 ),
+              ),
+            ),
+
+          // Download/loading overlay
+          if (_isDownloading || !_isVisionReady) _buildLoadingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  /// Desktop (macOS) vision UI: file picker + image display + description
+  Widget _buildDesktopVisionUI() {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      body: Stack(
+        children: [
+          if (_isVisionReady)
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Selected image preview
+                  if (_selectedImageBytes != null)
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 400, maxWidth: 600),
+                      margin: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(_selectedImageBytes!, fit: BoxFit.contain),
+                      ),
+                    ),
+
+                  // Description
+                  if (_description != null && _description!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: Row(
+                        children: [
+                          if (_isProcessingFile) const _PulsingDot(),
+                          if (_isProcessingFile) const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _description!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  const SizedBox(height: 24),
+
+                  // Pick image button
+                  ElevatedButton.icon(
+                    onPressed: _isProcessingFile ? null : _pickAndDescribeImage,
+                    icon: const Icon(Icons.image),
+                    label: Text(_selectedImageBytes != null
+                        ? 'Pick Another Image'
+                        : 'Pick an Image'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent,
+                      foregroundColor: AppTheme.background,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+
+                  if (_isProcessingFile)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: CircularProgressIndicator(color: AppTheme.accent),
+                    ),
+                ],
               ),
             ),
 
