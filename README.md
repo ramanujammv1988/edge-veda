@@ -11,11 +11,11 @@
 ---
 
 <p align="center">
-  <video src="https://github.com/ramanujammv1988/edge-veda/raw/main/docs/images/app_demo.mp4" width="300">
-    <a href="docs/images/app_demo.mp4">Watch demo video</a>
-  </video>
+  <a href="docs/images/app_demo.mp4">
+    <img src="docs/images/app_rag_demo.png" width="300" alt="Watch demo video">
+  </a>
 </p>
-<p align="center"><em>Document Q&A running entirely on-device — no cloud, no API keys</em></p>
+<p align="center"><em>Document Q&A running entirely on-device — no cloud, no API keys (<a href="docs/images/app_demo.mp4">watch video</a>)</em></p>
 
 ---
 
