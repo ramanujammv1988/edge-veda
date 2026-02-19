@@ -28,8 +28,8 @@ Confidence-aware health Q&A with cloud handoff banners -- privately query your m
 
 1. Clone the repo and navigate to the example:
    ```bash
-   git clone <repo-url>
-   cd edge/examples/health_advisor
+   git clone https://github.com/ramanujammv1988/edge-veda.git
+   cd edge-veda/examples/health_advisor
    ```
 
 2. Install dependencies:
