@@ -36,7 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 11: Production Runtime** - Persistent vision worker, sustained-session benchmarks, runtime policy layer (memory/thermal/battery adaptation)
 - [ ] **Phase 12: Chat Session API** - Multi-turn conversation management with context overflow summarization
 - [ ] **Phase 13: Compute Budget Contracts** - Declarative runtime guarantees (latency, battery, thermal, memory) enforced by central scheduler across concurrent workloads
-- [ ] **Phase 22: On-Device Intent Engine Demo** - Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, HA connector
+- [x] **Phase 22: On-Device Intent Engine Demo** - Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, HA connector
 
 ## Phase Details
 
@@ -445,7 +445,7 @@ Phase 6 (Streaming)  ----+
 | 18. Phone Detective Mode | 3/3 | **Complete** | 2026-02-15 |
 | 20. Smart Model Advisor | 2/2 | **Complete** | 2026-02-14 |
 | 21. Standalone Sample Apps | 0/? | Planned | -- |
-| 22. On-Device Intent Engine Demo | 2/3 | In Progress|  |
+| 22. On-Device Intent Engine Demo | 2/3 | Complete    | 2026-02-19 |
 
 ### v2.0 Phases (Planned)
 
@@ -671,12 +671,48 @@ Plans:
 
 **Research flag**: Skip research — uses existing SDK function calling + standard Flutter UI patterns
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 22-01-PLAN.md — Project scaffold, device models, LLM intent service, HA connector
-- [ ] 22-02-PLAN.md — Animated home dashboard UI, chat interface, action log
-- [ ] 22-03-PLAN.md — README + human verification on device
+- [x] 22-01-PLAN.md — Project scaffold, device models, LLM intent service, HA connector
+- [x] 22-02-PLAN.md — Animated home dashboard UI, chat interface, action log
+- [x] 22-03-PLAN.md — README + human verification on device
+
+### Phase 23: Add Image Generation Capabilities
+
+**Goal:** Add on-device text-to-image generation to the Edge Veda Flutter SDK using stable-diffusion.cpp and GGUF-quantized Stable Diffusion models. Developer calls `generateImage(prompt)` on EdgeVeda class, receives PNG bytes with progress streaming. Dedicated ImageWorker isolate manages persistent sd_ctx. Demo app gets new Image tab with prompt input, gallery, and advanced parameter controls.
+
+**Depends on:** Phase 22
+
+**Requirements:** Image generation C API, ImageWorker isolate, generateImage on EdgeVeda, SD model registry, demo Image tab
+
+**Success Criteria** (what must be TRUE):
+  1. stable-diffusion.cpp integrated as third engine submodule with shared ggml (no duplicate symbols)
+  2. ev_image_* C API wraps sd.cpp (init, generate, free, progress callback)
+  3. XCFramework rebuilt with all ev_image_* symbols, podspec exports them
+  4. ImageWorker persistent isolate manages sd_ctx (model loaded once, reused)
+  5. Developer calls `generateImage(prompt)` on EdgeVeda, receives PNG Uint8List
+  6. Progress callback fires for each denoising step (step N of M)
+  7. Full parameter control: prompt, negative prompt, seed, steps, guidance scale, dimensions, sampler, schedule
+  8. SD v2.1 Turbo Q8_0 (~2.3GB) model in ModelRegistry with HuggingFace download URL
+  9. Demo Image tab with prompt input, image display, gallery history, advanced settings panel
+  10. Works on real iPhone within 15-60 seconds generation time
+
+**Key Risks**:
+- **P1 (Critical)**: ggml version mismatch between sd.cpp and llama.cpp -- must share ggml successfully
+- **P2 (Critical)**: ~2.3GB model + app memory exceeds iPhone 6GB budget -- recommend unloading LLM first
+- **P3 (Moderate)**: Generation time may exceed 60s on older devices -- turbo model (4 steps) mitigates
+- **P4 (Low)**: Metal simulator crash -- use TARGET_OS_SIMULATOR guard (proven pattern)
+
+**Research flag**: Research complete (23-RESEARCH.md)
+
+**Plans:** 4 plans in 4 waves
+
+Plans:
+- [ ] 23-01-PLAN.md -- stable-diffusion.cpp submodule + CMake integration + ev_image_* C API + image_engine.cpp
+- [ ] 23-02-PLAN.md -- XCFramework rebuild + podspec symbol exports + Dart FFI bindings
+- [ ] 23-03-PLAN.md -- ImageWorker isolate + Dart types + generateImage() on EdgeVeda + model registry + SDK exports
+- [ ] 23-04-PLAN.md -- Demo Image tab (prompt, gallery, advanced settings) + human verification on device
 
 ---
 *Roadmap created: 2026-02-04*
@@ -702,5 +738,6 @@ Plans:
 *Phase 20 added: 2026-02-14 (Smart Model Advisor)*
 *Phase 20 planned: 2026-02-14 (2 plans in 2 waves)*
 *Phase 22 added: 2026-02-18 (On-Device Intent Engine Demo)*
+*Phase 23 planned: 2026-02-19 (4 plans in 4 waves)*
 *v1.0 Coverage: 19/19 requirements mapped*
 *v1.1 Coverage: 14/14 requirements mapped*
