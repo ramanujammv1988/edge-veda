@@ -170,7 +170,7 @@ ev_image_context ev_image_init(
     sd_params.model_path = ctx->model_path.c_str();
     sd_params.n_threads = ctx->default_threads;
     sd_params.vae_decode_only = true;   // Text-to-image only (no encoding)
-    sd_params.free_params_immediately = true;  // Free encoder params after load
+    sd_params.free_params_immediately = false;  // Keep weights for multi-generation reuse
 
     // Weight type override
     if (config->wtype >= 0 && config->wtype < SD_TYPE_COUNT) {
