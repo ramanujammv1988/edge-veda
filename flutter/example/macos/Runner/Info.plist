@@ -28,5 +28,13 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Edge Veda needs camera access for vision AI features</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Edge Veda needs microphone access for speech-to-text</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Edge Veda needs photo library access for the Detective AI feature</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Edge Veda needs calendar access for the Detective AI feature</string>
 </dict>
 </plist>
