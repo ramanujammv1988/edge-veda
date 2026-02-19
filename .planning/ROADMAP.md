@@ -706,7 +706,7 @@ Plans:
 
 **Research flag**: Research complete (23-RESEARCH.md)
 
-**Plans:** 4 plans in 4 waves
+**Plans:** 1/4 plans executed
 
 Plans:
 - [ ] 23-01-PLAN.md -- stable-diffusion.cpp submodule + CMake integration + ev_image_* C API + image_engine.cpp
