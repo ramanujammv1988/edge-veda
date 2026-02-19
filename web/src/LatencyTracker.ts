@@ -20,6 +20,8 @@ const DEFAULT_WINDOW_SIZE = 100;
  */
 export class LatencyTracker {
   private samples: number[] = [];
+  private sortedCache: number[] = [];
+  private dirty = false;
   private readonly windowSize: number;
 
   /**
@@ -37,6 +39,7 @@ export class LatencyTracker {
     if (this.samples.length > this.windowSize) {
       this.samples.shift();
     }
+    this.dirty = true;
   }
 
   /**
@@ -103,6 +106,8 @@ export class LatencyTracker {
    */
   reset(): void {
     this.samples = [];
+    this.sortedCache = [];
+    this.dirty = false;
   }
 
   /**
@@ -114,8 +119,11 @@ export class LatencyTracker {
   private percentile(p: number): number {
     if (this.samples.length === 0) return 0;
 
-    const sorted = [...this.samples].sort((a, b) => a - b);
-    const index = Math.ceil(p * sorted.length) - 1;
-    return sorted[Math.max(0, index)]!;
+    if (this.dirty) {
+      this.sortedCache = [...this.samples].sort((a, b) => a - b);
+      this.dirty = false;
+    }
+    const index = Math.ceil(p * this.sortedCache.length) - 1;
+    return this.sortedCache[Math.max(0, index)]!;
   }
 }
