@@ -42,6 +42,8 @@ flutter:
     platforms:
       ios:
         pluginClass: EdgeVedaPlugin
+      macos:
+        pluginClass: EdgeVedaPlugin
 
 ffigen:
   name: EdgeVedaNativeBindings

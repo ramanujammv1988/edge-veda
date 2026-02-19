@@ -782,7 +782,8 @@ class EdgeVedaNativeBindings {
       // On iOS, the library is statically linked
       return DynamicLibrary.process();
     } else if (Platform.isMacOS) {
-      return DynamicLibrary.open('libedge_veda.dylib');
+      // On macOS, the library is statically linked via the Flutter plugin
+      return DynamicLibrary.process();
     } else if (Platform.isLinux) {
       return DynamicLibrary.open('libedge_veda.so');
     } else if (Platform.isWindows) {
