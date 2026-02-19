@@ -369,6 +369,100 @@ final class EvStreamTokenInfo extends Struct {
 }
 
 // =============================================================================
+// Image Generation Types (matching edge_veda.h Image Generation API)
+// =============================================================================
+
+/// Opaque context handle for Edge Veda image generation engine
+/// Corresponds to: typedef struct ev_image_context_impl* ev_image_context;
+final class EvImageContextImpl extends Opaque {}
+
+/// Configuration structure for initializing image generation context
+/// Corresponds to: ev_image_config in edge_veda.h
+final class EvImageConfig extends Struct {
+  /// Path to SD GGUF model file
+  external Pointer<Utf8> modelPath;
+
+  /// CPU threads (0 = auto)
+  @Int32()
+  external int numThreads;
+
+  /// Metal on iOS/macOS
+  @Bool()
+  external bool useGpu;
+
+  /// Weight type override (-1 = auto from GGUF)
+  @Int32()
+  external int wtype;
+
+  /// Reserved for future use - must be NULL
+  external Pointer<Void> reserved;
+}
+
+/// Parameters for image generation
+/// Corresponds to: ev_image_gen_params in edge_veda.h
+final class EvImageGenParams extends Struct {
+  /// Text prompt describing desired image
+  external Pointer<Utf8> prompt;
+
+  /// Negative prompt (NULL = "")
+  external Pointer<Utf8> negativePrompt;
+
+  /// Image width in pixels (default 512)
+  @Int32()
+  external int width;
+
+  /// Image height in pixels (default 512)
+  @Int32()
+  external int height;
+
+  /// Number of inference steps (default 4 for turbo)
+  @Int32()
+  external int steps;
+
+  /// Classifier-free guidance scale (default 1.0 for turbo)
+  @Float()
+  external double cfgScale;
+
+  /// Random seed (-1 = random)
+  @Int64()
+  external int seed;
+
+  /// Sampler type (ev_image_sampler_t enum)
+  @Int32()
+  external int sampler;
+
+  /// Schedule type (ev_image_schedule_t enum)
+  @Int32()
+  external int schedule;
+
+  /// Reserved for future use - must be NULL
+  external Pointer<Void> reserved;
+}
+
+/// Result of image generation
+/// Corresponds to: ev_image_result in edge_veda.h
+final class EvImageResult extends Struct {
+  /// Raw pixel data (RGB, width * height * 3)
+  external Pointer<Uint8> data;
+
+  /// Image width
+  @Uint32()
+  external int width;
+
+  /// Image height
+  @Uint32()
+  external int height;
+
+  /// Number of channels (3 for RGB)
+  @Uint32()
+  external int channels;
+
+  /// Total bytes in data
+  @Size()
+  external int dataSize;
+}
+
+// =============================================================================
 // Whisper Types (matching edge_veda.h Whisper API)
 // =============================================================================
 
@@ -738,6 +832,84 @@ typedef EvFreeEmbeddingsDart = void Function(
 );
 
 // =============================================================================
+// Image Generation Function Types (matching edge_veda.h Image Generation API)
+// =============================================================================
+
+/// void ev_image_config_default(ev_image_config* config)
+typedef EvImageConfigDefaultNative = Void Function(
+  Pointer<EvImageConfig> config,
+);
+typedef EvImageConfigDefaultDart = void Function(
+  Pointer<EvImageConfig> config,
+);
+
+/// void ev_image_gen_params_default(ev_image_gen_params* params)
+typedef EvImageGenParamsDefaultNative = Void Function(
+  Pointer<EvImageGenParams> params,
+);
+typedef EvImageGenParamsDefaultDart = void Function(
+  Pointer<EvImageGenParams> params,
+);
+
+/// ev_image_context ev_image_init(const ev_image_config* config, ev_error_t* error)
+typedef EvImageInitNative = Pointer<EvImageContextImpl> Function(
+  Pointer<EvImageConfig> config,
+  Pointer<Int32> error,
+);
+typedef EvImageInitDart = Pointer<EvImageContextImpl> Function(
+  Pointer<EvImageConfig> config,
+  Pointer<Int32> error,
+);
+
+/// void ev_image_free(ev_image_context ctx)
+typedef EvImageFreeNative = Void Function(Pointer<EvImageContextImpl> ctx);
+typedef EvImageFreeDart = void Function(Pointer<EvImageContextImpl> ctx);
+
+/// bool ev_image_is_valid(ev_image_context ctx)
+typedef EvImageIsValidNative = Bool Function(Pointer<EvImageContextImpl> ctx);
+typedef EvImageIsValidDart = bool Function(Pointer<EvImageContextImpl> ctx);
+
+/// Progress callback: void (*ev_image_progress_cb)(int step, int total_steps, float elapsed_s, void* user_data)
+typedef EvImageProgressCbNative = Void Function(
+  Int32 step,
+  Int32 totalSteps,
+  Float elapsedS,
+  Pointer<Void> userData,
+);
+
+/// void ev_image_set_progress_callback(ev_image_context ctx, ev_image_progress_cb cb, void* user_data)
+typedef EvImageSetProgressCallbackNative = Void Function(
+  Pointer<EvImageContextImpl> ctx,
+  Pointer<NativeFunction<EvImageProgressCbNative>> cb,
+  Pointer<Void> userData,
+);
+typedef EvImageSetProgressCallbackDart = void Function(
+  Pointer<EvImageContextImpl> ctx,
+  Pointer<NativeFunction<EvImageProgressCbNative>> cb,
+  Pointer<Void> userData,
+);
+
+/// ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_params* params, ev_image_result* result)
+typedef EvImageGenerateNative = Int32 Function(
+  Pointer<EvImageContextImpl> ctx,
+  Pointer<EvImageGenParams> params,
+  Pointer<EvImageResult> result,
+);
+typedef EvImageGenerateDart = int Function(
+  Pointer<EvImageContextImpl> ctx,
+  Pointer<EvImageGenParams> params,
+  Pointer<EvImageResult> result,
+);
+
+/// void ev_image_free_result(ev_image_result* result)
+typedef EvImageFreeResultNative = Void Function(
+  Pointer<EvImageResult> result,
+);
+typedef EvImageFreeResultDart = void Function(
+  Pointer<EvImageResult> result,
+);
+
+// =============================================================================
 // Streaming Token Info Function Types (matching edge_veda.h confidence scoring)
 // =============================================================================
 
@@ -957,6 +1129,34 @@ class EdgeVedaNativeBindings {
   late final EvFreeEmbeddingsDart evFreeEmbeddings;
 
   // ---------------------------------------------------------------------------
+  // Image Generation Functions
+  // ---------------------------------------------------------------------------
+
+  /// Get default image generation configuration
+  late final EvImageConfigDefaultDart evImageConfigDefault;
+
+  /// Get default image generation parameters
+  late final EvImageGenParamsDefaultDart evImageGenParamsDefault;
+
+  /// Initialize image generation context with SD model
+  late final EvImageInitDart evImageInit;
+
+  /// Free image generation context and release all resources
+  late final EvImageFreeDart evImageFree;
+
+  /// Check if image generation context is valid and ready
+  late final EvImageIsValidDart evImageIsValid;
+
+  /// Set progress callback for image generation
+  late final EvImageSetProgressCallbackDart evImageSetProgressCallback;
+
+  /// Generate an image from a text prompt
+  late final EvImageGenerateDart evImageGenerate;
+
+  /// Free image generation result
+  late final EvImageFreeResultDart evImageFreeResult;
+
+  // ---------------------------------------------------------------------------
   // Streaming Token Info Functions
   // ---------------------------------------------------------------------------
 
@@ -1110,5 +1310,34 @@ class EdgeVedaNativeBindings {
       EvStreamGetTokenInfoNative,
       EvStreamGetTokenInfoDart
     >('ev_stream_get_token_info');
+
+    // Image generation functions
+    evImageConfigDefault = _dylib.lookupFunction<
+      EvImageConfigDefaultNative,
+      EvImageConfigDefaultDart
+    >('ev_image_config_default');
+    evImageGenParamsDefault = _dylib.lookupFunction<
+      EvImageGenParamsDefaultNative,
+      EvImageGenParamsDefaultDart
+    >('ev_image_gen_params_default');
+    evImageInit = _dylib.lookupFunction<EvImageInitNative, EvImageInitDart>(
+      'ev_image_init',
+    );
+    evImageFree = _dylib.lookupFunction<EvImageFreeNative, EvImageFreeDart>(
+      'ev_image_free',
+    );
+    evImageIsValid = _dylib.lookupFunction<EvImageIsValidNative, EvImageIsValidDart>(
+      'ev_image_is_valid',
+    );
+    evImageSetProgressCallback = _dylib.lookupFunction<
+      EvImageSetProgressCallbackNative,
+      EvImageSetProgressCallbackDart
+    >('ev_image_set_progress_callback');
+    evImageGenerate = _dylib.lookupFunction<EvImageGenerateNative, EvImageGenerateDart>(
+      'ev_image_generate',
+    );
+    evImageFreeResult = _dylib.lookupFunction<EvImageFreeResultNative, EvImageFreeResultDart>(
+      'ev_image_free_result',
+    );
   }
 }
