@@ -605,6 +605,27 @@ class ModelRegistry {
     return [whisperTinyEn, whisperBaseEn];
   }
 
+  // === Image Generation Models (Stable Diffusion) ===
+
+  /// SD v2.1 Turbo Q8_0 - Fast 1-4 step 512x512 image generation
+  static const ModelInfo sdV21Turbo = ModelInfo(
+    id: 'sd-v2-1-turbo-q8',
+    name: 'SD v2.1 Turbo Q8_0',
+    sizeBytes: 2320 * 1024 * 1024, // ~2.3 GB
+    description: 'Fast 1-4 step 512x512 image generation via Stable Diffusion',
+    downloadUrl:
+        'https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo-Q8_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q8_0',
+    capabilities: ['imageGeneration'],
+    family: 'stable-diffusion',
+  );
+
+  /// Get all available image generation models
+  static List<ModelInfo> getImageModels() {
+    return [sdV21Turbo];
+  }
+
   // === Embedding Models ===
 
   /// All MiniLM L6 v2 (F16) - Lightweight sentence embedding model
@@ -628,7 +649,7 @@ class ModelRegistry {
     return [allMiniLmL6V2];
   }
 
-  /// Get model by ID (searches text, vision, whisper, and embedding models)
+  /// Get model by ID (searches text, vision, whisper, embedding, and image models)
   static ModelInfo? getModelById(String id) {
     final allModels = [
       ...getAllModels(),
@@ -636,6 +657,7 @@ class ModelRegistry {
       smolvlm2_500m_mmproj,
       ...getWhisperModels(),
       ...getEmbeddingModels(),
+      ...getImageModels(),
     ];
     try {
       return allModels.firstWhere((model) => model.id == id);

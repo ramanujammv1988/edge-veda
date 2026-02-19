@@ -190,3 +190,15 @@ export 'src/model_advisor.dart' show
     UseCase,
     StorageCheck,
     MemoryValidation;
+
+// Image generation (Stable Diffusion)
+export 'src/types.dart' show
+    ImageGenerationConfig,
+    ImageProgress,
+    ImageResult,
+    ImageSampler,
+    ImageSchedule,
+    ImageGenerationException;
+
+// Image worker (persistent isolate)
+export 'src/isolate/image_worker.dart' show ImageWorker;
