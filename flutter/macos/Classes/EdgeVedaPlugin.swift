@@ -461,34 +461,38 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
     /// Both PHPhotoLibrary and EKEventStore permission APIs must be called
     /// on the main thread because they may synchronously trigger system UI.
     private func handleRequestDetectivePermissions(_ result: @escaping FlutterResult) {
-        // Step 1: Request Photos permission (must be on main thread)
-        PHPhotoLibrary.requestAuthorization(for: .readWrite) { phStatus in
-            let photosStatus: String
-            switch phStatus {
-            case .authorized:
-                photosStatus = "granted"
-            case .limited:
-                photosStatus = "limited"
-            default:
-                photosStatus = "denied"
-            }
+        // Step 1: Request Photos permission — explicitly dispatch to main thread
+        // to guard against future call-site changes (Flutter calls are typically
+        // already on main, but being explicit prevents regressions).
+        DispatchQueue.main.async {
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { phStatus in
+                let photosStatus: String
+                switch phStatus {
+                case .authorized:
+                    photosStatus = "granted"
+                case .limited:
+                    photosStatus = "limited"
+                default:
+                    photosStatus = "denied"
+                }
 
-            // Step 2: Request Calendar permission (must be on main thread)
-            DispatchQueue.main.async {
-                let eventStore = EKEventStore()
+                // Step 2: Request Calendar permission (must be on main thread)
+                DispatchQueue.main.async {
+                    let eventStore = EKEventStore()
 
-                if #available(macOS 14.0, *) {
-                    eventStore.requestFullAccessToEvents { granted, _ in
-                        let calendarStatus = granted ? "granted" : "denied"
-                        DispatchQueue.main.async {
-                            result(["photos": photosStatus, "calendar": calendarStatus])
+                    if #available(macOS 14.0, *) {
+                        eventStore.requestFullAccessToEvents { granted, _ in
+                            let calendarStatus = granted ? "granted" : "denied"
+                            DispatchQueue.main.async {
+                                result(["photos": photosStatus, "calendar": calendarStatus])
+                            }
                         }
-                    }
-                } else {
-                    eventStore.requestAccess(to: .event) { granted, _ in
-                        let calendarStatus = granted ? "granted" : "denied"
-                        DispatchQueue.main.async {
-                            result(["photos": photosStatus, "calendar": calendarStatus])
+                    } else {
+                        eventStore.requestAccess(to: .event) { granted, _ in
+                            let calendarStatus = granted ? "granted" : "denied"
+                            DispatchQueue.main.async {
+                                result(["photos": photosStatus, "calendar": calendarStatus])
+                            }
                         }
                     }
                 }
