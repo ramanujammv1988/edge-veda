@@ -249,17 +249,17 @@ X86_LIBS_TO_MERGE="$X86_LIB"
 
 echo "Merging arm64 libraries: $ARM64_LIBS_TO_MERGE"
 # shellcheck disable=SC2086
-libtool -static -o "$MERGED_DIR/arm64/libedge_veda_full.a" $ARM64_LIBS_TO_MERGE 2>/dev/null || {
-    echo "libtool merge failed for arm64, using primary library only"
-    cp "$ARM64_LIB" "$MERGED_DIR/arm64/libedge_veda_full.a"
-}
+if ! libtool -static -o "$MERGED_DIR/arm64/libedge_veda_full.a" $ARM64_LIBS_TO_MERGE; then
+    echo "ERROR: libtool merge failed for arm64. Cannot produce a valid binary."
+    exit 1
+fi
 
 echo "Merging x86_64 libraries: $X86_LIBS_TO_MERGE"
 # shellcheck disable=SC2086
-libtool -static -o "$MERGED_DIR/x86_64/libedge_veda_full.a" $X86_LIBS_TO_MERGE 2>/dev/null || {
-    echo "libtool merge failed for x86_64, using primary library only"
-    cp "$X86_LIB" "$MERGED_DIR/x86_64/libedge_veda_full.a"
-}
+if ! libtool -static -o "$MERGED_DIR/x86_64/libedge_veda_full.a" $X86_LIBS_TO_MERGE; then
+    echo "ERROR: libtool merge failed for x86_64. Cannot produce a valid binary."
+    exit 1
+fi
 
 echo "Merged arm64 library size: $(du -h "$MERGED_DIR/arm64/libedge_veda_full.a" | cut -f1)"
 echo "Merged x86_64 library size: $(du -h "$MERGED_DIR/x86_64/libedge_veda_full.a" | cut -f1)"
