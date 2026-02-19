@@ -125,6 +125,10 @@ class EVAudioCaptureHandler: NSObject, FlutterStreamHandler {
                     return
                 }
 
+                // Reset converter state per buffer. This discards inter-buffer state
+                // which can introduce minor discontinuities at buffer boundaries, but
+                // is acceptable for speech-to-text where whisper.cpp processes complete
+                // audio segments rather than continuous streams.
                 converter.reset()
 
                 var inputConsumed = false
@@ -377,6 +381,10 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
     // MARK: - Share
 
     /// Present macOS sharing service for a file at the given path.
+    /// Note: `result(true)` is returned as soon as the share picker is presented,
+    /// not when the user completes or cancels sharing. NSSharingServicePicker does
+    /// not provide a completion callback. Callers should treat the result as
+    /// "picker shown successfully", not "share completed".
     private func handleShareFile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any],
               let filePath = args["path"] as? String else {
