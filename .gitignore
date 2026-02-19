@@ -202,3 +202,10 @@ HYBRID_PRODUCT_PLAN.txt
 PHASE_11_SUMMARY.md
 *-this-session-is-being-continued-from-a-previous-co*.txt
 cactus/
+.knowledge/
+
+# macOS build artifacts
+build/macos-arm64/
+build/macos-x86_64/
+build/macos-merged/
+flutter/macos/Frameworks/EdgeVedaCore.xcframework

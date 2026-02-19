@@ -54,7 +54,7 @@ define print_warning
 endef
 
 .PHONY: all help clean test format check \
-	build-macos build-ios build-android build-wasm \
+	build-macos build-macos-framework build-ios build-android build-wasm \
 	build-flutter build-swift build-kotlin build-rn \
 	install-deps setup
 
@@ -67,6 +67,7 @@ help:
 	@echo ""
 	@echo "$(COLOR_BOLD)Platform Targets:$(COLOR_RESET)"
 	@echo "  $(COLOR_GREEN)build-macos$(COLOR_RESET)      - Build C++ core for macOS"
+	@echo "  $(COLOR_GREEN)build-macos-framework$(COLOR_RESET) - Build macOS XCFramework for Flutter"
 	@echo "  $(COLOR_GREEN)build-ios$(COLOR_RESET)        - Build iOS XCFramework (device + simulator)"
 	@echo "  $(COLOR_GREEN)build-android$(COLOR_RESET)    - Build Android AAR for all ABIs"
 	@echo "  $(COLOR_GREEN)build-wasm$(COLOR_RESET)       - Build WebAssembly module"
@@ -99,12 +100,18 @@ build-macos:
 		$(CMAKE) ../../$(CORE_DIR) \
 			-G Ninja \
 			-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
-			-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
+			-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
 			-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-			-DUSE_METAL=ON \
+			-DEDGE_VEDA_ENABLE_METAL=ON \
+			-DEDGE_VEDA_BUILD_STATIC=ON \
 			-DBUILD_TESTING=ON
 	@cd $(BUILD_DIR)/macos && $(NINJA) -j $(NUM_JOBS)
 	$(call print_success,"macOS build complete: $(BUILD_DIR)/macos/")
+
+build-macos-framework:
+	$(call print_header,"Building macOS XCFramework via build-macos.sh")
+	@./scripts/build-macos.sh --clean --release
+	$(call print_success,"macOS XCFramework built")
 
 # ============================================================================
 # iOS Build

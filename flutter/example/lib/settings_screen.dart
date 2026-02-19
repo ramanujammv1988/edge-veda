@@ -585,7 +585,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildAboutRow(
                 icon: Icons.memory,
                 title: 'Backend',
-                value: Platform.isIOS ? 'Metal GPU' : 'CPU',
+                value: (Platform.isIOS || Platform.isMacOS) ? 'Metal GPU' : 'CPU',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               const Padding(
@@ -998,7 +998,7 @@ class _DeviceInfo {
     return '${gb.toStringAsFixed(2)} GB';
   }
 
-  static bool get hasNeuralEngine => Platform.isIOS;
+  static bool get hasNeuralEngine => Platform.isIOS || Platform.isMacOS;
 
   static String _readString(String name) {
     final namePtr = name.toNativeUtf8();
