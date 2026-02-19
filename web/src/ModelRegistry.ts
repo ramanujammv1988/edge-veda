@@ -92,6 +92,71 @@ export const ModelRegistry = {
       'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-f16.gguf',
     format: 'GGUF',
     quantization: 'F16',
+    modelType: 'mmproj',
+  } as DownloadableModelInfo,
+
+  // =========================================================================
+  // Text Language Models (continued)
+  // =========================================================================
+
+  /** Qwen3 0.6B Instruct (Q4_K_M) — Alibaba's compact chat model */
+  qwen3_06b: {
+    id: 'qwen3-0.6b-q4',
+    name: 'Qwen3 0.6B',
+    sizeBytes: 522 * 1024 * 1024, // ~522 MB
+    description: "Alibaba's Qwen3 0.6B Instruct (Q4_K_M)",
+    downloadUrl:
+      'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    modelType: 'text',
+  } as DownloadableModelInfo,
+
+  // =========================================================================
+  // Speech-to-Text Models (Whisper)
+  // =========================================================================
+
+  /** Whisper Tiny English (ggml) — Fastest STT model */
+  whisperTinyEn: {
+    id: 'whisper-tiny-en',
+    name: 'Whisper Tiny EN',
+    sizeBytes: 77_700_000, // ~74 MB
+    description: 'OpenAI Whisper Tiny English — fastest speech-to-text',
+    downloadUrl:
+      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
+    format: 'ggml',
+    quantization: 'fp16',
+    modelType: 'whisper',
+  } as DownloadableModelInfo,
+
+  /** Whisper Base English (ggml) — Better accuracy than Tiny */
+  whisperBaseEn: {
+    id: 'whisper-base-en',
+    name: 'Whisper Base EN',
+    sizeBytes: 145_000_000, // ~138 MB
+    description: 'OpenAI Whisper Base English — balanced speed and accuracy',
+    downloadUrl:
+      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
+    format: 'ggml',
+    quantization: 'fp16',
+    modelType: 'whisper',
+  } as DownloadableModelInfo,
+
+  // =========================================================================
+  // Embedding Models
+  // =========================================================================
+
+  /** all-MiniLM-L6-v2 (F16) — Compact 384-dim sentence embedding model */
+  allMiniLmL6V2: {
+    id: 'all-minilm-l6-v2-f16',
+    name: 'all-MiniLM-L6-v2',
+    sizeBytes: 44_000_000, // ~42 MB
+    description: 'Sentence embedding model — 384-dim, fast and accurate',
+    downloadUrl:
+      'https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.F16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+    modelType: 'embedding',
   } as DownloadableModelInfo,
 
   // =========================================================================
@@ -105,6 +170,7 @@ export const ModelRegistry = {
       ModelRegistry.phi35_mini,
       ModelRegistry.gemma2_2b,
       ModelRegistry.tinyLlama,
+      ModelRegistry.qwen3_06b,
     ];
   },
 
@@ -113,12 +179,24 @@ export const ModelRegistry = {
     return [ModelRegistry.smolvlm2_500m];
   },
 
-  /** Get all models including vision and mmproj */
+  /** Get all Whisper speech-to-text models */
+  getWhisperModels(): DownloadableModelInfo[] {
+    return [ModelRegistry.whisperTinyEn, ModelRegistry.whisperBaseEn];
+  },
+
+  /** Get all sentence embedding models */
+  getEmbeddingModels(): DownloadableModelInfo[] {
+    return [ModelRegistry.allMiniLmL6V2];
+  },
+
+  /** Get all models across all categories (including mmproj) */
   getAllModels(): DownloadableModelInfo[] {
     return [
       ...ModelRegistry.getAllTextModels(),
       ...ModelRegistry.getVisionModels(),
       ModelRegistry.smolvlm2_500m_mmproj,
+      ...ModelRegistry.getWhisperModels(),
+      ...ModelRegistry.getEmbeddingModels(),
     ];
   },
 
