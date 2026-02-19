@@ -440,19 +440,20 @@ internal enum FFIBridge {
     // MARK: - Memory Management
 
     /// Get memory usage statistics
-    static func getMemoryUsage(ctx: ev_context) throws -> (current: UInt64, peak: UInt64, model: UInt64, context: UInt64) {
+    static func getMemoryUsage(ctx: ev_context) throws -> MemoryStats {
         var stats = ev_memory_stats()
         let error = ev_get_memory_usage(ctx, &stats)
-        
+
         guard error == EV_SUCCESS else {
             throw mapError(error, ctx: ctx)
         }
-        
-        return (
-            current: UInt64(stats.current_bytes),
-            peak: UInt64(stats.peak_bytes),
-            model: UInt64(stats.model_bytes),
-            context: UInt64(stats.context_bytes)
+
+        return MemoryStats(
+            currentBytes: UInt64(stats.current_bytes),
+            peakBytes:    UInt64(stats.peak_bytes),
+            limitBytes:   UInt64(stats.limit_bytes),
+            modelBytes:   UInt64(stats.model_bytes),
+            contextBytes: UInt64(stats.context_bytes)
         )
     }
 

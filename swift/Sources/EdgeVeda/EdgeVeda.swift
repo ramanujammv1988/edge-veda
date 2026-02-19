@@ -36,6 +36,9 @@ public actor EdgeVeda {
     /// Flag to track if model was auto-unloaded due to memory pressure
     private var autoUnloadedDueToMemory: Bool = false
 
+    /// Swift-level memory pressure callback registered via setMemoryPressureCallback(_:)
+    private var memoryPressureCallback: (@Sendable (MemoryPressureEvent) -> Void)? = nil
+
     // MARK: - Initialization
 
     /// Initialize EdgeVeda with a model file and configuration
@@ -207,18 +210,18 @@ public actor EdgeVeda {
 
     // MARK: - Model Information
 
-    /// Current memory usage in bytes
+    /// Full memory usage breakdown from the C inference engine.
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func getMemoryStats() async throws -> MemoryStats {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        return try await Task { try FFIBridge.getMemoryUsage(ctx: ctx) }.value
+    }
+
+    /// Current memory usage in bytes (backward-compatible convenience accessor).
     public var memoryUsage: UInt64 {
         get async {
-            guard let ctx = context else {
-                return 0
-            }
-            do {
-                let stats = try FFIBridge.getMemoryUsage(ctx: ctx)
-                return stats.current
-            } catch {
-                return 0
-            }
+            guard let ctx = context else { return 0 }
+            return (try? FFIBridge.getMemoryUsage(ctx: ctx))?.currentBytes ?? 0
         }
     }
 
@@ -229,6 +232,54 @@ public actor EdgeVeda {
             throw EdgeVedaError.modelNotLoaded
         }
         return try FFIBridge.getModelInfo(ctx: ctx)
+    }
+
+    // MARK: - Memory Management API
+
+    /// Set a hard memory ceiling in bytes.
+    /// - Parameter limitBytes: Maximum memory in bytes; 0 = no limit.
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func setMemoryLimit(_ limitBytes: UInt64) async throws {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        try FFIBridge.setMemoryLimit(ctx: ctx, limitBytes: limitBytes)
+    }
+
+    /// Register a callback invoked when memory usage exceeds ~80% of the configured limit.
+    /// Pass nil to remove the callback.
+    /// - Parameter callback: Sendable closure receiving a `MemoryPressureEvent`, or nil to deregister
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func setMemoryPressureCallback(
+        _ callback: (@Sendable (MemoryPressureEvent) -> Void)?
+    ) throws {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        self.memoryPressureCallback = callback
+
+        if callback != nil {
+            try FFIBridge.setMemoryPressureCallback(ctx: ctx) { [weak self] currentBytes, limitBytes in
+                guard let self else { return }
+                let ratio = limitBytes > 0 ? Double(currentBytes) / Double(limitBytes) : 0.0
+                let event = MemoryPressureEvent(
+                    currentBytes: currentBytes,
+                    limitBytes: limitBytes,
+                    pressureRatio: ratio,
+                    timestamp: Date()
+                )
+                Task { await self.dispatchMemoryPressureEvent(event) }
+            }
+        } else {
+            try FFIBridge.setMemoryPressureCallback(ctx: ctx, callback: nil)
+        }
+    }
+
+    private func dispatchMemoryPressureEvent(_ event: MemoryPressureEvent) {
+        memoryPressureCallback?(event)
+    }
+
+    /// Ask the inference engine to release any cached allocations it can safely free.
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func memoryCleanup() async throws {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        try FFIBridge.memoryCleanup(ctx: ctx)
     }
 
     // MARK: - Model Management

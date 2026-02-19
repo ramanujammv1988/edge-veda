@@ -102,6 +102,22 @@ public struct DownloadProgress: Sendable {
     }
 }
 
+// MARK: - ModelType
+
+/// Category of a downloadable model
+public enum ModelType: String, Codable, Sendable {
+    /// Standard text generation / instruction-tuned LLM
+    case text
+    /// Vision language model (image + text)
+    case vision
+    /// Multimodal projector companion file for a vision model
+    case mmproj
+    /// Speech-to-text (Whisper-style) model
+    case whisper
+    /// Text embedding model
+    case embedding
+}
+
 // MARK: - DownloadableModelInfo
 
 /// Downloadable model information descriptor
@@ -134,6 +150,9 @@ public struct DownloadableModelInfo: Codable, Sendable {
     /// Quantization level (e.g., "Q4_K_M")
     public let quantization: String?
 
+    /// Category of the model (text, vision, mmproj, whisper, embedding)
+    public let modelType: ModelType?
+
     public init(
         id: String,
         name: String,
@@ -142,7 +161,8 @@ public struct DownloadableModelInfo: Codable, Sendable {
         downloadUrl: String,
         checksum: String? = nil,
         format: String = "GGUF",
-        quantization: String? = nil
+        quantization: String? = nil,
+        modelType: ModelType? = nil
     ) {
         self.id = id
         self.name = name
@@ -152,6 +172,7 @@ public struct DownloadableModelInfo: Codable, Sendable {
         self.checksum = checksum
         self.format = format
         self.quantization = quantization
+        self.modelType = modelType
     }
 }
 

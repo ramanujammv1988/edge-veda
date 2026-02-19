@@ -43,6 +43,9 @@ public enum EdgeVedaError: LocalizedError, Sendable {
     /// FFI/C interop error
     case ffiError(message: String)
 
+    /// Initialization failed with a specific reason
+    case initializationFailed(reason: String)
+
     /// Unknown error
     case unknown(message: String)
 
@@ -83,6 +86,9 @@ public enum EdgeVedaError: LocalizedError, Sendable {
 
         case .invalidConfig(let reason):
             return "Invalid configuration: \(reason)"
+
+        case .initializationFailed(let reason):
+            return "Initialization failed: \(reason)"
 
         case .ffiError(let message):
             return "FFI error: \(message)"
@@ -440,6 +446,72 @@ public struct WhisperResult: Sendable {
         self.segments = segments
         self.detectedLanguage = detectedLanguage
         self.processingTime = processingTime
+    }
+}
+
+// MARK: - Memory Statistics
+
+/// Memory usage statistics from the inference engine.
+/// Field names map to C `ev_memory_stats` struct fields (camelCase).
+public struct MemoryStats: Sendable {
+    /// Bytes currently in use by model weights + KV cache
+    public let currentBytes: UInt64
+    /// Peak bytes observed since context creation
+    public let peakBytes: UInt64
+    /// Configured memory ceiling in bytes; 0 = no limit
+    public let limitBytes: UInt64
+    /// Bytes consumed by model weights
+    public let modelBytes: UInt64
+    /// Bytes consumed by the KV context cache
+    public let contextBytes: UInt64
+
+    /// Fraction of limit currently used (0.0–1.0+). Returns 0 if no limit set.
+    public var usagePercent: Double {
+        limitBytes > 0 ? Double(currentBytes) / Double(limitBytes) : 0.0
+    }
+
+    /// True when memory usage exceeds 80% of the configured limit.
+    public var isHighPressure: Bool { usagePercent > 0.8 }
+
+    /// True when memory usage exceeds 90% of the configured limit.
+    public var isCritical: Bool { usagePercent > 0.9 }
+
+    public init(
+        currentBytes: UInt64,
+        peakBytes: UInt64,
+        limitBytes: UInt64,
+        modelBytes: UInt64,
+        contextBytes: UInt64
+    ) {
+        self.currentBytes = currentBytes
+        self.peakBytes = peakBytes
+        self.limitBytes = limitBytes
+        self.modelBytes = modelBytes
+        self.contextBytes = contextBytes
+    }
+}
+
+/// Event emitted to callbacks registered via `setMemoryPressureCallback(_:)`.
+public struct MemoryPressureEvent: Sendable {
+    /// Current memory usage in bytes
+    public let currentBytes: UInt64
+    /// Configured memory limit in bytes
+    public let limitBytes: UInt64
+    /// Ratio of currentBytes to limitBytes (0.0–1.0+)
+    public let pressureRatio: Double
+    /// When the event was generated
+    public let timestamp: Date
+
+    public init(
+        currentBytes: UInt64,
+        limitBytes: UInt64,
+        pressureRatio: Double,
+        timestamp: Date
+    ) {
+        self.currentBytes = currentBytes
+        self.limitBytes = limitBytes
+        self.pressureRatio = pressureRatio
+        self.timestamp = timestamp
     }
 }
 

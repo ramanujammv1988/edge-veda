@@ -343,35 +343,6 @@ EV_API void ev_stream_cancel(ev_stream stream);
 EV_API void ev_stream_free(ev_stream stream);
 
 /* ============================================================================
- * Streaming Token Info (confidence scoring)
- * ========================================================================= */
-
-/**
- * @brief Extended token information from streaming generation
- */
-typedef struct {
-    float confidence;        /**< Token confidence score (0.0-1.0), -1.0 if not computed */
-    float avg_confidence;    /**< Running average confidence across all tokens */
-    bool needs_cloud_handoff; /**< True when avg confidence drops below threshold */
-    int token_index;         /**< Token position in generated sequence */
-} ev_stream_token_info;
-
-/**
- * @brief Get extended token information from current stream position
- *
- * Returns confidence scoring and cloud handoff information for the
- * most recently generated token in the stream.
- *
- * @param stream Stream handle
- * @param info Pointer to info structure to fill
- * @return Error code (EV_SUCCESS on success)
- */
-EV_API ev_error_t ev_stream_get_token_info(
-    ev_stream stream,
-    ev_stream_token_info* info
-);
-
-/* ============================================================================
  * Memory Management
  * ========================================================================= */
 
@@ -708,6 +679,35 @@ EV_API ev_error_t ev_embed(
 EV_API void ev_free_embeddings(ev_embed_result* result);
 
 /* ============================================================================
+ * Streaming Token Info (confidence scoring)
+ * ========================================================================= */
+
+/**
+ * @brief Extended token information from streaming generation
+ */
+typedef struct {
+    float confidence;        /**< Token confidence score (0.0-1.0), -1.0 if not computed */
+    float avg_confidence;    /**< Running average confidence across all tokens */
+    bool needs_cloud_handoff; /**< True when avg confidence drops below threshold */
+    int token_index;         /**< Token position in generated sequence */
+} ev_stream_token_info;
+
+/**
+ * @brief Get extended token information from current stream position
+ *
+ * Returns confidence scoring and cloud handoff information for the
+ * most recently generated token in the stream.
+ *
+ * @param stream Stream handle
+ * @param info Pointer to info structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_stream_get_token_info(
+    ev_stream stream,
+    ev_stream_token_info* info
+);
+
+/* ============================================================================
  * Whisper API (STT - Speech-to-Text)
  * ========================================================================= */
 
@@ -794,4 +794,65 @@ EV_API void ev_whisper_config_default(ev_whisper_config* config);
 /**
  * @brief Initialize whisper context with model
  *
- * Loads the Whisper model for speech-to-
+ * Loads the Whisper model for speech-to-text transcription.
+ * The whisper context is independent from text and vision contexts.
+ *
+ * @param config Whisper configuration (model_path required)
+ * @param error Optional pointer to receive error code
+ * @return Whisper context handle on success, NULL on failure
+ */
+EV_API ev_whisper_context ev_whisper_init(
+    const ev_whisper_config* config,
+    ev_error_t* error
+);
+
+/**
+ * @brief Transcribe PCM audio samples to text
+ *
+ * Takes 16kHz mono float32 PCM samples and returns transcribed text
+ * with segment-level timing information.
+ * This is a blocking call that returns the complete transcription.
+ *
+ * @param ctx Whisper context handle
+ * @param pcm_samples PCM audio data (16kHz, mono, float32, range [-1.0, 1.0])
+ * @param n_samples Number of samples in pcm_samples array
+ * @param params Transcription parameters (NULL = use defaults)
+ * @param result Pointer to result structure to fill (caller must free with ev_whisper_free_result)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_whisper_transcribe(
+    ev_whisper_context ctx,
+    const float* pcm_samples,
+    int n_samples,
+    const ev_whisper_params* params,
+    ev_whisper_result* result
+);
+
+/**
+ * @brief Free whisper transcription result
+ *
+ * Frees the segments array and associated text strings
+ * allocated by ev_whisper_transcribe().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_whisper_free_result(ev_whisper_result* result);
+
+/**
+ * @brief Free whisper context and release all resources
+ * @param ctx Whisper context handle to free
+ */
+EV_API void ev_whisper_free(ev_whisper_context ctx);
+
+/**
+ * @brief Check if whisper context is valid and ready for transcription
+ * @param ctx Whisper context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_whisper_is_valid(ev_whisper_context ctx);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* EDGE_VEDA_H */

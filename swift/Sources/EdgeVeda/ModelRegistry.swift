@@ -67,6 +67,19 @@ public enum ModelRegistry {
         quantization: "Q4_K_M"
     )
 
+    /// Qwen3 0.6B (Q4_K_M quantization) — Ultra-compact Alibaba model
+    public static let qwen3_06b = DownloadableModelInfo(
+        id: "qwen3-0.6b-q4",
+        name: "Qwen3 0.6B",
+        sizeBytes: 522 * 1024 * 1024, // ~522 MB
+        description: "Alibaba's Qwen3 0.6B Instruct (Q4_K_M)",
+        downloadUrl: "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
+        checksum: nil,
+        format: "GGUF",
+        quantization: "Q4_K_M",
+        modelType: .text
+    )
+
     // MARK: - Vision Language Models
 
     /// SmolVLM2-500M-Video-Instruct (Q8_0) — Vision Language Model
@@ -93,16 +106,69 @@ public enum ModelRegistry {
         quantization: "F16"
     )
 
+    // MARK: - Whisper STT Models
+
+    /// Whisper Tiny English — fastest speech-to-text
+    public static let whisperTinyEn = DownloadableModelInfo(
+        id: "whisper-tiny-en",
+        name: "Whisper Tiny EN",
+        sizeBytes: 77_700_000, // ~74 MB
+        description: "OpenAI Whisper Tiny English — fastest speech-to-text",
+        downloadUrl: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
+        checksum: nil,
+        format: "ggml",
+        quantization: nil,
+        modelType: .whisper
+    )
+
+    /// Whisper Base English — balanced speed and accuracy
+    public static let whisperBaseEn = DownloadableModelInfo(
+        id: "whisper-base-en",
+        name: "Whisper Base EN",
+        sizeBytes: 145_000_000, // ~138 MB
+        description: "OpenAI Whisper Base English — balanced speed and accuracy",
+        downloadUrl: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+        checksum: nil,
+        format: "ggml",
+        quantization: nil,
+        modelType: .whisper
+    )
+
+    // MARK: - Embedding Models
+
+    /// all-MiniLM-L6-v2 (F16) — 384-dim sentence embeddings
+    public static let allMiniLmL6V2 = DownloadableModelInfo(
+        id: "all-minilm-l6-v2-f16",
+        name: "all-MiniLM-L6-v2",
+        sizeBytes: 44_000_000, // ~42 MB
+        description: "Sentence embedding model — 384-dim, fast and accurate",
+        downloadUrl: "https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.F16.gguf",
+        checksum: nil,
+        format: "GGUF",
+        quantization: "F16",
+        modelType: .embedding
+    )
+
     // MARK: - Query Methods
 
     /// Get all available text models
     public static func getAllModels() -> [DownloadableModelInfo] {
-        return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama]
+        return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama, qwen3_06b]
     }
 
     /// Get all available vision models (model files only, not mmproj)
     public static func getVisionModels() -> [DownloadableModelInfo] {
         return [smolvlm2_500m]
+    }
+
+    /// Get all available Whisper speech-to-text models
+    public static func getWhisperModels() -> [DownloadableModelInfo] {
+        return [whisperTinyEn, whisperBaseEn]
+    }
+
+    /// Get all available text embedding models
+    public static func getEmbeddingModels() -> [DownloadableModelInfo] {
+        return [allMiniLmL6V2]
     }
 
     /// Get the multimodal projector for a vision model
@@ -122,12 +188,13 @@ public enum ModelRegistry {
         }
     }
 
-    /// Get model by ID (searches both text and vision models)
+    /// Get model by ID (searches all model categories)
     ///
     /// - Parameter id: The model identifier to look up
     /// - Returns: The matching `DownloadableModelInfo`, or nil if not found
     public static func getModelById(_ id: String) -> DownloadableModelInfo? {
         let allModels: [DownloadableModelInfo] = getAllModels() + getVisionModels() + [smolvlm2_500m_mmproj]
+            + getWhisperModels() + getEmbeddingModels()
         return allModels.first { $0.id == id }
     }
 
