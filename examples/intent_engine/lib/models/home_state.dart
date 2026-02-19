@@ -253,6 +253,13 @@ class HomeState extends ChangeNotifier {
             isOn: false,
             speed: 0,
           ),
+          const LockState(
+            id: 'front_door_lock',
+            name: 'Front Door Lock',
+            room: RoomId.livingRoom,
+            isOn: true,
+            isLocked: false,
+          ),
         ],
       ),
       Room(

@@ -128,6 +128,7 @@ Available device IDs:
 - living_room_thermostat: Living Room Thermostat
 - living_room_tv: Living Room TV
 - living_room_fan: Living Room Fan
+- front_door_lock: Front Door Lock
 - bedroom_light_main: Bedroom Main Light
 - bedroom_light_bedside: Bedroom Bedside Lamp
 - bedroom_fan: Bedroom Fan
@@ -298,9 +299,6 @@ ${_homeState.getHomeStatusSummary()}''';
       );
 
       final newActions = _homeState.actionLog.sublist(actionsBefore);
-
-      // Recreate session with updated home status for next turn
-      _createSession();
 
       return IntentResult(
         message: reply.content,
