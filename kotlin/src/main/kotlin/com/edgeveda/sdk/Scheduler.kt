@@ -1,5 +1,6 @@
 package com.edgeveda.sdk
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,9 +30,13 @@ import kotlin.coroutines.cancellation.CancellationException
  * ```
  */
 class Scheduler(
+    // context is forwarded to BatteryDrainTracker and ThermalMonitor so that
+    // battery-drain and thermal budget checks actually work. Without it both
+    // trackers return null/−1 and their budget constraints are silently skipped.
+    private val context: Context? = null,
     private val latencyTracker: LatencyTracker = LatencyTracker(),
-    private val batteryTracker: BatteryDrainTracker = BatteryDrainTracker(),
-    private val thermalMonitor: ThermalMonitor = ThermalMonitor(),
+    private val batteryTracker: BatteryDrainTracker = BatteryDrainTracker(context),
+    private val thermalMonitor: ThermalMonitor = ThermalMonitor(context),
     private val resourceMonitor: ResourceMonitor = ResourceMonitor()
 ) {
     private val mutex = Mutex()
@@ -382,25 +387,25 @@ internal class PriorityQueue {
         val priority: TaskPriority
     )
 
-    private val items = mutableListOf<QueuedItem>()
+    // java.util.PriorityQueue gives O(log n) insert and O(log n) poll vs the
+    // previous O(n log n) sort-on-insert + O(n) removeFirst on ArrayList.
+    private val heap = java.util.PriorityQueue<QueuedItem>(
+        compareByDescending { it.priority.value }
+    )
 
-    val count: Int get() = items.size
-    val isEmpty: Boolean get() = items.isEmpty()
+    val count: Int get() = heap.size
+    val isEmpty: Boolean get() = heap.isEmpty()
 
     fun enqueue(id: String, priority: TaskPriority) {
-        items.add(QueuedItem(id, priority))
-        items.sortByDescending { it.priority.value }
+        heap.add(QueuedItem(id, priority))
     }
 
-    fun dequeue(): String? {
-        if (items.isEmpty()) return null
-        return items.removeFirst().id
-    }
+    fun dequeue(): String? = heap.poll()?.id
 
     fun removeTask(id: String) {
-        items.removeAll { it.id == id }
+        heap.removeIf { it.id == id }
     }
 
     fun countByPriority(priority: TaskPriority): Int =
-        items.count { it.priority == priority }
+        heap.count { it.priority == priority }
 }

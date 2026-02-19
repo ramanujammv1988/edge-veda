@@ -4,6 +4,7 @@ import com.edgeveda.sdk.internal.NativeBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -44,6 +45,20 @@ class VisionWorker {
     private val frameQueue = FrameQueue()
     private val _isInitialized = AtomicBoolean(false)
     @Volatile private var backend = ""
+
+    // Reusable DirectByteBuffer for zero-copy JNI transfer.
+    // Allocated once and grown only when a larger frame arrives, avoiding
+    // repeated off-heap allocations and GC pressure at camera frame rates.
+    @Volatile private var frameBuffer: ByteBuffer? = null
+
+    private fun getFrameBuffer(requiredSize: Int): ByteBuffer {
+        val existing = frameBuffer
+        if (existing != null && existing.capacity() >= requiredSize) {
+            existing.clear()
+            return existing
+        }
+        return ByteBuffer.allocateDirect(requiredSize).also { frameBuffer = it }
+    }
 
     /**
      * Whether the vision context is initialized and ready
@@ -209,8 +224,9 @@ class VisionWorker {
         params: VisionGenerationParams
     ): VisionResult = withContext(Dispatchers.Default) {
         try {
-            // Allocate DirectByteBuffer for zero-copy JNI transfer
-            val buffer = java.nio.ByteBuffer.allocateDirect(rgb.size)
+            // Reuse the pre-allocated DirectByteBuffer for zero-copy JNI transfer.
+            // getFrameBuffer() returns the cached buffer (cleared) or grows it if needed.
+            val buffer = getFrameBuffer(rgb.size)
             buffer.put(rgb)
             buffer.flip()
 
@@ -303,6 +319,7 @@ class VisionWorker {
             _isInitialized.set(false)
             frameQueue.reset()
             backend = ""
+            frameBuffer = null  // release native memory held by the reusable buffer
         } catch (e: Exception) {
             throw EdgeVedaException.NativeError(
                 "Failed to cleanup vision context: ${e.message}",

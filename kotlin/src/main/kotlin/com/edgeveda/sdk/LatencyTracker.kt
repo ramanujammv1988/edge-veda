@@ -15,17 +15,21 @@ class LatencyTracker(
     private val maxSamples: Int = 100
 ) {
     private val mutex = Mutex()
-    private val samples = mutableListOf<Double>()
+    private val samples = ArrayDeque<Double>(maxSamples)
+    // Sorted copy rebuilt lazily — only when new data has arrived since the last sort.
+    private var sortedCache: List<Double> = emptyList()
+    private var dirty = false
 
     /** Total number of samples recorded. */
     suspend fun sampleCount(): Int = mutex.withLock { samples.size }
 
     /** Record a latency sample in milliseconds. */
     suspend fun record(latencyMs: Double) = mutex.withLock {
-        samples.add(latencyMs)
+        samples.addLast(latencyMs)
         if (samples.size > maxSamples) {
             samples.removeFirst()
         }
+        dirty = true
     }
 
     /** Get the 50th percentile (median) latency. */
@@ -55,13 +59,18 @@ class LatencyTracker(
     /** Calculate a specific percentile (internal, must be called under lock). */
     private fun percentile(p: Double): Double {
         if (samples.isEmpty()) return 0.0
-        val sorted = samples.sorted()
-        val index = (sorted.size * p).toInt().coerceAtMost(sorted.size - 1)
-        return sorted[index]
+        if (dirty) {
+            sortedCache = samples.sorted()
+            dirty = false
+        }
+        val index = (sortedCache.size * p).toInt().coerceAtMost(sortedCache.size - 1)
+        return sortedCache[index]
     }
 
     /** Reset all samples. */
     suspend fun reset() = mutex.withLock {
         samples.clear()
+        sortedCache = emptyList()
+        dirty = false
     }
 }

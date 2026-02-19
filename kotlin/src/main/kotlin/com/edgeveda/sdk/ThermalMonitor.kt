@@ -36,7 +36,10 @@ class ThermalMonitor(
     private val context: Context? = null
 ) {
     private val mutex = Mutex()
-    private var _currentLevel: Int = -1
+    // @Volatile ensures the background-thread write from the OS thermal callback is
+    // immediately visible to coroutine readers (Kotlin Mutex does not provide that
+    // happens-before guarantee for raw background-thread writes).
+    @Volatile private var _currentLevel: Int = -1
     private val stateChangeListeners = mutableMapOf<String, (Int) -> Unit>()
     private var thermalStatusListener: Any? = null // Holds the OnThermalStatusChangedListener ref
 

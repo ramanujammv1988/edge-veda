@@ -26,7 +26,7 @@ class ResourceMonitor(
     private val maxSamples: Int = 100
 ) {
     private val mutex = Mutex()
-    private val samples = mutableListOf<Double>()
+    private val samples = ArrayDeque<Double>(maxSamples)
     private var _peakRssMb: Double = 0.0
 
     companion object {
@@ -77,7 +77,7 @@ class ResourceMonitor(
     /** Must be called under [mutex] lock. */
     private fun updateMemoryUsage() {
         val rss = getResidentSetSize()
-        samples.add(rss)
+        samples.addLast(rss)
 
         if (rss > _peakRssMb) {
             _peakRssMb = rss
