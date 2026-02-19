@@ -34,6 +34,8 @@
 	<string>Edge Veda needs microphone access for speech-to-text</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Edge Veda needs photo library access for the Detective AI feature</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Edge Veda needs permission to save photos for the Detective AI feature</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Edge Veda needs calendar access for the Detective AI feature</string>
 </dict>

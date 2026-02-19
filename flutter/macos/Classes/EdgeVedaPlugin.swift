@@ -450,44 +450,40 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
     }
 
     /// Request photo and calendar permissions sequentially.
+    /// Both PHPhotoLibrary and EKEventStore permission APIs must be called
+    /// on the main thread because they may synchronously trigger system UI.
     private func handleRequestDetectivePermissions(_ result: @escaping FlutterResult) {
-        DispatchQueue.global().async {
-            let semaphore = DispatchSemaphore(value: 0)
-
-            // Step 1: Request Photos permission
-            var photosStatus = "denied"
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-                switch status {
-                case .authorized:
-                    photosStatus = "granted"
-                case .limited:
-                    photosStatus = "limited"
-                default:
-                    photosStatus = "denied"
-                }
-                semaphore.signal()
+        // Step 1: Request Photos permission (must be on main thread)
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { phStatus in
+            let photosStatus: String
+            switch phStatus {
+            case .authorized:
+                photosStatus = "granted"
+            case .limited:
+                photosStatus = "limited"
+            default:
+                photosStatus = "denied"
             }
-            semaphore.wait()
 
-            // Step 2: Request Calendar permission
-            var calendarStatus = "denied"
-            let eventStore = EKEventStore()
-
-            if #available(macOS 14.0, *) {
-                eventStore.requestFullAccessToEvents { granted, _ in
-                    calendarStatus = granted ? "granted" : "denied"
-                    semaphore.signal()
-                }
-            } else {
-                eventStore.requestAccess(to: .event) { granted, _ in
-                    calendarStatus = granted ? "granted" : "denied"
-                    semaphore.signal()
-                }
-            }
-            semaphore.wait()
-
+            // Step 2: Request Calendar permission (must be on main thread)
             DispatchQueue.main.async {
-                result(["photos": photosStatus, "calendar": calendarStatus])
+                let eventStore = EKEventStore()
+
+                if #available(macOS 14.0, *) {
+                    eventStore.requestFullAccessToEvents { granted, _ in
+                        let calendarStatus = granted ? "granted" : "denied"
+                        DispatchQueue.main.async {
+                            result(["photos": photosStatus, "calendar": calendarStatus])
+                        }
+                    }
+                } else {
+                    eventStore.requestAccess(to: .event) { granted, _ in
+                        let calendarStatus = granted ? "granted" : "denied"
+                        DispatchQueue.main.async {
+                            result(["photos": photosStatus, "calendar": calendarStatus])
+                        }
+                    }
+                }
             }
         }
     }
