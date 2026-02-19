@@ -205,8 +205,8 @@ actor BatteryDrainTracker {
                 // Wait 60 seconds (60 billion nanoseconds)
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 
-                // Record sample
-                await recordSample()
+                // Record sample (non-async actor method; Task inherits actor isolation)
+                recordSample()
             }
         }
         

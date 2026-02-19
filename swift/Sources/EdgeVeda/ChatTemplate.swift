@@ -56,20 +56,37 @@ public enum ChatTemplate: Sendable {
     }
     
     private func formatMistral(messages: [ChatMessage]) -> String {
-        var prompt = ""
-        
+        // Mistral Instruct v0.1 format:
+        // <s>[INST] <<SYS>>\n{system}\n<</SYS>>\n\n{user} [/INST] {assistant}</s>[INST] {user2} [/INST]…
+        //
+        // Rules:
+        // • Prompt opens with <s> (BOS token) — one per conversation, not per turn.
+        // • System prompt is injected inside the first [INST] block using <<SYS>>/<</SYS>> markers.
+        // • Subsequent user turns use [INST]…[/INST] without <s>.
+        // • Previous implementation placed system content as bare text before [INST], which
+        //   Mistral models do not recognise, and omitted the <s> BOS token entirely.
+        var prompt = "<s>"
+        var pendingSystem: String? = nil
+
         for message in messages {
             switch message.role {
             case .system:
-                // Mistral typically includes system messages at the start
-                prompt += "\(message.content)\n\n"
+                // Defer system content until the next user turn so it lands inside [INST].
+                pendingSystem = message.content
             case .user:
-                prompt += "[INST] \(message.content) [/INST]"
+                prompt += "[INST]"
+                if let sys = pendingSystem {
+                    prompt += " <<SYS>>\n\(sys)\n<</SYS>>\n\n"
+                    pendingSystem = nil
+                } else {
+                    prompt += " "
+                }
+                prompt += "\(message.content) [/INST]"
             case .assistant:
                 prompt += " \(message.content)</s>"
             }
         }
-        
+
         return prompt
     }
 }

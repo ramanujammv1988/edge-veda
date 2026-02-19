@@ -194,12 +194,11 @@ public actor ModelManager {
     /// Uses Application Support directory which is NOT cleared when the user clears cache,
     /// ensuring models survive between app sessions.
     public func getModelsDirectory() throws -> URL {
-        let appSupportDir: URL
-        #if os(iOS)
-        appSupportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        #else
-        appSupportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        #endif
+        guard let appSupportDir = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first else {
+            throw EdgeVedaError.ffiError(message: "Application Support directory unavailable")
+        }
 
         let modelsDir = appSupportDir.appendingPathComponent(Self.modelsCacheDir)
 

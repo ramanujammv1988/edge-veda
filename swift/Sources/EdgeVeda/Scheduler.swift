@@ -259,7 +259,12 @@ public actor Scheduler {
         guard let budget = budget, warmUpComplete else {
             return
         }
-        
+
+        // Refresh the memory sample once per budget-check cycle.
+        // ResourceMonitor.currentRssMb now returns a cached value (no syscall);
+        // sample() triggers the actual Mach task_info read.
+        await resourceMonitor.sample()
+
         // Check p95 latency
         if let maxP95 = budget.p95LatencyMs {
             let currentP95 = await latencyTracker.p95

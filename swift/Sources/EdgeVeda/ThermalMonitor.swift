@@ -29,6 +29,8 @@ actor ThermalMonitor {
     #if os(iOS) || os(macOS)
     private var currentState: ProcessInfo.ThermalState = .nominal
     private let logger = Logger(subsystem: "com.edgeveda.sdk", category: "ThermalMonitor")
+    // Stored so it can be removed in deinit; discarding this token leaks the observer block.
+    private var thermalObserver: NSObjectProtocol?
     #else
     private var currentLevel: Int = -1
     #endif
@@ -42,8 +44,10 @@ actor ThermalMonitor {
         // Get initial state
         currentState = ProcessInfo.processInfo.thermalState
         
-        // Register for thermal state notifications
-        NotificationCenter.default.addObserver(
+        // Register for thermal state notifications.
+        // Store the returned token so the observer can be removed in deinit;
+        // without this the closure block stays in NotificationCenter indefinitely.
+        thermalObserver = NotificationCenter.default.addObserver(
             forName: ProcessInfo.thermalStateDidChangeNotification,
             object: nil,
             queue: .main
@@ -170,4 +174,14 @@ actor ThermalMonitor {
         }
     }
     #endif
+
+    // MARK: - Lifecycle
+
+    nonisolated deinit {
+        #if os(iOS) || os(macOS)
+        if let observer = thermalObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        #endif
+    }
 }
