@@ -10,6 +10,15 @@
 
 ---
 
+<p align="center">
+  <video src="https://github.com/ramanujammv1988/edge-veda/raw/main/docs/images/app_demo.mp4" width="300">
+    <a href="docs/images/app_demo.mp4">Watch demo video</a>
+  </video>
+</p>
+<p align="center"><em>Document Q&A running entirely on-device — no cloud, no API keys</em></p>
+
+---
+
 ## Get Started in 3 Lines
 
 ```dart
@@ -33,6 +42,9 @@ Modern on-device AI demos break instantly in real usage:
 - Debugging failures is nearly impossible
 
 Edge-Veda exists to make on-device AI **predictable, observable, and sustainable** — not just runnable.
+
+![Session Stability: Unmanaged vs Managed Runtime](docs/images/session_stability.png)
+*Left: without runtime management, latency spikes and the app is killed by iOS within 2 minutes. Right: with Edge Veda, latency stays flat for 28+ minutes with thermal spikes auto-recovered. Same Y-axis scale.*
 
 ---
 
@@ -98,9 +110,15 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - **Thermal, memory, and battery-aware runtime policy** with hysteresis
 - Backpressure-controlled frame processing (drop-newest, not queue-forever)
 - Structured **performance tracing** (JSONL) with offline analysis tooling
-- Long-session stability validated on-device (12+ minutes, 0 crashes, 0 model reloads)
+- Long-session stability validated on-device (28+ minutes, 0 crashes, 0 model reloads)
 
 ### Smart Model Advisor
+
+<p align="center">
+  <img src="docs/images/app_model_advisor.jpeg" width="300" alt="Smart Model Advisor with 4D scoring">
+</p>
+<p align="center"><em>Device-aware model recommendations scored across fit, quality, speed, and context</em></p>
+
 - **DeviceProfile** detects iPhone model, RAM, chip generation, and device tier (low/medium/high/ultra)
 - **MemoryEstimator** with calibrated bytes-per-parameter formulas for accurate fit prediction
 - **ModelAdvisor** scores models 0–100 across fit, quality, speed, and context dimensions
@@ -264,6 +282,11 @@ print(session.transcript);
 
 ### Embeddings & RAG
 
+<p align="center">
+  <img src="docs/images/app_rag_demo.png" width="300" alt="Document Q&A with on-device RAG">
+</p>
+<p align="center"><em>Multi-turn Q&A over a PDF — RAG retrieval, 31.8 tok/s, entirely on-device</em></p>
+
 ```dart
 // Generate embeddings
 final result = await edgeVeda.embed('On-device AI is the future');
@@ -387,6 +410,8 @@ scheduler.onBudgetViolation.listen((v) {
 
 All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with Metal GPU. See [BENCHMARKS.md](BENCHMARKS.md) for full details.
 
+![Key Metrics](docs/images/metrics_scorecard.png)
+
 ### Text Generation
 
 | Metric | Value |
@@ -407,8 +432,8 @@ All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with
 
 | Metric | Value |
 |--------|-------|
-| Sustained runtime | 12.6 minutes |
-| Frames processed | 254 |
+| Sustained runtime | 28.6 minutes |
+| Frames processed | 572 |
 | p50 / p95 / p99 latency | 1,412 / 2,283 / 2,597 ms |
 | Crashes / model reloads | 0 / 0 |
 
@@ -422,10 +447,18 @@ All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with
 
 ### Memory Optimization
 
+![Memory Comparison](docs/images/memory_comparison.png)
+
 | Metric | Before | After |
 |--------|--------|-------|
 | KV cache | ~64 MB | ~32 MB (Q8_0) |
 | Steady-state memory | ~1,200 MB peak | 400–550 MB |
+
+### Thermal Management
+
+![Thermal Behavior](docs/images/thermal_management.png)
+
+The runtime monitors thermal state and automatically steps down quality of service to prevent crashes. When conditions improve, it recovers — one level at a time with a 60-second cooldown to prevent oscillation.
 
 ### Observability
 
