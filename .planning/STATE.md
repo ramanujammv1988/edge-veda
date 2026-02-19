@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-01 complete (sd.cpp submodule + C API).
+**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-02 complete (XCFramework + FFI bindings).
 
 ## Current Position
 
 Phase: 23 (Add Image Generation Capabilities)
-Plan: 23-01 complete (1/4 plans done)
+Plan: 23-02 complete (2/4 plans done)
 Status: **In Progress**
-Last activity: 2026-02-19 - Completed 23-01: stable-diffusion.cpp submodule + ev_image_* C API
+Last activity: 2026-02-19 - Completed 23-02: XCFramework rebuild + podspec + Dart FFI bindings
 
-Progress: [###################_] ~96% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 1/4 complete)
+Progress: [###################_] ~96% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 2/4 complete)
 
 ## Milestone Summary
 
@@ -178,7 +178,7 @@ Phase 22 (Intent Engine Demo) - COMPLETE
 
 Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
   23-01 (Submodule + C API) DONE
-  23-02 (FFI Bindings + XCFramework) PENDING
+  23-02 (FFI Bindings + XCFramework) DONE
   23-03 (ImageWorker Isolate + Dart API) PENDING
   23-04 (Demo Screen + Human Verification) PENDING
   Depends on: Phase 14 (submodule integration pattern)
@@ -195,6 +195,12 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Phase 23 Plan 2 decisions:
+- XCFramework grows from ~8MB to ~31MB per slice with sd.cpp (binary size limit raised to 40MB)
+- All 8 ev_image_* FFI bindings are eager (XCFramework rebuilt with verified symbols)
+- Progress callback uses NativeFunction pointer type for NativeCallable in ImageWorker isolate
+- EvImageGenParams struct maps C enums (sampler, schedule) as Int32 fields
 
 Phase 23 Plan 1 decisions:
 - sd.cpp CMake target is 'stable-diffusion' (not 'sd'), linked with target_link_libraries PRIVATE
@@ -494,8 +500,8 @@ v1.1:
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 23-01-PLAN.md (sd.cpp submodule + ev_image_* C API)
-Resume file: .planning/phases/23-add-image-generation-capabilities/23-02-PLAN.md
+Stopped at: Completed 23-02-PLAN.md (XCFramework rebuild + FFI bindings + podspec)
+Resume file: .planning/phases/23-add-image-generation-capabilities/23-03-PLAN.md
 
 ---
 ### Roadmap Evolution
