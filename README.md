@@ -1,6 +1,6 @@
 # Edge-Veda
 
-**A managed on-device AI runtime for Flutter — text, vision, speech, and RAG running sustainably on real phones under real constraints. Private by default.**
+**A managed on-device AI runtime for Flutter — text, vision, speech, image generation, and RAG running sustainably on real phones under real constraints. Private by default.**
 
 `~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
@@ -101,6 +101,17 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - **VectorIndex** — pure Dart HNSW with cosine similarity and JSON persistence
 - **RagPipeline** — end-to-end embed, search, inject, generate
 
+### Image Generation
+- **On-device text-to-image** via stable-diffusion.cpp (Metal GPU accelerated)
+- Persistent `ImageWorker` isolate — model loads once, generates multiple images
+- Progress callbacks with per-step updates during diffusion
+- Configurable samplers (Euler A, DPM++), schedulers (Discrete, Karras, AYS), and CFG scale
+
+<p align="center">
+  <img src="docs/images/image_gen_demo.gif" width="300" alt="On-device image generation demo">
+</p>
+<p align="center"><em>"cat on a swing" → "dog riding a bicycle" — generated entirely on-device in ~30s each</em></p>
+
 ### Runtime Supervision
 - **Compute budget contracts** — declare p95 latency, battery drain, thermal, and memory ceilings
 - **Adaptive budget profiles** — auto-calibrate to measured device performance
@@ -141,6 +152,7 @@ Flutter App (Dart)
     +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
     +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
     +-- WhisperWorker -------- Persistent isolate, keeps whisper model loaded
+    +-- ImageWorker ---------- Persistent isolate, keeps SD model loaded
     |
     +-- Scheduler ------------ Central budget enforcer, priority-based degradation
     +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
@@ -158,9 +170,11 @@ Flutter App (Dart)
     +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
     +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
     +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)
+    +-- image_engine.cpp ----- Image generation (wraps stable-diffusion.cpp)
     +-- memory_guard.cpp ----- Cross-platform RSS monitoring, pressure callbacks
     +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
     +-- whisper.cpp v1.8.3 --- Metal GPU, shared ggml backend (unmodified)
+    +-- stable-diffusion.cpp - Metal GPU, shared ggml backend (unmodified)
 ```
 
 **Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. Workers maintain persistent contexts so models load once and stay in memory across the entire session.
