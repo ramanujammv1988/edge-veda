@@ -24,6 +24,15 @@ export enum ChatRole {
   
   /** Assistant messages contain AI responses */
   ASSISTANT = 'assistant',
+
+  /** Tool call messages — model is requesting a tool invocation */
+  TOOL_CALL = 'tool_call',
+
+  /** Tool result messages — developer's tool execution result */
+  TOOL_RESULT = 'tool_result',
+
+  /** Context summary messages — auto-generated when context window overflows */
+  SUMMARY = 'summary',
 }
 
 /**

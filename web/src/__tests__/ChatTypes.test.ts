@@ -14,9 +14,21 @@ describe('ChatTypes', () => {
       expect(ChatRole.ASSISTANT).toBe('assistant');
     });
 
-    it('has exactly 3 string values', () => {
+    it('has exactly 6 string values (including TOOL_CALL, TOOL_RESULT, SUMMARY)', () => {
       const values = Object.values(ChatRole).filter((v) => typeof v === 'string');
-      expect(values).toHaveLength(3);
+      expect(values).toHaveLength(6);
+    });
+
+    it('TOOL_CALL === "tool_call"', () => {
+      expect(ChatRole.TOOL_CALL).toBe('tool_call');
+    });
+
+    it('TOOL_RESULT === "tool_result"', () => {
+      expect(ChatRole.TOOL_RESULT).toBe('tool_result');
+    });
+
+    it('SUMMARY === "summary"', () => {
+      expect(ChatRole.SUMMARY).toBe('summary');
     });
   });
 

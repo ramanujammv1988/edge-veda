@@ -55,6 +55,9 @@ export type {
 // Export Embeddings API types
 export type { EmbeddingResult } from './types';
 
+// Export Model Manager
+export { ModelManager, ModelDownloadError, ModelChecksumError } from './ModelManager';
+
 // Export Tool Calling System (Priority 2)
 export {
   ToolRegistry,
@@ -535,6 +538,54 @@ export class EdgeVeda {
     });
 
     return response.result;
+  }
+
+  /**
+   * Embed multiple texts in a single batch.
+   *
+   * More efficient than calling embed() in a loop because the model stays
+   * loaded in the worker between calls. Returns results in the same order
+   * as the input texts.
+   *
+   * Mirrors Flutter SDK's EdgeVeda.embedBatch().
+   *
+   * @param texts - Array of input texts to embed
+   * @param onProgress - Optional callback fired after each text is embedded
+   * @returns Array of EmbeddingResult in input order
+   */
+  async embedBatch(
+    texts: string[],
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<import('./types').EmbeddingResult[]> {
+    if (!this.initialized || !this.worker) {
+      throw new Error('EdgeVeda not initialized. Call init() first.');
+    }
+
+    const results: import('./types').EmbeddingResult[] = [];
+    for (let i = 0; i < texts.length; i++) {
+      results.push(await this.embed(texts[i]));
+      onProgress?.(i + 1, texts.length);
+    }
+    return results;
+  }
+
+  /**
+   * Check whether memory usage exceeds a pressure threshold.
+   *
+   * Returns true when the proportion of used memory is above `threshold`
+   * (default 0.8 = 80%). Uses `usagePercent` when available (requires
+   * limitBytes to be set), falling back to the `percentage` field.
+   *
+   * Mirrors Flutter SDK's EdgeVeda.isMemoryPressure().
+   *
+   * @param threshold - Fractional pressure level 0.0–1.0 (default 0.8)
+   */
+  async isMemoryPressure(threshold: number = 0.8): Promise<boolean> {
+    const stats = await this.getMemoryUsage();
+    if (stats.usagePercent !== undefined) {
+      return stats.usagePercent > threshold;
+    }
+    return stats.percentage > threshold;
   }
 
   /**

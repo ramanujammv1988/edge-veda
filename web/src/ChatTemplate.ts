@@ -50,24 +50,24 @@ function formatLlama3(messages: ChatMessage[]): string {
     prompt += `<|start_header_id|>${message.role}<|end_header_id|>\n\n`;
     prompt += `${message.content}<|eot_id|>`;
   }
-  
+
   // Add assistant prompt to continue generation
   prompt += '<|start_header_id|>assistant<|end_header_id|>\n\n';
-  
+
   return prompt;
 }
 
 function formatChatML(messages: ChatMessage[]): string {
   let prompt = '';
-  
+
   for (const message of messages) {
     prompt += `<|im_start|>${message.role}\n`;
     prompt += `${message.content}<|im_end|>\n`;
   }
-  
+
   // Add assistant prompt to continue generation
   prompt += '<|im_start|>assistant\n';
-  
+
   return prompt;
 }
 
@@ -93,6 +93,14 @@ function formatMistral(messages: ChatMessage[]): string {
       case ChatRole.ASSISTANT:
         prompt += ` ${message.content}</s>`;
         break;
+      case ChatRole.TOOL_RESULT:
+        prompt += `[INST] Tool result: ${message.content} [/INST]`;
+        break;
+      case ChatRole.SUMMARY:
+        // Inject summary as the next system block
+        pendingSystem = `[Context Summary] ${message.content}`;
+        break;
+      // TOOL_CALL is already part of the assistant output — skip to avoid duplication
     }
   }
 
@@ -112,6 +120,15 @@ function formatGeneric(messages: ChatMessage[]): string {
         break;
       case ChatRole.ASSISTANT:
         prompt += `### Assistant:\n${message.content}\n`;
+        break;
+      case ChatRole.TOOL_CALL:
+        prompt += `### Tool Call:\n${message.content}\n`;
+        break;
+      case ChatRole.TOOL_RESULT:
+        prompt += `### Tool Result:\n${message.content}\n`;
+        break;
+      case ChatRole.SUMMARY:
+        prompt += `### Context Summary:\n${message.content}\n\n`;
         break;
     }
   }
@@ -133,6 +150,17 @@ function formatQwen3(messages: ChatMessage[]): string {
         break;
       case ChatRole.ASSISTANT:
         prompt += `<|im_start|>assistant\n${message.content}<|im_end|>\n`;
+        break;
+      case ChatRole.TOOL_CALL:
+        // Hermes-style: tool call is part of the assistant turn
+        prompt += `<|im_start|>assistant\n${message.content}<|im_end|>\n`;
+        break;
+      case ChatRole.TOOL_RESULT:
+        // Hermes-style: tool results use the "tool" role
+        prompt += `<|im_start|>tool\n${message.content}<|im_end|>\n`;
+        break;
+      case ChatRole.SUMMARY:
+        prompt += `<|im_start|>system\n[Context Summary] ${message.content}<|im_end|>\n`;
         break;
     }
   }
@@ -157,6 +185,15 @@ function formatGemma3(messages: ChatMessage[]): string {
       case ChatRole.ASSISTANT:
         // Gemma3 uses "model" as the assistant role name
         prompt += `<start_of_turn>model\n${message.content}<end_of_turn>\n`;
+        break;
+      case ChatRole.TOOL_CALL:
+        prompt += `<start_of_turn>model\n${message.content}<end_of_turn>\n`;
+        break;
+      case ChatRole.TOOL_RESULT:
+        prompt += `<start_of_turn>tool\n${message.content}<end_of_turn>\n`;
+        break;
+      case ChatRole.SUMMARY:
+        prompt += `<start_of_turn>user\n[Context Summary] ${message.content}<end_of_turn>\n`;
         break;
     }
   }
