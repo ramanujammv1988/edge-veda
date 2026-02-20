@@ -10,7 +10,6 @@ import type {
   EdgeVedaConfig,
   GenerateOptions,
   MemoryUsage,
-  MemoryStats,
   ModelInfo,
   TokenCallback,
   ProgressCallback,
@@ -884,10 +883,10 @@ class EdgeVedaSDK {
    */
   isMemoryPressure(threshold: number = 0.8): boolean {
     try {
-      const raw = JSON.parse(NativeEdgeVeda.getMemoryUsage()) as MemoryStats;
-      if (!raw.limitBytes || raw.limitBytes === 0) return false;
-      const usage = raw.currentBytes / raw.limitBytes;
-      return usage > threshold;
+      const raw = JSON.parse(NativeEdgeVeda.getMemoryUsage()) as MemoryUsage;
+      const total = raw.totalBytes + (raw.availableBytes ?? 0);
+      if (total === 0) return false;
+      return (raw.totalBytes / total) > threshold;
     } catch {
       return false;
     }
