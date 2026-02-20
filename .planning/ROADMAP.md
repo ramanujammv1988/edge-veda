@@ -450,7 +450,7 @@ Phase 6 (Streaming)  ----+
 | 21. Standalone Sample Apps | 0/? | Planned | -- |
 | 22. On-Device Intent Engine Demo | 2/3 | Complete    | 2024-02-19 |
 | 23. Image Generation | 3/4 | **In Progress** | -- |
-| 24. Voice Pipeline | 1/3 | **In Progress** | -- |
+| 24. Voice Pipeline | 2/3 | In Progress|  |
 | 25. LoRA Adapter Support | 0/? | Planned | -- |
 | 26. Polished Example Apps | 0/? | Planned | -- |
 
@@ -748,7 +748,7 @@ Plans:
 
 **Research flag**: Research complete (24-RESEARCH.md)
 
-**Plans:** 3 plans in 3 waves
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 24-01-PLAN.md — AVAudioSession config + VoicePipeline core class with state machine, VAD, event stream
