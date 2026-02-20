@@ -552,12 +552,9 @@ internal class NativeBridge {
     // Model Information
     private external fun nativeGetModelInfo(handle: Long): Array<String>?
 
-    // Backend Detection (static methods)
-    private external fun nativeDetectBackend(): Int
+    // Backend Detection (static methods — @JvmStatic declarations live in companion object)
 
     private external fun nativeIsBackendAvailable(backend: Int): Boolean
-
-    private external fun nativeGetBackendName(backend: Int): String
 
     // Utility Functions (static methods)
     private external fun nativeGetVersion(): String
@@ -614,6 +611,13 @@ internal class NativeBridge {
         // Whisper context singleton
         private var whisperHandle: Long = 0L
         private val whisperLock = Any()
+
+        // Backend Detection (must be in companion object for static access)
+        @JvmStatic
+        private external fun nativeDetectBackend(): Int
+
+        @JvmStatic
+        private external fun nativeGetBackendName(backend: Int): String
 
         // Vision API JNI declarations (must be in companion object for static access)
         @JvmStatic

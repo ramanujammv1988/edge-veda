@@ -73,4 +73,36 @@ class ResourceMonitorTest {
 
         assertEquals("Should have exactly 6 public API methods", 6, publicMethods.size)
     }
+
+    @Test
+    fun `test ResourceMonitor maxSamples parameter has type Int`() {
+        val primary = ResourceMonitor::class.constructors.first()
+        val maxSamplesParam = primary.parameters.firstOrNull { it.name == "maxSamples" }
+        assertNotNull("maxSamples parameter should exist", maxSamplesParam)
+        assertEquals(
+            "maxSamples should be of type Int",
+            Int::class,
+            maxSamplesParam!!.type.classifier
+        )
+    }
+
+    @Test
+    fun `test ResourceMonitor maxSamples parameter has default value`() {
+        val primary = ResourceMonitor::class.constructors.first()
+        val maxSamplesParam = primary.parameters.firstOrNull { it.name == "maxSamples" }
+        assertNotNull("maxSamples parameter should exist", maxSamplesParam)
+        assertTrue("maxSamples should have a default value", maxSamplesParam!!.isOptional)
+    }
+
+    @Test
+    fun `test ResourceMonitor instantiates without throwing`() {
+        val monitor = ResourceMonitor()
+        assertNotNull("ResourceMonitor instance should not be null", monitor)
+    }
+
+    @Test
+    fun `test ResourceMonitor instantiates with custom maxSamples`() {
+        val monitor = ResourceMonitor(maxSamples = 50)
+        assertNotNull("ResourceMonitor with custom maxSamples should not be null", monitor)
+    }
 }
