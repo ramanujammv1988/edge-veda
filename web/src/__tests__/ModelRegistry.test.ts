@@ -18,9 +18,13 @@ describe('ModelRegistry', () => {
       expect(ModelRegistry.getEmbeddingModels()).toHaveLength(1);
     });
 
-    it('total across all categories is 10 (includes mmproj)', () => {
-      // 5 text + 1 vision + 1 mmproj + 2 whisper + 1 embedding = 10
-      expect(ModelRegistry.getAllModels()).toHaveLength(10);
+    it('getImageModels returns 1 image generation model', () => {
+      expect(ModelRegistry.getImageModels()).toHaveLength(1);
+    });
+
+    it('total across all categories is 11 (includes mmproj and image gen)', () => {
+      // 5 text + 1 vision + 1 mmproj + 2 whisper + 1 embedding + 1 image = 11
+      expect(ModelRegistry.getAllModels()).toHaveLength(11);
     });
   });
 
@@ -134,6 +138,16 @@ describe('ModelRegistry', () => {
     it('mmproj is not in getVisionModels', () => {
       const visionIds = ModelRegistry.getVisionModels().map((m) => m.id);
       expect(visionIds).not.toContain('smolvlm2-500m-mmproj-f16');
+    });
+
+    it('sdV21Turbo.modelType === "imageGeneration"', () => {
+      expect(ModelRegistry.sdV21Turbo.modelType).toBe('imageGeneration');
+    });
+
+    it('sdV21Turbo is findable by ID', () => {
+      const model = ModelRegistry.getModelById('sd-v2-1-turbo-q8');
+      expect(model).not.toBeNull();
+      expect(model!.name).toContain('SD');
     });
   });
 });

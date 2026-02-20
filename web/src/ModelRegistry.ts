@@ -160,6 +160,23 @@ export const ModelRegistry = {
   } as DownloadableModelInfo,
 
   // =========================================================================
+  // Image Generation Models (Stable Diffusion)
+  // =========================================================================
+
+  /** SD v2.1 Turbo Q8_0 — Fast 1-4 step 512×512 image generation */
+  sdV21Turbo: {
+    id: 'sd-v2-1-turbo-q8',
+    name: 'SD v2.1 Turbo Q8_0',
+    sizeBytes: 2320 * 1024 * 1024, // ~2.3 GB
+    description: 'Fast 1-4 step 512×512 image generation via Stable Diffusion',
+    downloadUrl:
+      'https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo-Q8_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q8_0',
+    modelType: 'imageGeneration',
+  } as DownloadableModelInfo,
+
+  // =========================================================================
   // Utility Methods
   // =========================================================================
 
@@ -189,6 +206,11 @@ export const ModelRegistry = {
     return [ModelRegistry.allMiniLmL6V2];
   },
 
+  /** Get all image generation models */
+  getImageModels(): DownloadableModelInfo[] {
+    return [ModelRegistry.sdV21Turbo];
+  },
+
   /** Get all models across all categories (including mmproj) */
   getAllModels(): DownloadableModelInfo[] {
     return [
@@ -197,6 +219,7 @@ export const ModelRegistry = {
       ModelRegistry.smolvlm2_500m_mmproj,
       ...ModelRegistry.getWhisperModels(),
       ...ModelRegistry.getEmbeddingModels(),
+      ...ModelRegistry.getImageModels(),
     ];
   },
 
