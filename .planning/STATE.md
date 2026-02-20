@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 Phase: 23 (Add Image Generation Capabilities)
 Plan: 23-03 complete (3/4 plans done)
 Status: **In Progress**
-Last activity: 2026-02-20 - Completed quick task 7: Strengthen enterprise-safe JSON/tool behavior
+Last activity: 2026-02-20 - Completed quick task 8: ImageWorker Scheduler integration
 
 Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4 complete)
 
@@ -195,6 +195,13 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Quick task 8 decisions:
+- Memory eviction is fire-and-forget via unawaited() to avoid blocking enforcement loop
+- Eviction only triggers when RSS exceeds ceiling by >10% to avoid premature eviction on borderline values
+- One-shot eviction: after callback fires, workload and callback are unregistered (re-init required)
+- Image workload registered as WorkloadPriority.low (text/vision more important)
+- EdgeVeda.setScheduler() provides deferred Scheduler binding (app creates both, then connects)
 
 Phase 23 Plan 3 decisions:
 - NativeCallable.listener used for C progress callbacks into Dart isolate (per-step progress updates)
@@ -492,6 +499,8 @@ v1.1:
 | 5 | DX quick wins: real READMEs, ffi comments, magic number docs, download UX | 2026-02-15 | d12d61e, d3b9984, dc50d4c | [5-fix-dx-quick-wins-readmes-ffi-comments-m](./quick/5-fix-dx-quick-wins-readmes-ffi-comments-m/) |
 | 6 | Fix image generation onProgress callback and add idle auto-disposal | 2026-02-20 | ef665f0, 764ce17 | [1-fix-image-generation-onprogress-callback](./quick/1-fix-image-generation-onprogress-callback/) |
 | 7 | Strengthen enterprise-safe JSON/tool behavior (strict schema, recovery, telemetry) | 2026-02-20 | e822449, dcebd14 | [6-strengthen-enterprise-safe-tool-json-beh](./quick/6-strengthen-enterprise-safe-tool-json-beh/) |
+| 8 | ImageWorker Scheduler integration (QoS gating, latency tracking, memory eviction) | 2026-02-20 | 05518a8, 6a97bea | [7-image-generation-scheduler-integration-a](./quick/7-image-generation-scheduler-integration-a/) |
+| 9 | Add TTS via iOS AVSpeechSynthesizer + demo screen | 2026-02-20 | a29d60b, adea67e | [8-add-tts-via-ios-avspeechsynthesizer-plat](./quick/8-add-tts-via-ios-avspeechsynthesizer-plat/) |
 
 ### Blockers/Concerns
 
@@ -508,7 +517,7 @@ v1.1:
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed quick task 7 (enterprise-safe JSON: strict schema, recovery, telemetry)
+Stopped at: Completed quick task 9 (Add TTS via iOS AVSpeechSynthesizer + demo screen)
 Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
 
 ---
