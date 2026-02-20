@@ -92,7 +92,9 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - **Tool/function calling** with ToolDefinition, ToolRegistry, and schema validation
 - Multi-round tool chains with configurable max rounds
 - `sendWithTools()` for automatic tool call/result cycling
-- `sendStructured()` for grammar-constrained generation
+- `sendStructured()` for grammar-constrained generation with strict/standard validation modes
+- **JSON recovery** — auto-repairs truncated/malformed model output (unclosed brackets, trailing garbage)
+- **Validation telemetry** — `onValidationEvent` callback for enterprise observability
 
 ### Embeddings & RAG
 - **Text embeddings** via ev_embed() with L2 normalization
@@ -104,7 +106,9 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 ### Image Generation
 - **On-device text-to-image** via stable-diffusion.cpp (Metal GPU accelerated)
 - Persistent `ImageWorker` isolate — model loads once, generates multiple images
+- **Scheduler-integrated** — respects thermal/battery QoS policies, auto-evicts under memory pressure
 - Progress callbacks with per-step updates during diffusion
+- **60-second idle auto-disposal** — frees ~2.3 GB when not in use
 - Configurable samplers (Euler A, DPM++), schedulers (Discrete, Karras, AYS), and CFG scale
 
 <p align="center">
@@ -115,7 +119,8 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 ### Runtime Supervision
 - **Compute budget contracts** — declare p95 latency, battery drain, thermal, and memory ceilings
 - **Adaptive budget profiles** — auto-calibrate to measured device performance
-- **Central scheduler** arbitrates concurrent workloads with priority-based degradation
+- **Central scheduler** arbitrates concurrent workloads (text, vision, STT, image, RAG) with priority-based degradation
+- **Cross-worker memory eviction** — auto-disposes idle workers under memory pressure
 - **Thermal, memory, and battery-aware runtime policy** with hysteresis
 - Backpressure-controlled frame processing (drop-newest, not queue-forever)
 - Structured **performance tracing** (JSONL) with offline analysis tooling
@@ -188,7 +193,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^2.1.0
+  edge_veda: ^2.2.0
 ```
 
 ### Text Generation
@@ -449,6 +454,15 @@ All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with
 | p50 / p95 / p99 latency | 1,412 / 2,283 / 2,597 ms |
 | Crashes / model reloads | 0 / 0 |
 
+### Image Generation
+
+| Metric | Value |
+|--------|-------|
+| Model load | 5.1s (+2.3 GB) |
+| 512x512, 4 steps (Euler A) | ~14s per image |
+| Memory (steady state) | ~2.3 GB |
+| Idle auto-disposal | 60s (frees 2.3 GB) |
+
 ### Speech-to-Text
 
 | Metric | Value |
@@ -499,6 +513,7 @@ Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 | SmolVLM2 500M | 607 MB | — | vision | Camera/image analysis |
 | Whisper Tiny | 77 MB | — | stt | Fast transcription |
 | Whisper Base | 148 MB | — | stt | Quality transcription |
+| SD v2.1 Turbo | 2.3 GB | — | image generation | Text-to-image (512x512) |
 | MiniLM L6 v2 | 46 MB | — | embedding | RAG, similarity search |
 
 > **Template matters.** Using the wrong `ChatTemplateFormat` produces garbage output. Match the model to its template from the table above.
@@ -567,7 +582,7 @@ cd flutter/example
 flutter run
 ```
 
-The demo app includes Chat (multi-turn with tool calling), Vision (continuous camera scanning), STT (live microphone transcription), and Settings (model management, device info).
+The demo app includes Chat (multi-turn with tool calling), Vision (continuous camera scanning), Image (text-to-image generation with gallery), STT (live microphone transcription), and Settings (model management, device info).
 
 ---
 
