@@ -140,7 +140,11 @@ class _VoiceScreenState extends State<VoiceScreen>
 
     _chatSession = ChatSession(
       edgeVeda: _edgeVeda!,
-      preset: SystemPromptPreset.assistant,
+      systemPrompt:
+          'You are a voice assistant. Respond in 1-2 short sentences. '
+          'Be conversational and natural. Never use markdown, bullet points, '
+          'numbered lists, code blocks, or special formatting. '
+          'Speak plainly as if talking to a friend.',
       templateFormat: ChatTemplateFormat.llama3Instruct,
     );
   }
@@ -262,9 +266,7 @@ class _VoiceScreenState extends State<VoiceScreen>
       tts: _tts,
       whisperModelPath: _whisperModelPath!,
       config: const VoicePipelineConfig(
-        systemPrompt:
-            'You are a helpful voice assistant. Keep responses concise '
-            'and conversational — 1-3 sentences. Be friendly and natural.',
+        maxResponseTokens: 128,
       ),
     );
 

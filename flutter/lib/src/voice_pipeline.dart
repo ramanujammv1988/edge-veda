@@ -222,6 +222,7 @@ class VoicePipeline {
   bool _isProcessingTurn = false;
   bool _isCoolingDown = false;
   Timer? _cooldownTimer;
+  Timer? _interruptionTransitionTimer;
 
   // Conversation transcript tracking
   final List<({String user, String assistant})> _turns = [];
@@ -484,18 +485,28 @@ class VoicePipeline {
 
   /// Speaking: VAD active with elevated threshold for TTS interruption.
   void _handleSpeaking(double rms, Float32List frame) {
-    if (rms > _activeThreshold) {
+    if (rms > _activeThreshold && _interruptionTransitionTimer == null) {
       // User interrupted TTS -- stop immediately (fire-and-forget)
       _tts.stop();
       // Start cooldown to keep threshold elevated while residual TTS fades
       _startCooldown();
       _whisperSession?.resetTranscript();
-      _speechDetected = true;
-      _silentFrameCount = 0;
-      _totalSilentFrameCount = 0;
-      _setState(VoicePipelineState.listening);
-      // Feed the interrupting audio to WhisperSession
-      _whisperSession?.feedAudio(frame);
+
+      // Wait briefly for AVSpeechSynthesizer to actually stop audio output
+      // before transitioning to listening. The stop() method returns immediately
+      // but the speaker may continue outputting audio for 50-100ms. If we
+      // transition to listening immediately, residual TTS audio gets picked up
+      // by the mic and fed to WhisperSession, causing echo transcription.
+      // This delay matches the observed speaker stop latency on iOS.
+      _interruptionTransitionTimer = Timer(const Duration(milliseconds: 100), () {
+        if (_state == VoicePipelineState.speaking) {
+          _speechDetected = true;
+          _silentFrameCount = 0;
+          _totalSilentFrameCount = 0;
+          _setState(VoicePipelineState.listening);
+        }
+        _interruptionTransitionTimer = null;
+      });
     }
   }
 
@@ -524,8 +535,8 @@ class VoicePipeline {
       });
     }
     // TtsEventType.cancel is handled by _handleSpeaking -- the interruption
-    // handler already transitions to listening. No cooldown needed since
-    // the user is actively speaking.
+    // handler calls stop(), starts cooldown, and transitions to listening
+    // after a brief delay to let speaker audio fully stop.
   }
 
   /// Start the post-TTS cooldown period.
@@ -775,6 +786,8 @@ class VoicePipeline {
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _isCoolingDown = false;
+    _interruptionTransitionTimer?.cancel();
+    _interruptionTransitionTimer = null;
     _isProcessingTurn = false;
     _pausedFromState = null;
   }

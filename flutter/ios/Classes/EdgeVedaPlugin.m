@@ -253,9 +253,9 @@
         }
     }
 
-    utterance.rate = rate ? [rate floatValue] : AVSpeechUtteranceDefaultSpeechRate;
-    utterance.pitchMultiplier = pitch ? [pitch floatValue] : 1.0f;
-    utterance.volume = volume ? [volume floatValue] : 1.0f;
+    utterance.rate = (rate && ![rate isEqual:[NSNull null]]) ? [rate floatValue] : AVSpeechUtteranceDefaultSpeechRate;
+    utterance.pitchMultiplier = (pitch && ![pitch isEqual:[NSNull null]]) ? [pitch floatValue] : 1.0f;
+    utterance.volume = (volume && ![volume isEqual:[NSNull null]]) ? [volume floatValue] : 1.0f;
 
     [_synthesizer speakUtterance:utterance];
 }
@@ -465,10 +465,7 @@
         return;
     }
 
-    // Prefer echo-cancelled input if the hardware supports it.
-    if ([session isEchoCancelledInputAvailable]) {
-        [session setPrefersEchoCancelledInput:YES];
-    }
+    // Echo cancellation is automatically enabled by AVAudioSessionModeVoiceChat.
 
     if (![session setActive:YES error:&error]) {
         result([FlutterError errorWithCode:@"AUDIO_SESSION"
@@ -476,6 +473,10 @@
                                    details:error.localizedDescription]);
         return;
     }
+
+    // Force speaker output. VoiceChat mode defaults to earpiece —
+    // overrideOutputAudioPort forces loudspeaker regardless of mode.
+    [session overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker error:&error];
 
     result(@(YES));
 }
