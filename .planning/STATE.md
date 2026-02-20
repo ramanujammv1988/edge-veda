@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-03 complete (ImageWorker + Dart API).
+**Current focus:** Phase 24 Voice Pipeline. Plan 24-01 complete (1/3 plans done).
 
 ## Current Position
 
-Phase: 23 (Add Image Generation Capabilities)
-Plan: 23-03 complete (3/4 plans done)
+Phase: 24 (Voice Pipeline — Unified STT -> LLM -> TTS Orchestration)
+Plan: 24-01 complete (1/3 plans done)
 Status: **In Progress**
-Last activity: 2026-02-20 - Completed quick task 8: ImageWorker Scheduler integration
+Last activity: 2026-02-20 - Completed 24-01: VoicePipeline core with state machine, VAD, native audio session
 
-Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4 complete)
+Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4, Phase 24: 1/3 complete)
 
 ## Milestone Summary
 
@@ -195,6 +195,16 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Phase 24 Plan 1 decisions:
+- VoicePipeline event-driven state machine: audio frames drive transitions, no async* generators
+- VAD threshold = mean + 2.5*stddev with 0.005 minimum clamp for adaptive speech detection
+- TTS threshold multiplier 1.5x (not 3x like RunAnywhere) balances echo rejection vs real interruption
+- Microphone stream called exactly once at start, never restarted (pause by not feeding to Whisper)
+- WhisperSession created without Scheduler to prevent double-registration (pipeline manages its own workload)
+- Audio NOT fed to WhisperSession during speaking/thinking states (echo prevention)
+- _processUserSpeech is a stub in Plan 01 (Plan 02 adds full LLM+TTS loop)
+- Frame buffer pattern: variable-size native audio chunks rebuffered into fixed 1600-sample frames
 
 Quick task 8 decisions:
 - Memory eviction is fire-and-forget via unawaited() to avoid blocking enforcement loop
@@ -517,8 +527,8 @@ v1.1:
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed quick task 9 (Add TTS via iOS AVSpeechSynthesizer + demo screen)
-Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
+Stopped at: Completed 24-01-PLAN.md — VoicePipeline core with state machine, VAD, native audio session
+Resume file: .planning/phases/24-voice-pipeline-unified-stt-to-llm-to-tts-orchestration-with-real-time-voice-conversations/24-02-PLAN.md
 
 ---
 ### Roadmap Evolution
@@ -533,5 +543,8 @@ Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
 - Phase 22 added: On-Device Intent Engine Demo -- Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, Home Assistant connector architecture
 - Phase 23 added: Add image generation capabilities
 - Phase 24 added: PR-1: Fix Image Worker Request Isolation -- prevent concurrent generateImage() cross-talk with per-request routing
+- Phase 24 added: Voice Pipeline — Unified STT → LLM → TTS orchestration with VAD, interruptible TTS, real-time voice conversations
+- Phase 25 added: LoRA Adapter Support — Hot-swappable fine-tuned adapters for domain specialization
+- Phase 26 added: Polished Example Apps — Production-quality sample apps for developer adoption and marketing
 
 *Phase 20 (Smart Model Advisor) COMPLETE: DeviceProfile with 27-entry iPhone DB, MemoryEstimator calibrated to real-world 400-550MB data, ModelAdvisor 4D scoring (fit/quality/speed/context) with use-case weighted recommendations. Settings screen shows tier badge + Recommended Models section with use-case selector chips and scored model cards. Human verified on real iPhone. Android work (Phases 5, 6, 7) deferred.*
