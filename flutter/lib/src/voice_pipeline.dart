@@ -621,10 +621,13 @@ class VoicePipeline {
         )) {
           if (chunk.isFinal) break;
           responseBuffer.write(chunk.token);
-          // Emit partial transcript for UI updates during streaming
+          // Emit partial transcript for UI updates during streaming.
+          // Clean special tokens from the partial text to prevent
+          // Llama 3 / ChatML tags from appearing in the UI.
+          final partialClean = cleanResponseText(responseBuffer.toString());
           _eventController.add(TranscriptUpdated(
             text,
-            responseBuffer.toString(),
+            partialClean,
             isPartial: true,
           ));
         }
@@ -662,7 +665,10 @@ class VoicePipeline {
         return;
       }
 
-      final responseText = responseBuffer.toString().trim();
+      // Clean special tokens (Llama 3, ChatML, Gemma) from response
+      // before displaying in UI or sending to TTS. Tags like <|eot_id|>
+      // confuse AVSpeechSynthesizer and look bad in the transcript.
+      final responseText = cleanResponseText(responseBuffer.toString());
       if (responseText.isEmpty) {
         _setState(VoicePipelineState.listening);
         _speechDetected = false;
@@ -798,5 +804,31 @@ class VoicePipeline {
   Future<void> dispose() async {
     await stop();
     await _eventController.close();
+  }
+
+  // =========================================================================
+  // Text cleaning
+  // =========================================================================
+
+  /// Pattern matching Llama 3, ChatML, and Gemma special tokens that
+  /// may leak into generated text. These tokens are meaningful to
+  /// llama.cpp's tokenizer but should never appear in user-facing text.
+  static final _specialTokenPattern = RegExp(
+    r'<\|(?:begin_of_text|end_of_text|start_header_id|end_header_id|eot_id|'
+    r'im_start|im_end|finetune_right_pad|reserved_special_token_\d+)\|>'
+    r'|<(?:start_of_turn|end_of_turn)>',
+    caseSensitive: false,
+  );
+
+  /// Strip special tokens and template artifacts from LLM response text.
+  ///
+  /// Llama 3.x, ChatML, and Gemma models may emit special tokens as
+  /// literal text (e.g., `<|eot_id|>`, `<|im_end|>`). These must be
+  /// removed before displaying or speaking the response.
+  static String cleanResponseText(String text) {
+    return text
+        .replaceAll(_specialTokenPattern, '')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n') // Collapse excessive newlines
+        .trim();
   }
 }

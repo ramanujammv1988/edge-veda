@@ -141,10 +141,12 @@ class _VoiceScreenState extends State<VoiceScreen>
     _chatSession = ChatSession(
       edgeVeda: _edgeVeda!,
       systemPrompt:
-          'You are a voice assistant. Respond in 1-2 short sentences. '
-          'Be conversational and natural. Never use markdown, bullet points, '
-          'numbered lists, code blocks, or special formatting. '
-          'Speak plainly as if talking to a friend.',
+          'You are a friendly voice assistant having a spoken conversation. '
+          'Keep responses to 1-2 short sentences. '
+          'Use only plain spoken English -- no markdown, no bullet points, '
+          'no numbered lists, no code, no special characters, no tags, '
+          'no asterisks, no parenthetical notes. '
+          'Just talk naturally as if chatting with a friend.',
       templateFormat: ChatTemplateFormat.llama3Instruct,
     );
   }

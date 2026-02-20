@@ -439,17 +439,27 @@
 
 #pragma mark - Voice Pipeline Audio Session
 
-/// Configure AVAudioSession for voice pipeline: PlayAndRecord + VoiceChat mode.
-/// Enables simultaneous mic capture + TTS playback with built-in echo cancellation,
-/// noise suppression, and AGC. Speaker output routed to loudspeaker (not earpiece).
+/// Configure AVAudioSession for voice pipeline: PlayAndRecord + Default mode.
+/// Enables simultaneous mic capture + TTS playback at full speaker volume.
+///
+/// We intentionally use AVAudioSessionModeDefault instead of VoiceChat because:
+/// - VoiceChat mode is designed for phone-to-ear conversations and applies
+///   heavy AGC, noise suppression, and volume reduction that degrades both
+///   speaker output volume and microphone quality for Whisper STT.
+/// - PlayAndRecord category inherently enables echo cancellation on iOS
+///   regardless of mode — VoiceChat is NOT required for echo cancellation.
+/// - DefaultToSpeaker routes audio to loudspeaker at full volume.
+/// - AllowBluetooth lets users use AirPods/headsets for voice conversations.
 - (void)handleConfigureVoicePipelineAudio:(FlutterResult)result {
     AVAudioSession *session = [AVAudioSession sharedInstance];
     NSError *error = nil;
 
     // PlayAndRecord allows simultaneous mic input + speaker output.
     // DefaultToSpeaker routes TTS to loudspeaker instead of earpiece.
+    // AllowBluetooth enables Bluetooth headset/AirPods for voice.
     if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
-                  withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker
+                  withOptions:(AVAudioSessionCategoryOptionDefaultToSpeaker |
+                               AVAudioSessionCategoryOptionAllowBluetooth)
                         error:&error]) {
         result([FlutterError errorWithCode:@"AUDIO_SESSION"
                                    message:@"Failed to set audio session category"
@@ -457,15 +467,14 @@
         return;
     }
 
-    // VoiceChat mode enables built-in echo cancellation + noise suppression + AGC.
-    if (![session setMode:AVAudioSessionModeVoiceChat error:&error]) {
+    // Default mode preserves natural speaker volume and mic sensitivity.
+    // Echo cancellation is provided by PlayAndRecord category, not by the mode.
+    if (![session setMode:AVAudioSessionModeDefault error:&error]) {
         result([FlutterError errorWithCode:@"AUDIO_SESSION"
                                    message:@"Failed to set audio session mode"
                                    details:error.localizedDescription]);
         return;
     }
-
-    // Echo cancellation is automatically enabled by AVAudioSessionModeVoiceChat.
 
     if (![session setActive:YES error:&error]) {
         result([FlutterError errorWithCode:@"AUDIO_SESSION"
@@ -473,10 +482,6 @@
                                    details:error.localizedDescription]);
         return;
     }
-
-    // Force speaker output. VoiceChat mode defaults to earpiece —
-    // overrideOutputAudioPort forces loudspeaker regardless of mode.
-    [session overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker error:&error];
 
     result(@(YES));
 }
