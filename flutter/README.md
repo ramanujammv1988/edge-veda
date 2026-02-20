@@ -469,9 +469,10 @@ Any GGUF model compatible with llama.cpp or whisper.cpp can be loaded by file pa
 
 ---
 
-## Community
+## Support
 
-Join us on [Discord](https://discord.gg/rv8qZMGC) to ask questions, share what you're building, and get help from the community.
+- **Discord:** [Join our community](https://discord.gg/rv8qZMGC)
+- **GitHub Issues:** [Report bugs or request features](https://github.com/ramanujammv1988/edge-veda/issues)
 
 ---
 
