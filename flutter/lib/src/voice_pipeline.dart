@@ -50,8 +50,8 @@ import 'whisper_session.dart';
 /// - calibrating -> listening (after calibration completes)
 /// - listening -> transcribing (after speech + silence detected)
 /// - transcribing -> thinking (after transcript obtained)
-/// - thinking -> speaking (after LLM response, Plan 02)
-/// - thinking -> listening (on user interruption or stub fallback)
+/// - thinking -> speaking (after LLM response completes)
+/// - thinking -> listening (on user interruption or empty response)
 /// - speaking -> listening (after TTS finishes or user interrupts)
 /// - any -> error (on fatal error)
 /// - any -> idle (on stop)
@@ -179,12 +179,17 @@ class VoicePipelineConfig {
 /// 1. Calibrates the VAD threshold from ambient noise
 /// 2. Listens for speech using energy-based VAD
 /// 3. Transcribes speech via WhisperSession
-/// 4. Generates a response via ChatSession (stub in Plan 01, full in Plan 02)
+/// 4. Streams LLM response via ChatSession.sendStream() with CancelToken
 /// 5. Speaks the response via TtsService
 /// 6. Returns to listening for the next turn
 ///
 /// Supports interruption: user speech during thinking or speaking states
-/// cancels the current operation and starts a new listening turn.
+/// cancels the current operation and starts a new listening turn. Post-TTS
+/// cooldown prevents residual audio from triggering false speech detection.
+///
+/// App lifecycle: call [pause] when going to background, [resume] when
+/// returning to foreground. The microphone subscription is paused (not
+/// cancelled) and the audio session is reconfigured on resume.
 class VoicePipeline {
   final ChatSession _chatSession;
   final TtsService _tts;
@@ -480,8 +485,10 @@ class VoicePipeline {
   /// Speaking: VAD active with elevated threshold for TTS interruption.
   void _handleSpeaking(double rms, Float32List frame) {
     if (rms > _activeThreshold) {
-      // User interrupted TTS
+      // User interrupted TTS -- stop immediately (fire-and-forget)
       _tts.stop();
+      // Start cooldown to keep threshold elevated while residual TTS fades
+      _startCooldown();
       _whisperSession?.resetTranscript();
       _speechDetected = true;
       _silentFrameCount = 0;
