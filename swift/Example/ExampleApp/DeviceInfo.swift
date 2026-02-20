@@ -86,4 +86,11 @@ struct DeviceInfo {
         // For simplicity, assume true for iPhone 8 and later
         return true
     }
+
+    // MARK: - Static Accessors
+
+    static var modelName: String     { current().modelName }
+    static var chipName: String      { current().chipName }
+    static var memoryString: String  { String(format: "%.1f GB", current().totalMemoryGB) }
+    static var hasNeuralEngine: Bool { current().hasNeuralEngine }
 }

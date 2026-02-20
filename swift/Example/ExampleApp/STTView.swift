@@ -28,7 +28,7 @@ struct STTView: View {
             
             Image(systemName: "mic.fill")
                 .font(.system(size: 72))
-                .foregroundColor(Theme.accent)
+                .foregroundColor(AppTheme.accent)
             
             Text("Speech-to-Text")
                 .font(.system(size: 24, weight: .bold))
@@ -36,19 +36,19 @@ struct STTView: View {
             
             Text("Download whisper-tiny.en (77 MB) to enable\non-device transcription")
                 .font(.system(size: 14))
-                .foregroundColor(Theme.textSecondary)
+                .foregroundColor(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             
             if viewModel.isDownloading {
                 VStack(spacing: 12) {
                     ProgressView(value: viewModel.downloadProgress, total: 1.0)
-                        .progressViewStyle(LinearProgressViewStyle(tint: Theme.accent))
+                        .progressViewStyle(LinearProgressViewStyle(tint: AppTheme.accent))
                         .frame(width: 240)
                     
                     Text("\(Int(viewModel.downloadProgress * 100))%")
                         .font(.system(size: 14))
-                        .foregroundColor(Theme.textSecondary)
+                        .foregroundColor(AppTheme.textSecondary)
                 }
             } else {
                 Button(action: {
@@ -84,7 +84,7 @@ struct STTView: View {
                 if !viewModel.transcript.isEmpty {
                     Button(action: viewModel.copyTranscript) {
                         Image(systemName: "doc.on.doc")
-                            .foregroundColor(Theme.textSecondary)
+                            .foregroundColor(AppTheme.textSecondary)
                     }
                 }
                 
@@ -92,7 +92,7 @@ struct STTView: View {
                 if !viewModel.segments.isEmpty && !viewModel.isRecording {
                     Button(action: viewModel.clearTranscript) {
                         Image(systemName: "trash")
-                            .foregroundColor(Theme.textSecondary)
+                            .foregroundColor(AppTheme.textSecondary)
                     }
                 }
             }
@@ -101,7 +101,7 @@ struct STTView: View {
             .padding(.bottom, 12)
             
             Divider()
-                .background(Theme.border)
+                .background(AppTheme.border)
             
             // Transcript area
             if viewModel.segments.isEmpty && !viewModel.isRecording {
@@ -123,15 +123,15 @@ struct STTView: View {
             
             Image(systemName: "mic")
                 .font(.system(size: 64))
-                .foregroundColor(Theme.border)
+                .foregroundColor(AppTheme.border)
             
             Text("Tap to start recording")
                 .font(.system(size: 16))
-                .foregroundColor(Theme.textTertiary)
+                .foregroundColor(AppTheme.textTertiary)
             
             Text("Audio is processed entirely on your device")
                 .font(.system(size: 13))
-                .foregroundColor(Theme.textTertiary)
+                .foregroundColor(AppTheme.textTertiary)
             
             Spacer()
         }
@@ -145,11 +145,11 @@ struct STTView: View {
             
             Text("Listening...")
                 .font(.system(size: 16))
-                .foregroundColor(Theme.textSecondary)
+                .foregroundColor(AppTheme.textSecondary)
             
             Text("Transcription will appear shortly")
                 .font(.system(size: 13))
-                .foregroundColor(Theme.textTertiary)
+                .foregroundColor(AppTheme.textTertiary)
             
             Spacer()
         }
@@ -169,7 +169,7 @@ struct STTView: View {
     private var controlsView: some View {
         VStack(spacing: 12) {
             Divider()
-                .background(Theme.border)
+                .background(AppTheme.border)
             
             // Recording status
             if viewModel.isRecording {
@@ -177,7 +177,7 @@ struct STTView: View {
                     PulsingDot()
                     Text("Recording  \(viewModel.formattedDuration)")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Theme.brandRed)
+                        .foregroundColor(AppTheme.brandRed)
                 }
                 .padding(.top, 8)
             }
@@ -185,11 +185,11 @@ struct STTView: View {
             if viewModel.isInitializing {
                 HStack(spacing: 8) {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: Theme.accent))
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.accent))
                         .scaleEffect(0.8)
                     Text("Loading whisper model...")
                         .font(.system(size: 14))
-                        .foregroundColor(Theme.textSecondary)
+                        .foregroundColor(AppTheme.textSecondary)
                 }
                 .padding(.top, 8)
             }
@@ -206,10 +206,10 @@ struct STTView: View {
             }) {
                 ZStack {
                     Circle()
-                        .fill(viewModel.isRecording ? Theme.brandRed : Theme.accent)
+                        .fill(viewModel.isRecording ? AppTheme.brandRed : AppTheme.accent)
                         .frame(width: 72, height: 72)
                         .shadow(
-                            color: (viewModel.isRecording ? Theme.brandRed : Theme.accent).opacity(0.4),
+                            color: (viewModel.isRecording ? AppTheme.brandRed : AppTheme.accent).opacity(0.4),
                             radius: viewModel.isRecording ? 20 : 12,
                             x: 0,
                             y: 0
@@ -224,7 +224,7 @@ struct STTView: View {
             
             Text(viewModel.isRecording ? "Tap to stop" : (viewModel.isInitializing ? "" : "Tap to start recording"))
                 .font(.system(size: 12))
-                .foregroundColor(Theme.textTertiary)
+                .foregroundColor(AppTheme.textTertiary)
             
             Spacer()
                 .frame(height: 20)
@@ -243,12 +243,12 @@ struct SegmentRow: View {
             // Timestamp
             Text(segment.formattedTimeRange)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundColor(Theme.accent)
+                .foregroundColor(AppTheme.accent)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(Theme.accent.opacity(0.12))
+                        .fill(AppTheme.accent.opacity(0.12))
                 )
             
             // Text
@@ -263,10 +263,10 @@ struct SegmentRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Theme.surface)
+                .fill(AppTheme.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.border, lineWidth: 1)
+                        .stroke(AppTheme.border, lineWidth: 1)
                 )
         )
     }
@@ -280,7 +280,7 @@ struct PulsingMicIcon: View {
     var body: some View {
         Image(systemName: "waveform")
             .font(.system(size: 48))
-            .foregroundColor(Theme.accent)
+            .foregroundColor(AppTheme.accent)
             .opacity(isPulsing ? 0.3 : 0.7)
             .animation(
                 Animation.easeInOut(duration: 1.2).repeatForever(autoreverses: true),

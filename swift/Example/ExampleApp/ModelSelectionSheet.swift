@@ -1,89 +1,46 @@
 import SwiftUI
+import EdgeVeda
 
-/// Model selection bottom sheet showing device info and available models.
-///
-/// This is a read-only/informational modal. Model downloads happen
-/// automatically on the Chat and Vision screens.
+/// Model selection bottom sheet — read-only informational modal showing all available models
+/// grouped by category, with live download status.
 struct ModelSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var modelManager = ModelManager()
-    
+    @StateObject private var vm = ModelSheetViewModel()
+
     var body: some View {
         NavigationView {
             ZStack {
-                Theme.background
-                    .ignoresSafeArea()
-                
+                AppTheme.background.ignoresSafeArea()
+
                 ScrollView {
                     VStack(spacing: 20) {
                         // Device status card
                         deviceStatusCard
-                        
-                        // Available models section
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Available Models")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(Theme.textPrimary)
-                                .padding(.horizontal, 20)
-                            
-                            // Chat models
-                            ModelTile(
-                                model: ModelInfo(
-                                    name: "Llama 3.2 1B",
-                                    size: 700_000_000,
-                                    filename: "llama-3.2-1b-gguf"
-                                ),
-                                icon: "text.alignleft",
-                                sizeLabel: "~700 MB",
-                                modelManager: modelManager
-                            )
-                            
-                            ModelTile(
-                                model: ModelInfo(
-                                    name: "Qwen 3 0.6B",
-                                    size: 600_000_000,
-                                    filename: "qwen-3-0.6b-gguf"
-                                ),
-                                icon: "text.alignleft",
-                                sizeLabel: "~600 MB",
-                                modelManager: modelManager
-                            )
-                            
-                            // Vision models
-                            ModelTile(
-                                model: ModelInfo(
-                                    name: "SmolVLM2 500M",
-                                    size: 417_000_000,
-                                    filename: "smolvlm2-500m-gguf"
-                                ),
-                                icon: "eye",
-                                sizeLabel: "~417 MB",
-                                modelManager: modelManager
-                            )
-                            
-                            ModelTile(
-                                model: ModelInfo(
-                                    name: "SmolVLM2 MMProj",
-                                    size: 190_000_000,
-                                    filename: "smolvlm2-500m-mmproj-gguf"
-                                ),
-                                icon: "eye",
-                                sizeLabel: "~190 MB",
-                                modelManager: modelManager
-                            )
-                            
-                            // Speech model
-                            ModelTile(
-                                model: ModelInfo(
-                                    name: "Whisper Tiny EN",
-                                    size: 75_000_000,
-                                    filename: "whisper-tiny-en-ggml"
-                                ),
-                                icon: "mic",
-                                sizeLabel: "~75 MB",
-                                modelManager: modelManager
-                            )
-                        }
+
+                        // Model categories
+                        modelCategory(
+                            title: "Text",
+                            icon: "text.alignleft",
+                            models: ModelRegistry.getAllModels()
+                        )
+
+                        modelCategory(
+                            title: "Vision",
+                            icon: "eye",
+                            models: ModelRegistry.getVisionModels() + [ModelRegistry.smolvlm2_500m_mmproj]
+                        )
+
+                        modelCategory(
+                            title: "Speech",
+                            icon: "waveform",
+                            models: ModelRegistry.getWhisperModels()
+                        )
+
+                        modelCategory(
+                            title: "Embedding",
+                            icon: "chart.bar.xaxis",
+                            models: ModelRegistry.getEmbeddingModels()
+                        )
                     }
                     .padding(.vertical, 20)
                 }
@@ -92,99 +49,169 @@ struct ModelSelectionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(Theme.accent)
+                    Button("Done") { dismiss() }
+                        .foregroundColor(AppTheme.accent)
                 }
             }
         }
+        .task { await vm.loadStatus() }
     }
-    
+
+    // MARK: - Device Status Card
+
     private var deviceStatusCard: some View {
         HStack(spacing: 16) {
             Image(systemName: "iphone")
                 .font(.system(size: 28))
-                .foregroundColor(Theme.accent)
-            
+                .foregroundColor(AppTheme.accent)
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("Device")
                     .font(.system(size: 11))
-                    .foregroundColor(Theme.textTertiary)
-                
+                    .foregroundColor(AppTheme.textTertiary)
+
                 Text(DeviceInfo.modelName)
                     .font(.system(size: 14))
-                    .foregroundColor(Theme.textPrimary)
+                    .foregroundColor(AppTheme.textPrimary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("Backend")
                     .font(.system(size: 11))
-                    .foregroundColor(Theme.textTertiary)
-                
-                Text("Metal GPU")
+                    .foregroundColor(AppTheme.textTertiary)
+
+                Text(detectDeviceCapabilities().hasMetal ? "Metal GPU" : "CPU")
                     .font(.system(size: 14))
-                    .foregroundColor(Theme.textPrimary)
+                    .foregroundColor(AppTheme.textPrimary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
-        .background(Theme.surfaceVariant)
+        .background(AppTheme.surfaceVariant)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Theme.border, lineWidth: 1)
+                .stroke(AppTheme.border, lineWidth: 1)
         )
         .padding(.horizontal, 16)
     }
-}
 
-struct ModelTile: View {
-    let model: ModelInfo
-    let icon: String
-    let sizeLabel: String
-    @ObservedObject var modelManager: ModelManager
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundColor(Theme.accent)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.name)
-                    .font(.system(size: 16))
-                    .foregroundColor(Theme.textPrimary)
-                
-                Text(sizeLabel)
+    // MARK: - Category Section
+
+    private func modelCategory(
+        title: String,
+        icon: String,
+        models: [DownloadableModelInfo]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
                     .font(.system(size: 12))
-                    .foregroundColor(Theme.textSecondary)
+                    .foregroundColor(AppTheme.accent)
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppTheme.textPrimary)
             }
-            
-            Spacer()
-            
-            // Download status indicator
-            Group {
-                if modelManager.isModelDownloaded(model.filename) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(Theme.success)
-                } else {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 24))
-                        .foregroundColor(Theme.accent)
+            .padding(.horizontal, 20)
+
+            VStack(spacing: 8) {
+                ForEach(models, id: \.id) { model in
+                    ModelSheetTile(
+                        model: model,
+                        isDownloaded: vm.downloadedIds.contains(model.id)
+                    )
                 }
             }
         }
+    }
+}
+
+// MARK: - Model Tile
+
+private struct ModelSheetTile: View {
+    let model: DownloadableModelInfo
+    let isDownloaded: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: tileIcon)
+                .font(.system(size: 24))
+                .foregroundColor(AppTheme.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.name)
+                    .font(.system(size: 16))
+                    .foregroundColor(AppTheme.textPrimary)
+
+                Text(sizeLabel)
+                    .font(.system(size: 12))
+                    .foregroundColor(AppTheme.textSecondary)
+            }
+
+            Spacer()
+
+            if isDownloaded {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(AppTheme.success)
+            } else {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(AppTheme.accent)
+            }
+        }
         .padding(16)
-        .background(Theme.surfaceVariant)
+        .background(AppTheme.surfaceVariant)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Theme.border, lineWidth: 1)
+                .stroke(AppTheme.border, lineWidth: 1)
         )
         .padding(.horizontal, 16)
+    }
+
+    private var sizeLabel: String {
+        let mb = Double(model.sizeBytes) / (1024 * 1024)
+        if mb >= 1024 { return String(format: "~%.1f GB", mb / 1024) }
+        return "~\(Int(mb)) MB"
+    }
+
+    private var tileIcon: String {
+        switch model.modelType {
+        case .whisper:   return "waveform"
+        case .vision:    return "eye"
+        case .mmproj:    return "puzzlepiece.extension"
+        case .embedding: return "chart.bar.xaxis"
+        default:         return "brain"
+        }
+    }
+}
+
+// MARK: - View Model
+
+@MainActor
+private class ModelSheetViewModel: ObservableObject {
+    @Published var downloadedIds: Set<String> = []
+
+    private let modelManager = ModelManager()
+
+    private var allModels: [DownloadableModelInfo] {
+        ModelRegistry.getAllModels()
+            + ModelRegistry.getVisionModels()
+            + [ModelRegistry.smolvlm2_500m_mmproj]
+            + ModelRegistry.getWhisperModels()
+            + ModelRegistry.getEmbeddingModels()
+    }
+
+    func loadStatus() async {
+        var ids = Set<String>()
+        for model in allModels {
+            if (try? await modelManager.isModelDownloaded(model.id)) == true {
+                ids.insert(model.id)
+            }
+        }
+        downloadedIds = ids
     }
 }
 

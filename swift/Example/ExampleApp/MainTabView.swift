@@ -51,7 +51,7 @@ struct MainTabView: View {
                     
                     TabButton(
                         icon: "mic.fill",
-                        title: "STT",
+                        title: "Listen",
                         isSelected: selectedTab == 2
                     ) {
                         selectedTab = 2

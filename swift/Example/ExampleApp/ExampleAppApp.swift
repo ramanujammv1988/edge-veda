@@ -16,7 +16,7 @@ struct ExampleAppApp: App {
             if hasCompletedWelcome {
                 MainTabView()
             } else {
-                WelcomeView(hasCompletedWelcome: $hasCompletedWelcome)
+                WelcomeView(onGetStarted: { hasCompletedWelcome = true })
             }
         }
     }

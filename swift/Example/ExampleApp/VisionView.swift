@@ -41,10 +41,10 @@ struct VisionView: View {
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Theme.surface.opacity(0.9))
+                            .fill(AppTheme.surface.opacity(0.9))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Theme.border.opacity(0.5), lineWidth: 1)
+                                    .stroke(AppTheme.border.opacity(0.5), lineWidth: 1)
                             )
                     )
                     .padding(.horizontal, 16)
@@ -68,7 +68,7 @@ struct VisionView: View {
                     
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(Theme.brandRed)
+                            .foregroundColor(AppTheme.brandRed)
                         Text(error)
                             .foregroundColor(.white)
                             .font(.system(size: 14))
@@ -76,7 +76,7 @@ struct VisionView: View {
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Theme.surface)
+                            .fill(AppTheme.surface)
                     )
                     .padding(16)
                 }
@@ -135,7 +135,7 @@ struct PulsingDot: View {
     
     var body: some View {
         Circle()
-            .fill(Theme.accent)
+            .fill(AppTheme.accent)
             .frame(width: 10, height: 10)
             .opacity(isPulsing ? 0.3 : 1.0)
             .animation(
@@ -168,7 +168,7 @@ struct LoadingOverlay: View {
                     
                     if progress > 0 {
                         ProgressView(value: progress, total: 1.0)
-                            .progressViewStyle(LinearProgressViewStyle(tint: Theme.accent))
+                            .progressViewStyle(LinearProgressViewStyle(tint: AppTheme.accent))
                             .frame(width: 240)
                     }
                 } else {
