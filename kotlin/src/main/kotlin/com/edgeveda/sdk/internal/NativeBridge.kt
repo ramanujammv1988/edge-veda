@@ -381,6 +381,38 @@ internal class NativeBridge {
     }
 
     /**
+     * Get full memory usage breakdown from the native inference engine.
+     *
+     * @return LongArray with 5 elements: [currentBytes, peakBytes, limitBytes, modelBytes, contextBytes],
+     *         or null on error
+     */
+    fun getMemoryStats(): LongArray? {
+        checkNotDisposed()
+        return nativeGetMemoryStats(nativeHandle)
+    }
+
+    /**
+     * Set a hard memory ceiling in bytes.
+     *
+     * @param limitBytes Maximum memory in bytes; 0 = no limit
+     * @return true if successful, false otherwise
+     */
+    fun setMemoryLimit(limitBytes: Long): Boolean {
+        checkNotDisposed()
+        return nativeSetMemoryLimit(nativeHandle, limitBytes)
+    }
+
+    /**
+     * Ask the native engine to release cached allocations it can safely free.
+     *
+     * @return true if successful, false otherwise
+     */
+    fun memoryCleanup(): Boolean {
+        checkNotDisposed()
+        return nativeMemoryCleanup(nativeHandle)
+    }
+
+    /**
      * Unload the model from memory.
      */
     fun unloadModel() {

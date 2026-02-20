@@ -30,7 +30,8 @@ object ModelRegistry {
         description = "Fast and efficient instruction-tuned model",
         downloadUrl = "$HUGGING_FACE_BASE_URL/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         format = "GGUF",
-        quantization = "Q4_K_M"
+        quantization = "Q4_K_M",
+        modelType = ModelType.TEXT
     )
 
     /** Phi-3.5 Mini Instruct (Q4_K_M) — High-quality reasoning model from Microsoft */
@@ -41,7 +42,8 @@ object ModelRegistry {
         description = "High-quality reasoning model from Microsoft",
         downloadUrl = "$HUGGING_FACE_BASE_URL/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
         format = "GGUF",
-        quantization = "Q4_K_M"
+        quantization = "Q4_K_M",
+        modelType = ModelType.TEXT
     )
 
     /** Gemma 2 2B Instruct (Q4_K_M) — Google's efficient instruction model */
@@ -52,7 +54,8 @@ object ModelRegistry {
         description = "Google's efficient instruction model",
         downloadUrl = "$HUGGING_FACE_BASE_URL/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
         format = "GGUF",
-        quantization = "Q4_K_M"
+        quantization = "Q4_K_M",
+        modelType = ModelType.TEXT
     )
 
     /** TinyLlama 1.1B Chat (Q4_K_M) — Ultra-fast lightweight chat model */
@@ -63,7 +66,20 @@ object ModelRegistry {
         description = "Ultra-fast lightweight chat model",
         downloadUrl = "$HUGGING_FACE_BASE_URL/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
         format = "GGUF",
-        quantization = "Q4_K_M"
+        quantization = "Q4_K_M",
+        modelType = ModelType.TEXT
+    )
+
+    /** Qwen3 0.6B (Q4_K_M) — Ultra-compact Alibaba model with tool-calling support */
+    val qwen3_06b = DownloadableModelInfo(
+        id = "qwen3-0.6b-q4",
+        name = "Qwen3 0.6B",
+        sizeBytes = 522L * 1024 * 1024, // ~522 MB
+        description = "Alibaba's Qwen3 0.6B Instruct (Q4_K_M)",
+        downloadUrl = "$HUGGING_FACE_BASE_URL/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
+        format = "GGUF",
+        quantization = "Q4_K_M",
+        modelType = ModelType.TEXT
     )
 
     // =========================================================================
@@ -78,7 +94,8 @@ object ModelRegistry {
         description = "Vision + video understanding model for image description",
         downloadUrl = "$HUGGING_FACE_BASE_URL/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/SmolVLM2-500M-Video-Instruct-Q8_0.gguf",
         format = "GGUF",
-        quantization = "Q8_0"
+        quantization = "Q8_0",
+        modelType = ModelType.VISION
     )
 
     /** SmolVLM2-500M mmproj (F16) — Multimodal projector for SmolVLM2 */
@@ -89,7 +106,52 @@ object ModelRegistry {
         description = "Multimodal projector for SmolVLM2 vision model",
         downloadUrl = "$HUGGING_FACE_BASE_URL/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-f16.gguf",
         format = "GGUF",
-        quantization = "F16"
+        quantization = "F16",
+        modelType = ModelType.MMPROJ
+    )
+
+    // =========================================================================
+    // Whisper STT Models
+    // =========================================================================
+
+    /** Whisper Tiny EN — Fastest speech-to-text */
+    val whisperTinyEn = DownloadableModelInfo(
+        id = "whisper-tiny-en",
+        name = "Whisper Tiny EN",
+        sizeBytes = 77_700_000L, // ~74 MB
+        description = "OpenAI Whisper Tiny English — fastest speech-to-text",
+        downloadUrl = "$HUGGING_FACE_BASE_URL/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
+        format = "ggml",
+        quantization = null,
+        modelType = ModelType.WHISPER
+    )
+
+    /** Whisper Base EN — Balanced speed and accuracy */
+    val whisperBaseEn = DownloadableModelInfo(
+        id = "whisper-base-en",
+        name = "Whisper Base EN",
+        sizeBytes = 145_000_000L, // ~138 MB
+        description = "OpenAI Whisper Base English — balanced speed and accuracy",
+        downloadUrl = "$HUGGING_FACE_BASE_URL/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+        format = "ggml",
+        quantization = null,
+        modelType = ModelType.WHISPER
+    )
+
+    // =========================================================================
+    // Embedding Models
+    // =========================================================================
+
+    /** all-MiniLM-L6-v2 (F16) — 384-dim sentence embedding model */
+    val allMiniLmL6V2 = DownloadableModelInfo(
+        id = "all-minilm-l6-v2-f16",
+        name = "all-MiniLM-L6-v2",
+        sizeBytes = 44_000_000L, // ~42 MB
+        description = "Sentence embedding model — 384-dim, fast and accurate",
+        downloadUrl = "$HUGGING_FACE_BASE_URL/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.F16.gguf",
+        format = "GGUF",
+        quantization = "F16",
+        modelType = ModelType.EMBEDDING
     )
 
     // =========================================================================
@@ -98,11 +160,19 @@ object ModelRegistry {
 
     /** Get all available text models */
     fun getAllTextModels(): List<DownloadableModelInfo> =
-        listOf(llama32_1b, phi35_mini, gemma2_2b, tinyLlama)
+        listOf(llama32_1b, phi35_mini, gemma2_2b, tinyLlama, qwen3_06b)
 
     /** Get all available vision models (main model only, not mmproj) */
     fun getVisionModels(): List<DownloadableModelInfo> =
         listOf(smolvlm2_500m)
+
+    /** Get all available Whisper speech-to-text models */
+    fun getWhisperModels(): List<DownloadableModelInfo> =
+        listOf(whisperTinyEn, whisperBaseEn)
+
+    /** Get all available embedding models */
+    fun getEmbeddingModels(): List<DownloadableModelInfo> =
+        listOf(allMiniLmL6V2)
 
     /**
      * Get the multimodal projector for a vision model.
@@ -117,9 +187,10 @@ object ModelRegistry {
             else -> null
         }
 
-    /** Get a model by its ID (searches both text and vision models) */
+    /** Get a model by its ID (searches all categories) */
     fun getModelById(id: String): DownloadableModelInfo? {
-        val all = getAllTextModels() + getVisionModels() + listOf(smolvlm2_500m_mmproj)
+        val all = getAllTextModels() + getVisionModels() + listOf(smolvlm2_500m_mmproj) +
+                  getWhisperModels() + getEmbeddingModels()
         return all.firstOrNull { it.id == id }
     }
 }

@@ -6,13 +6,22 @@ package com.edgeveda.sdk
 enum class ChatTemplate {
     /** Llama 3 chat format */
     LLAMA3,
-    
+
     /** ChatML format (used by OpenAI, GPT-4, etc.) */
     CHATML,
-    
+
     /** Mistral/Mixtral chat format */
-    MISTRAL;
-    
+    MISTRAL,
+
+    /** Generic ### System/User/Assistant format */
+    GENERIC,
+
+    /** Qwen3 ChatML format (same tokens as CHATML, kept separate for future tool-calling) */
+    QWEN3,
+
+    /** Gemma 3 format — system merged into first user turn; "model" role for assistant */
+    GEMMA3;
+
     /**
      * Formats a list of messages according to the template
      * @param messages The messages to format
@@ -23,6 +32,9 @@ enum class ChatTemplate {
             LLAMA3 -> formatLlama3(messages)
             CHATML -> formatChatML(messages)
             MISTRAL -> formatMistral(messages)
+            GENERIC -> formatGeneric(messages)
+            QWEN3 -> formatQwen3(messages)
+            GEMMA3 -> formatGemma3(messages)
         }
     }
     
@@ -84,6 +96,56 @@ enum class ChatTemplate {
             }
         }
 
+        return prompt.toString()
+    }
+
+    private fun formatGeneric(messages: List<ChatMessage>): String {
+        val prompt = StringBuilder()
+        for (msg in messages) {
+            when (msg.role) {
+                ChatRole.SYSTEM    -> prompt.append("### System:\n${msg.content}\n\n")
+                ChatRole.USER      -> prompt.append("### User:\n${msg.content}\n")
+                ChatRole.ASSISTANT -> prompt.append("### Assistant:\n${msg.content}\n")
+            }
+        }
+        prompt.append("### Assistant:\n")
+        return prompt.toString()
+    }
+
+    private fun formatQwen3(messages: List<ChatMessage>): String {
+        val prompt = StringBuilder()
+        for (msg in messages) {
+            when (msg.role) {
+                ChatRole.SYSTEM    -> prompt.append("<|im_start|>system\n${msg.content}<|im_end|>\n")
+                ChatRole.USER      -> prompt.append("<|im_start|>user\n${msg.content}<|im_end|>\n")
+                ChatRole.ASSISTANT -> prompt.append("<|im_start|>assistant\n${msg.content}<|im_end|>\n")
+            }
+        }
+        prompt.append("<|im_start|>assistant\n")
+        return prompt.toString()
+    }
+
+    private fun formatGemma3(messages: List<ChatMessage>): String {
+        val prompt = StringBuilder()
+        var pendingSystem: String? = null
+
+        for (msg in messages) {
+            when (msg.role) {
+                ChatRole.SYSTEM -> pendingSystem = msg.content
+                ChatRole.USER -> {
+                    val content = if (pendingSystem != null) {
+                        "$pendingSystem\n\n${msg.content}".also { pendingSystem = null }
+                    } else {
+                        msg.content
+                    }
+                    prompt.append("<start_of_turn>user\n${content}<end_of_turn>\n")
+                }
+                ChatRole.ASSISTANT ->
+                    prompt.append("<start_of_turn>model\n${msg.content}<end_of_turn>\n")
+            }
+        }
+
+        prompt.append("<start_of_turn>model\n")
         return prompt.toString()
     }
 }

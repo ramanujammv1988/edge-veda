@@ -65,6 +65,7 @@ class EdgeVeda private constructor(
     private val closed = AtomicBoolean(false)
     private val currentGenerationJob = AtomicReference<Job?>(null)
     private val currentStreamJob = AtomicReference<Job?>(null)
+    private var memoryPressureCallback: ((MemoryPressureEvent) -> Unit)? = null
     
     // Lifecycle management
     private val lifecycleScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -196,6 +197,82 @@ class EdgeVeda private constructor(
                 -1L
             }
         }
+
+    /**
+     * Get full memory usage breakdown from the native inference engine.
+     *
+     * @return [MemoryStats] with current, peak, limit, model, and context byte counts
+     * @throws EdgeVedaException.GenerationError if the native call fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun getMemoryStats(): MemoryStats {
+        checkInitialized()
+        return withContext(Dispatchers.Default) {
+            val raw = nativeBridge.getMemoryStats()
+                ?: throw EdgeVedaException.GenerationError("getMemoryStats returned null")
+            MemoryStats(
+                currentBytes  = raw[0],
+                peakBytes     = raw[1],
+                limitBytes    = raw[2],
+                modelBytes    = raw[3],
+                contextBytes  = raw[4]
+            )
+        }
+    }
+
+    /**
+     * Set a hard memory ceiling for the native inference engine.
+     *
+     * @param limitBytes Maximum memory in bytes; 0 = no limit
+     * @throws EdgeVedaException.GenerationError if the native call fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun setMemoryLimit(limitBytes: Long) {
+        checkInitialized()
+        withContext(Dispatchers.Default) {
+            val ok = nativeBridge.setMemoryLimit(limitBytes)
+            if (!ok) throw EdgeVedaException.GenerationError("setMemoryLimit failed")
+        }
+    }
+
+    /**
+     * Ask the native engine to release cached allocations it can safely free.
+     *
+     * @throws EdgeVedaException.GenerationError if the native call fails
+     * @throws IllegalStateException if not initialized or closed
+     */
+    suspend fun memoryCleanup() {
+        checkInitialized()
+        withContext(Dispatchers.Default) {
+            val ok = nativeBridge.memoryCleanup()
+            if (!ok) throw EdgeVedaException.GenerationError("memoryCleanup failed")
+        }
+    }
+
+    /**
+     * Register a callback invoked by the native engine when memory usage exceeds
+     * approximately 80% of the configured limit.
+     *
+     * Pass null to remove the callback.
+     *
+     * @param callback Callback receiving a [MemoryPressureEvent], or null to deregister
+     * @throws IllegalStateException if not initialized or closed
+     */
+    fun setMemoryPressureCallback(callback: ((MemoryPressureEvent) -> Unit)?) {
+        checkInitialized()
+        this.memoryPressureCallback = callback
+        nativeBridge.setMemoryPressureCallback(
+            if (callback != null) { currentBytes, limitBytes ->
+                val ratio = if (limitBytes > 0) currentBytes.toDouble() / limitBytes else 0.0
+                val event = MemoryPressureEvent(
+                    currentBytes  = currentBytes,
+                    limitBytes    = limitBytes,
+                    pressureRatio = ratio
+                )
+                callback(event)
+            } else null
+        )
+    }
 
     /**
      * Get model information including architecture, parameters, and metadata.

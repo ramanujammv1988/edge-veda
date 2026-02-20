@@ -91,6 +91,13 @@ data class DownloadProgress(
     val progressPercent: Int get() = (progress * 100).toInt()
 }
 
+// MARK: - ModelType
+
+/** Category of a downloadable model */
+enum class ModelType {
+    TEXT, VISION, MMPROJ, WHISPER, EMBEDDING
+}
+
 // MARK: - DownloadableModelInfo
 
 /**
@@ -115,7 +122,9 @@ data class DownloadableModelInfo(
     /** Model format (e.g., "GGUF") */
     val format: String = "GGUF",
     /** Quantization level (e.g., "Q4_K_M") */
-    val quantization: String? = null
+    val quantization: String? = null,
+    /** Model category (TEXT, VISION, MMPROJ, WHISPER, EMBEDDING) */
+    val modelType: ModelType? = null
 )
 
 // MARK: - ModelManager
@@ -560,6 +569,7 @@ class ModelManager(private val context: Context) {
             put("format", model.format)
             putOpt("quantization", model.quantization)
             put("downloadedAt", java.time.Instant.now().toString())
+            putOpt("modelType", model.modelType?.name)
         }.toString(2)
         File(getModelsDirectory(), "${model.id}_$METADATA_FILE_NAME").writeText(json)
     }
@@ -587,7 +597,10 @@ class ModelManager(private val context: Context) {
                 downloadUrl = json.getString("downloadUrl"),
                 checksum = json.optString("checksum", null),
                 format = json.optString("format", "GGUF"),
-                quantization = json.optString("quantization", null)
+                quantization = json.optString("quantization", null),
+                modelType = json.optString("modelType", null)?.let {
+                    runCatching { ModelType.valueOf(it) }.getOrNull()
+                }
             )
         } catch (e: Exception) {
             null

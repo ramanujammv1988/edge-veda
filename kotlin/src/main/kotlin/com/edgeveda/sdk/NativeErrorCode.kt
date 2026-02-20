@@ -5,6 +5,7 @@ package com.edgeveda.sdk
  *
  * The native C engine returns integer error codes through the JNI boundary.
  * This enum provides a type-safe mapping from those codes to rich Kotlin exceptions.
+ * Codes match `ev_error_t` in `edge_veda.h` (all errors are negative; 0 = success).
  *
  * ## Usage
  * ```kotlin
@@ -13,66 +14,81 @@ package com.edgeveda.sdk
  * ```
  *
  * ## Error Code Table
- * | Code | Name              | Description                        |
- * |------|-------------------|------------------------------------|
- * | 0    | OK                | Success (no error)                 |
- * | 1    | MODEL_NOT_FOUND   | Model file not found               |
- * | 2    | MODEL_LOAD_FAILED | Model failed to load               |
- * | 3    | OUT_OF_MEMORY     | System ran out of memory           |
- * | 4    | CONTEXT_OVERFLOW  | Prompt exceeds context window      |
- * | 5    | INVALID_PARAMETER | Invalid parameter value            |
- * | 6    | GENERATION_FAILED | Text generation failed             |
- * | 7    | CANCELLED         | Operation was cancelled            |
- * | -1   | UNKNOWN           | Unknown or unmapped error          |
+ * | Code | Name                 | Description                               |
+ * |------|----------------------|-------------------------------------------|
+ * |  0   | OK                   | Success (no error)                        |
+ * | -1   | INVALID_PARAM        | Invalid parameter value                   |
+ * | -2   | OUT_OF_MEMORY        | System ran out of memory                  |
+ * | -3   | MODEL_LOAD_FAILED    | Model failed to load                      |
+ * | -4   | BACKEND_INIT_FAILED  | Backend (Vulkan/CPU) failed to initialise |
+ * | -5   | INFERENCE_FAILED     | Text generation / inference failed        |
+ * | -6   | CONTEXT_INVALID      | Context invalid or prompt exceeds window  |
+ * | -7   | STREAM_ENDED         | Normal end-of-stream (not an error)       |
+ * | -8   | NOT_IMPLEMENTED      | Feature not implemented                   |
+ * | -9   | MEMORY_LIMIT_EXCEEDED| Configured memory limit exceeded          |
+ * | -10  | UNSUPPORTED_BACKEND  | Backend not supported on this device      |
+ * | -999 | UNKNOWN              | Unknown or unmapped error code            |
  */
 enum class NativeErrorCode(val code: Int) {
     /** Operation completed successfully (no error) */
     OK(0),
 
-    /** Model file was not found at the specified path */
-    MODEL_NOT_FOUND(1),
-
-    /** Model failed to load (corrupt file, unsupported format, etc.) */
-    MODEL_LOAD_FAILED(2),
+    /** An invalid parameter was passed to the engine */
+    INVALID_PARAM(-1),
 
     /** System ran out of memory during operation */
-    OUT_OF_MEMORY(3),
+    OUT_OF_MEMORY(-2),
 
-    /** Prompt exceeded the model's context window size */
-    CONTEXT_OVERFLOW(4),
+    /** Model failed to load (corrupt file, unsupported format, etc.) */
+    MODEL_LOAD_FAILED(-3),
 
-    /** An invalid parameter was passed to the engine */
-    INVALID_PARAMETER(5),
+    /** Backend (Vulkan/CPU) failed to initialise */
+    BACKEND_INIT_FAILED(-4),
 
-    /** Text generation failed mid-operation */
-    GENERATION_FAILED(6),
+    /** Text generation / inference failed mid-operation */
+    INFERENCE_FAILED(-5),
 
-    /** Operation was cancelled by the user */
-    CANCELLED(7),
+    /** Context is invalid or prompt exceeded the context window */
+    CONTEXT_INVALID(-6),
+
+    /** Normal end-of-stream signal — not an error */
+    STREAM_ENDED(-7),
+
+    /** Feature is not yet implemented in the native engine */
+    NOT_IMPLEMENTED(-8),
+
+    /** Configured memory limit was exceeded */
+    MEMORY_LIMIT_EXCEEDED(-9),
+
+    /** Backend is not supported on this device */
+    UNSUPPORTED_BACKEND(-10),
 
     /** Unknown or unmapped error code */
-    UNKNOWN(-1);
+    UNKNOWN(-999);
 
     /**
      * Convert this native error code to an [EdgeVedaException].
      *
-     * Returns `null` for [OK] since no error occurred.
+     * Returns `null` for [OK] and [STREAM_ENDED] since neither represents an error.
      *
      * @param context Optional additional context string for the error message.
-     * @return The corresponding [EdgeVedaException], or `null` if the code is [OK].
+     * @return The corresponding [EdgeVedaException], or `null` if the code is [OK]/[STREAM_ENDED].
      */
     fun toException(context: String? = null): EdgeVedaException? {
         val msg = context ?: "Native engine error"
 
         return when (this) {
             OK -> null
-            MODEL_NOT_FOUND -> EdgeVedaException.ModelNotFoundError(msg)
-            MODEL_LOAD_FAILED -> EdgeVedaException.ModelLoadError(msg)
+            INVALID_PARAM -> EdgeVedaException.InvalidConfiguration(msg)
             OUT_OF_MEMORY -> EdgeVedaException.OutOfMemoryError(msg)
-            CONTEXT_OVERFLOW -> EdgeVedaException.ContextOverflowError(msg)
-            INVALID_PARAMETER -> EdgeVedaException.InvalidConfiguration(msg)
-            GENERATION_FAILED -> EdgeVedaException.GenerationError(msg)
-            CANCELLED -> EdgeVedaException.CancelledException(msg)
+            MODEL_LOAD_FAILED -> EdgeVedaException.ModelLoadError(msg)
+            BACKEND_INIT_FAILED -> EdgeVedaException.ModelLoadError("Backend initialization failed: $msg")
+            INFERENCE_FAILED -> EdgeVedaException.GenerationError(msg)
+            CONTEXT_INVALID -> EdgeVedaException.ContextOverflowError(msg)
+            STREAM_ENDED -> null
+            NOT_IMPLEMENTED -> EdgeVedaException.UnsupportedOperationError(msg)
+            MEMORY_LIMIT_EXCEEDED -> EdgeVedaException.OutOfMemoryError("Memory limit exceeded: $msg")
+            UNSUPPORTED_BACKEND -> EdgeVedaException.InvalidConfiguration("Unsupported backend: $msg")
             UNKNOWN -> EdgeVedaException.NativeError(msg)
         }
     }

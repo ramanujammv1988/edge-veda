@@ -261,3 +261,46 @@ data class DeviceInfo(
     val gpuVendor: String?,
     val gpuModel: String?
 )
+
+/**
+ * Memory usage statistics from the native inference engine.
+ * Field values map to the C `ev_memory_stats` struct fields.
+ *
+ * @property currentBytes Bytes currently used by model weights + KV cache
+ * @property peakBytes Peak bytes since context creation
+ * @property limitBytes Configured memory limit in bytes; 0 = no limit
+ * @property modelBytes Bytes consumed by model weights alone
+ * @property contextBytes Bytes consumed by the KV context cache
+ */
+data class MemoryStats(
+    val currentBytes: Long,
+    val peakBytes: Long,
+    val limitBytes: Long,
+    val modelBytes: Long,
+    val contextBytes: Long
+) {
+    /** Fraction of limit in use (0.0–1.0+). Returns 0.0 if no limit set. */
+    val usagePercent: Double
+        get() = if (limitBytes > 0) currentBytes.toDouble() / limitBytes else 0.0
+
+    /** True when memory usage exceeds 80% of the configured limit. */
+    val isHighPressure: Boolean get() = usagePercent > 0.8
+
+    /** True when memory usage exceeds 90% of the configured limit. */
+    val isCritical: Boolean get() = usagePercent > 0.9
+}
+
+/**
+ * Event emitted when the memory pressure callback fires.
+ *
+ * @property currentBytes Current memory usage in bytes
+ * @property limitBytes Configured memory limit in bytes
+ * @property pressureRatio Ratio of currentBytes to limitBytes (0.0–1.0+)
+ * @property timestampMs Epoch millis when the event was generated
+ */
+data class MemoryPressureEvent(
+    val currentBytes: Long,
+    val limitBytes: Long,
+    val pressureRatio: Double,
+    val timestampMs: Long = System.currentTimeMillis()
+)
