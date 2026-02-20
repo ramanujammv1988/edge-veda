@@ -11,12 +11,16 @@ import {
 import { AppTheme } from './theme';
 import { ModelManager, ModelRegistry, ModelInfo } from 'edge-veda';
 
+export interface SettingsScreenProps {
+  onNavigate?: (screen: 'detective' | 'soaktest') => void;
+}
+
 /**
  * Settings screen matching Flutter's SettingsScreen.
  *
  * Sections: Device Status, Generation (sliders), Storage, Models, About.
  */
-export function SettingsScreen(): React.JSX.Element {
+export function SettingsScreen({ onNavigate }: SettingsScreenProps = {}): React.JSX.Element {
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(256);
 
@@ -78,6 +82,24 @@ export function SettingsScreen(): React.JSX.Element {
         {/* Models */}
         <SectionTitle title="MODELS" />
         <ModelsCard />
+
+        {/* Developer */}
+        <SectionTitle title="DEVELOPER" />
+        <Card>
+          <TouchableOpacity style={styles.infoRow} onPress={() => onNavigate?.('detective')}>
+            <Text style={styles.rowIcon}>🕵️</Text>
+            <Text style={styles.rowLabel}>Phone Detective</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.rowValue}>›</Text>
+          </TouchableOpacity>
+          <Divider />
+          <TouchableOpacity style={styles.infoRow} onPress={() => onNavigate?.('soaktest')}>
+            <Text style={styles.rowIcon}>📊</Text>
+            <Text style={styles.rowLabel}>Soak Test</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.rowValue}>›</Text>
+          </TouchableOpacity>
+        </Card>
 
         {/* About */}
         <SectionTitle title="ABOUT" />
@@ -145,8 +167,18 @@ function SliderBar({
   );
 }
 
+const ALL_MODELS = [
+  ModelRegistry.llama32_1b,
+  ModelRegistry.smolvlm2_500m,
+  ModelRegistry.smolvlm2_500m_mmproj,
+  ModelRegistry.qwen3_06b,
+  ModelRegistry.whisperTinyEn,
+  ModelRegistry.allMiniLmL6V2,
+  ModelRegistry.sdV21Turbo,
+];
+
 function StorageCard() {
-  const models = [ModelRegistry.llama32_1b, ModelRegistry.smolvlm2_500m, ModelRegistry.smolvlm2_500m_mmproj];
+  const models = ALL_MODELS;
   const totalBytes = models.reduce((sum, m) => sum + m.sizeBytes, 0);
   const totalGb = totalBytes / (1024 * 1024 * 1024);
   const pct = Math.min(100, (totalGb / 4) * 100);
@@ -168,7 +200,7 @@ function StorageCard() {
 }
 
 function ModelsCard() {
-  const models = [ModelRegistry.llama32_1b, ModelRegistry.smolvlm2_500m, ModelRegistry.smolvlm2_500m_mmproj];
+  const models = ALL_MODELS;
 
   return (
     <Card>
@@ -196,7 +228,19 @@ function ModelRow({ model }: { model: ModelInfo }) {
   const sizeMb = model.sizeBytes / (1024 * 1024);
   const sizeLabel = sizeMb >= 1024 ? `~${(sizeMb / 1024).toFixed(1)} GB` : `~${Math.round(sizeMb)} MB`;
 
-  const icon = model.id.includes('mmproj') ? '🧩' : model.id.includes('vlm') || model.id.includes('smol') ? '👁️' : '🤖';
+  const icon = model.id.includes('mmproj')
+    ? '🧩'
+    : model.id.includes('vlm') || model.id.includes('smol')
+    ? '👁️'
+    : model.id.includes('whisper')
+    ? '🎙️'
+    : model.id.includes('minilm') || model.id.includes('embedding')
+    ? '🔢'
+    : model.id.includes('sd-') || model.id.includes('stable')
+    ? '🎨'
+    : model.id.includes('qwen')
+    ? '🔧'
+    : '🤖';
 
   const handleDelete = async () => {
     setIsDeleting(true);
