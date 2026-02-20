@@ -126,7 +126,7 @@ export 'src/runtime_policy.dart' show RuntimePolicy, QoSLevel, QoSKnobs;
 export 'src/model_manager.dart' show ModelManager, ModelRegistry;
 
 // Chat session (multi-turn conversation)
-export 'src/chat_session.dart' show ChatSession;
+export 'src/chat_session.dart' show ChatSession, ValidationEvent;
 export 'src/chat_types.dart' show ChatMessage, ChatRole, SystemPromptPreset;
 export 'src/chat_template.dart' show ChatTemplateFormat;
 
@@ -162,9 +162,12 @@ export 'src/tool_registry.dart' show ToolRegistry;
 
 export 'src/tool_template.dart' show ToolTemplate;
 
-export 'src/schema_validator.dart' show SchemaValidator, SchemaValidationResult;
+export 'src/schema_validator.dart' show SchemaValidator, SchemaValidationResult, SchemaValidationMode;
 
 export 'src/gbnf_builder.dart' show GbnfBuilder;
+
+// JSON recovery utilities
+export 'src/json_recovery.dart' show JsonRecovery, JsonRecoveryResult;
 
 // Embeddings and confidence
 export 'src/types.dart' show
