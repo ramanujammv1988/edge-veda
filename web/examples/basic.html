@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edge Veda Web SDK - Basic Example</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    button {
+      background: #0066cc;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 10px;
+    }
+
+    button:hover {
+      background: #0052a3;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    #progress {
+      margin-top: 10px;
+      padding: 10px;
+      background: white;
+      border-radius: 4px;
+      min-height: 20px;
+    }
+
+    #output {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 4px;
+      min-height: 100px;
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+
+    .stats {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    .error {
+      color: #d32f2f;
+      background: #ffebee;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Edge Veda Web SDK - Basic Example</h1>
+
+  <div class="container">
+    <h2>Initialize Model</h2>
+    <button id="initBtn">Initialize</button>
+    <button id="terminateBtn" disabled>Terminate</button>
+    <div id="progress"></div>
+  </div>
+
+  <div class="container">
+    <h2>Generate Text</h2>
+    <textarea id="prompt" rows="4" placeholder="Enter your prompt...">What is the capital of France?</textarea>
+    <div style="margin-top: 10px;">
+      <button id="generateBtn" disabled>Generate</button>
+      <button id="streamBtn" disabled>Generate (Stream)</button>
+    </div>
+    <div id="output"></div>
+    <div id="stats" class="stats"></div>
+  </div>
+
+  <script type="module">
+    // Import from the built library
+    // In production, this would be: import { EdgeVeda } from '@edgeveda/web'
+
+    let ai = null;
+
+    const initBtn = document.getElementById('initBtn');
+    const terminateBtn = document.getElementById('terminateBtn');
+    const generateBtn = document.getElementById('generateBtn');
+    const streamBtn = document.getElementById('streamBtn');
+    const progress = document.getElementById('progress');
+    const output = document.getElementById('output');
+    const stats = document.getElementById('stats');
+    const prompt = document.getElementById('prompt');
+
+    function updateProgress(text) {
+      progress.innerHTML = text;
+    }
+
+    function updateOutput(text) {
+      output.textContent = text;
+    }
+
+    function updateStats(text) {
+      stats.innerHTML = text;
+    }
+
+    function showError(error) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error';
+      errorDiv.textContent = `Error: ${error.message}`;
+      progress.appendChild(errorDiv);
+    }
+
+    initBtn.addEventListener('click', async () => {
+      try {
+        initBtn.disabled = true;
+        updateProgress('Initializing...');
+        updateOutput('');
+        updateStats('');
+
+        // Create EdgeVeda instance
+        // NOTE: This is a mock for demonstration. In production, use actual SDK:
+        // import { EdgeVeda } from '@edgeveda/web';
+        // ai = new EdgeVeda({ modelId: 'llama-3.2-1b' });
+
+        updateProgress(`
+          <strong>Stage:</strong> Detecting device capabilities...<br>
+          <strong>Progress:</strong> 10%
+        `);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        updateProgress(`
+          <strong>Stage:</strong> Downloading model...<br>
+          <strong>Progress:</strong> 30% (15.2 MB / 50.0 MB)
+        `);
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        updateProgress(`
+          <strong>Stage:</strong> Loading WASM module...<br>
+          <strong>Progress:</strong> 70%
+        `);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        updateProgress(`
+          <strong>Stage:</strong> Initializing inference engine...<br>
+          <strong>Progress:</strong> 90%
+        `);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        updateProgress(`
+          <strong>Stage:</strong> Ready<br>
+          <strong>Progress:</strong> 100%
+        `);
+
+        ai = { initialized: true }; // Mock
+
+        terminateBtn.disabled = false;
+        generateBtn.disabled = false;
+        streamBtn.disabled = false;
+
+      } catch (error) {
+        showError(error);
+        initBtn.disabled = false;
+      }
+    });
+
+    terminateBtn.addEventListener('click', async () => {
+      if (ai) {
+        updateProgress('Terminating...');
+        // await ai.terminate();
+        ai = null;
+
+        initBtn.disabled = false;
+        terminateBtn.disabled = true;
+        generateBtn.disabled = true;
+        streamBtn.disabled = true;
+
+        updateProgress('Terminated');
+        updateOutput('');
+        updateStats('');
+      }
+    });
+
+    generateBtn.addEventListener('click', async () => {
+      if (!ai) return;
+
+      try {
+        generateBtn.disabled = true;
+        streamBtn.disabled = true;
+        updateOutput('Generating...');
+        updateStats('');
+
+        const promptText = prompt.value;
+
+        // Mock generation
+        // In production: const result = await ai.generate({ prompt: promptText });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const mockResult = {
+          text: `Mock response to: "${promptText}"\n\nThis is a placeholder response. In production, this would be the actual generated text from the LLM running in your browser via WebGPU or WASM.`,
+          tokensGenerated: 42,
+          timeMs: 1234,
+          tokensPerSecond: 34.05,
+        };
+
+        updateOutput(mockResult.text);
+        updateStats(`
+          <strong>Tokens:</strong> ${mockResult.tokensGenerated} |
+          <strong>Time:</strong> ${mockResult.timeMs}ms |
+          <strong>Speed:</strong> ${mockResult.tokensPerSecond.toFixed(2)} tokens/sec
+        `);
+
+        generateBtn.disabled = false;
+        streamBtn.disabled = false;
+
+      } catch (error) {
+        showError(error);
+        generateBtn.disabled = false;
+        streamBtn.disabled = false;
+      }
+    });
+
+    streamBtn.addEventListener('click', async () => {
+      if (!ai) return;
+
+      try {
+        generateBtn.disabled = true;
+        streamBtn.disabled = true;
+        updateOutput('');
+        updateStats('Streaming...');
+
+        const promptText = prompt.value;
+
+        // Mock streaming
+        // In production: for await (const chunk of ai.generateStream({ prompt: promptText }))
+        const words = `This is a mock streaming response. Each word appears one at a time, simulating real-time token generation. In production, this would stream actual tokens from the LLM running in your browser.`.split(' ');
+
+        let fullText = '';
+        let tokenCount = 0;
+        const startTime = performance.now();
+
+        for (const word of words) {
+          fullText += word + ' ';
+          tokenCount++;
+          updateOutput(fullText);
+
+          const elapsed = performance.now() - startTime;
+          const tokensPerSec = (tokenCount / elapsed) * 1000;
+
+          updateStats(`
+            <strong>Tokens:</strong> ${tokenCount} |
+            <strong>Speed:</strong> ${tokensPerSec.toFixed(2)} tokens/sec
+          `);
+
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        const totalTime = performance.now() - startTime;
+        updateStats(`
+          <strong>Tokens:</strong> ${tokenCount} |
+          <strong>Time:</strong> ${totalTime.toFixed(0)}ms |
+          <strong>Speed:</strong> ${((tokenCount / totalTime) * 1000).toFixed(2)} tokens/sec |
+          <strong>Status:</strong> Complete
+        `);
+
+        generateBtn.disabled = false;
+        streamBtn.disabled = false;
+
+      } catch (error) {
+        showError(error);
+        generateBtn.disabled = false;
+        streamBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
