@@ -409,6 +409,10 @@
         [self handleGetCalendarInsights:call result:result];
     } else if ([@"getFreeDiskSpace" isEqualToString:call.method]) {
         [self handleGetFreeDiskSpace:result];
+    } else if ([@"configureVoicePipelineAudio" isEqualToString:call.method]) {
+        [self handleConfigureVoicePipelineAudio:result];
+    } else if ([@"resetAudioSession" isEqualToString:call.method]) {
+        [self handleResetAudioSession:result];
     } else if ([@"tts_speak" isEqualToString:call.method]) {
         NSDictionary *args = call.arguments;
         [_ttsHandler speakText:args[@"text"]
@@ -431,6 +435,67 @@
     } else {
         result(FlutterMethodNotImplemented);
     }
+}
+
+#pragma mark - Voice Pipeline Audio Session
+
+/// Configure AVAudioSession for voice pipeline: PlayAndRecord + VoiceChat mode.
+/// Enables simultaneous mic capture + TTS playback with built-in echo cancellation,
+/// noise suppression, and AGC. Speaker output routed to loudspeaker (not earpiece).
+- (void)handleConfigureVoicePipelineAudio:(FlutterResult)result {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+
+    // PlayAndRecord allows simultaneous mic input + speaker output.
+    // DefaultToSpeaker routes TTS to loudspeaker instead of earpiece.
+    if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
+                  withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker
+                        error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to set audio session category"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    // VoiceChat mode enables built-in echo cancellation + noise suppression + AGC.
+    if (![session setMode:AVAudioSessionModeVoiceChat error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to set audio session mode"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    // Prefer echo-cancelled input if the hardware supports it.
+    if ([session isEchoCancelledInputAvailable]) {
+        [session setPrefersEchoCancelledInput:YES];
+    }
+
+    if (![session setActive:YES error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to activate audio session"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    result(@(YES));
+}
+
+/// Reset the audio session after voice pipeline stops.
+/// Deactivates the session and notifies other audio apps they can resume.
+- (void)handleResetAudioSession:(FlutterResult)result {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+
+    if (![session setActive:NO
+                withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                      error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to deactivate audio session"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    result(@(YES));
 }
 
 #pragma mark - Thermal
