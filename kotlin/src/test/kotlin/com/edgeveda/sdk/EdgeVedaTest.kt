@@ -24,7 +24,7 @@ class EdgeVedaTest {
     @Before
     fun setUp() {
         // Create a new instance for each test
-        edgeVeda = EdgeVeda.create()
+        edgeVeda = EdgeVeda.createWithoutLifecycle()
     }
 
     @After
@@ -47,7 +47,7 @@ class EdgeVedaTest {
 
     @Test
     fun `test create returns non-null instance`() {
-        val instance = EdgeVeda.create()
+        val instance = EdgeVeda.createWithoutLifecycle()
         assertNotNull("EdgeVeda instance should not be null", instance)
         instance.close()
     }
@@ -170,13 +170,13 @@ class EdgeVedaTest {
     @Test
     fun `test generate options presets`() {
         val creative = GenerateOptions.creative()
-        assertEquals("Creative temperature should be 1.0", 1.0f, creative.temperature, 0.001f)
+        assertEquals("Creative temperature should be 1.0", 1.0, creative.temperature!!.toDouble(), 0.001)
 
         val deterministic = GenerateOptions.deterministic()
-        assertEquals("Deterministic temperature should be 0.3", 0.3f, deterministic.temperature, 0.001f)
+        assertEquals("Deterministic temperature should be 0.3", 0.3, deterministic.temperature!!.toDouble(), 0.001)
 
         val balanced = GenerateOptions.balanced()
-        assertEquals("Balanced temperature should be 0.7", 0.7f, balanced.temperature, 0.001f)
+        assertEquals("Balanced temperature should be 0.7", 0.7, balanced.temperature!!.toDouble(), 0.001)
     }
 
     @Test
@@ -190,8 +190,8 @@ class EdgeVedaTest {
         )
 
         assertEquals("Max tokens should be 100", 100, options.maxTokens)
-        assertEquals("Temperature should be 0.9", 0.9f, options.temperature, 0.001f)
-        assertEquals("TopP should be 0.95", 0.95f, options.topP, 0.001f)
+        assertEquals("Temperature should be 0.9", 0.9, options.temperature!!.toDouble(), 0.001)
+        assertEquals("TopP should be 0.95", 0.95, options.topP!!.toDouble(), 0.001)
         assertEquals("TopK should be 50", 50, options.topK)
         assertEquals("Stop sequences should have 2 items", 2, options.stopSequences.size)
     }
