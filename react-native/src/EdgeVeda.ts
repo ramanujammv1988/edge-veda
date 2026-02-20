@@ -10,9 +10,18 @@ import type {
   EdgeVedaConfig,
   GenerateOptions,
   MemoryUsage,
+  MemoryStats,
   ModelInfo,
   TokenCallback,
   ProgressCallback,
+  EmbeddingResult,
+  WhisperConfig,
+  WhisperParams,
+  WhisperResult,
+  ImageGenerationConfig,
+  ImageProgress,
+  ImageResult,
+  CancelToken,
 } from './types';
 import { EdgeVedaError, EdgeVedaErrorCode } from './types';
 import { version } from '../package.json';
@@ -203,6 +212,7 @@ const EVENTS = {
   GENERATION_COMPLETE: 'EdgeVeda_GenerationComplete',
   GENERATION_ERROR: 'EdgeVeda_GenerationError',
   MODEL_LOAD_PROGRESS: 'EdgeVeda_ModelLoadProgress',
+  IMAGE_PROGRESS: 'EdgeVeda_ImageProgress',
 } as const;
 
 /**
@@ -820,6 +830,304 @@ class EdgeVedaSDK {
     } catch (error) {
       return false;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Embedding methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Generate a text embedding vector
+   *
+   * @param text - Input text to embed
+   * @returns Embedding result with vector, dimensions, and token count
+   * @throws EdgeVedaError if an embedding model is not loaded
+   */
+  async embed(text: string): Promise<EmbeddingResult> {
+    try {
+      const json = await NativeEdgeVeda.embed(text);
+      return JSON.parse(json) as EmbeddingResult;
+    } catch (error) {
+      if (error instanceof EdgeVedaError) throw error;
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.GENERATION_FAILED,
+        'Failed to generate embedding',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
+   * Generate embeddings for multiple texts sequentially
+   *
+   * @param texts - Array of input texts to embed
+   * @param onProgress - Optional callback invoked after each embedding (done, total)
+   * @returns Array of embedding results in the same order as input texts
+   */
+  async embedBatch(
+    texts: string[],
+    onProgress?: (done: number, total: number) => void
+  ): Promise<EmbeddingResult[]> {
+    const results: EmbeddingResult[] = [];
+    for (let i = 0; i < texts.length; i++) {
+      results.push(await this.embed(texts[i]));
+      onProgress?.(i + 1, texts.length);
+    }
+    return results;
+  }
+
+  /**
+   * Check whether memory usage exceeds a pressure threshold
+   *
+   * @param threshold - Fraction (0.0-1.0) above which memory is considered pressured (default 0.8)
+   * @returns true if current memory usage exceeds the threshold
+   */
+  isMemoryPressure(threshold: number = 0.8): boolean {
+    try {
+      const raw = JSON.parse(NativeEdgeVeda.getMemoryUsage()) as MemoryStats;
+      if (!raw.limitBytes || raw.limitBytes === 0) return false;
+      const usage = raw.currentBytes / raw.limitBytes;
+      return usage > threshold;
+    } catch {
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Whisper STT methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Initialize a persistent Whisper STT context
+   *
+   * @param modelPath - Absolute path to the Whisper GGUF model file
+   * @param config - Optional Whisper configuration
+   * @returns Backend name (e.g., "Metal", "CPU")
+   */
+  async initWhisper(modelPath: string, config?: WhisperConfig): Promise<string> {
+    try {
+      const configJson = JSON.stringify({
+        numThreads: config?.numThreads ?? 4,
+        useGpu: config?.useGpu ?? false,
+      });
+      return await NativeEdgeVeda.initWhisper(modelPath, configJson);
+    } catch (error) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.MODEL_LOAD_FAILED,
+        'Failed to initialize Whisper',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
+   * Transcribe 16 kHz mono PCM audio samples to text
+   *
+   * @param pcmSamples - Float32Array of 16 kHz mono PCM audio
+   * @param params - Optional transcription parameters
+   * @returns Transcription result with segments and full text
+   */
+  async transcribeAudio(pcmSamples: Float32Array, params?: WhisperParams): Promise<WhisperResult> {
+    try {
+      // Base64-encode Float32 bytes for TurboModule transfer
+      const bytes = new Uint8Array(pcmSamples.buffer, pcmSamples.byteOffset, pcmSamples.byteLength);
+      const pcmBase64 = this._uint8ArrayToBase64(bytes);
+      const paramsJson = JSON.stringify({
+        language: params?.language ?? 'en',
+        translate: params?.translate ?? false,
+        maxTokens: params?.maxTokens ?? 0,
+      });
+      const resultJson = await NativeEdgeVeda.transcribeAudio(pcmBase64, pcmSamples.length, paramsJson);
+      return JSON.parse(resultJson) as WhisperResult;
+    } catch (error) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.GENERATION_FAILED,
+        'Whisper transcription failed',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
+   * Create a managed WhisperSession for persistent STT inference
+   *
+   * @param modelPath - Absolute path to the Whisper GGUF model file
+   * @returns Uninitialized WhisperSession (call initialize() before use)
+   */
+  createWhisperSession(modelPath: string): any {
+    const { WhisperSession } = require('./WhisperSession');
+    return new WhisperSession(modelPath);
+  }
+
+  /**
+   * Free the Whisper STT context
+   */
+  async freeWhisper(): Promise<void> {
+    try {
+      await NativeEdgeVeda.freeWhisper();
+    } catch (error) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.UNKNOWN_ERROR,
+        'Failed to free Whisper context',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
+   * Check if the Whisper context is initialized
+   */
+  isWhisperLoaded(): boolean {
+    try {
+      return NativeEdgeVeda.isWhisperLoaded();
+    } catch {
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Image generation methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Initialize a Stable Diffusion image generation context
+   *
+   * @param modelPath - Absolute path to the SD GGUF model file
+   * @param config - Optional image generation configuration
+   */
+  async initImageGeneration(
+    modelPath: string,
+    config?: ImageGenerationConfig
+  ): Promise<void> {
+    try {
+      const configJson = JSON.stringify({
+        negativePrompt: config?.negativePrompt ?? '',
+        width: config?.width ?? 512,
+        height: config?.height ?? 512,
+        steps: config?.steps ?? 20,
+        cfgScale: config?.cfgScale ?? 7.0,
+        seed: config?.seed ?? -1,
+        sampler: config?.sampler ?? 0,
+        schedule: config?.schedule ?? 0,
+      });
+      await NativeEdgeVeda.initImageGeneration(modelPath, configJson);
+    } catch (error) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.MODEL_LOAD_FAILED,
+        'Failed to initialize image generation',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
+   * Generate an image from a text prompt
+   *
+   * @param prompt - Text description of the image to generate
+   * @param config - Optional generation parameters
+   * @param onProgress - Optional callback for generation progress
+   * @param cancelToken - Optional cancellation token
+   * @returns Image result with pixel data and metadata
+   */
+  async generateImage(
+    prompt: string,
+    config?: ImageGenerationConfig,
+    onProgress?: (progress: ImageProgress) => void,
+    cancelToken?: CancelToken
+  ): Promise<ImageResult> {
+    cancelToken?.throwIfCancelled();
+
+    // Subscribe to progress events
+    let progressSub: any = null;
+    if (onProgress) {
+      progressSub = this.eventEmitter.addListener(
+        EVENTS.IMAGE_PROGRESS,
+        (payload: { step: number; totalSteps: number; elapsedSeconds: number }) => {
+          if (cancelToken?.isCancelled) return;
+          const progress: ImageProgress = {
+            step: payload.step,
+            totalSteps: payload.totalSteps,
+            elapsedSeconds: payload.elapsedSeconds,
+            progress: payload.totalSteps > 0 ? payload.step / payload.totalSteps : 0,
+          };
+          onProgress(progress);
+        }
+      );
+    }
+
+    try {
+      cancelToken?.throwIfCancelled();
+
+      const paramsJson = JSON.stringify({
+        prompt,
+        negativePrompt: config?.negativePrompt ?? '',
+        width: config?.width ?? 512,
+        height: config?.height ?? 512,
+        steps: config?.steps ?? 20,
+        cfgScale: config?.cfgScale ?? 7.0,
+        seed: config?.seed ?? -1,
+        sampler: config?.sampler ?? 0,
+        schedule: config?.schedule ?? 0,
+      });
+
+      const resultJson = await NativeEdgeVeda.generateImage(paramsJson);
+      return JSON.parse(resultJson) as ImageResult;
+    } catch (error) {
+      if (error instanceof EdgeVedaError) throw error;
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.GENERATION_FAILED,
+        'Image generation failed',
+        error instanceof Error ? error.message : String(error)
+      );
+    } finally {
+      progressSub?.remove();
+    }
+  }
+
+  /**
+   * Free the image generation context
+   */
+  async freeImageGeneration(): Promise<void> {
+    try {
+      await NativeEdgeVeda.freeImageGeneration();
+    } catch (error) {
+      throw new EdgeVedaError(
+        EdgeVedaErrorCode.UNKNOWN_ERROR,
+        'Failed to free image generation context',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  /**
+   * Check if the image generation context is initialized
+   */
+  isImageGenerationLoaded(): boolean {
+    try {
+      return NativeEdgeVeda.isImageGenerationLoaded();
+    } catch {
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private _uint8ArrayToBase64(bytes: Uint8Array): string {
+    const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    const len = bytes.length;
+    for (let i = 0; i < len; i += 3) {
+      const byte1 = bytes[i];
+      const byte2 = i + 1 < len ? bytes[i + 1] : 0;
+      const byte3 = i + 2 < len ? bytes[i + 2] : 0;
+      result += BASE64_CHARS[byte1 >> 2];
+      result += BASE64_CHARS[((byte1 & 0x03) << 4) | (byte2 >> 4)];
+      result += i + 1 < len ? BASE64_CHARS[((byte2 & 0x0f) << 2) | (byte3 >> 6)] : '=';
+      result += i + 2 < len ? BASE64_CHARS[byte3 & 0x3f] : '=';
+    }
+    return result;
   }
 
   /**

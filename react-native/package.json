@@ -44,7 +44,9 @@
   },
   "homepage": "https://github.com/edgeveda/edgeveda-sdk#readme",
   "expo": {
-    "plugins": ["./app.plugin.js"]
+    "plugins": [
+      "./app.plugin.js"
+    ]
   },
   "peerDependencies": {
     "react": "*",
@@ -89,5 +91,8 @@
     "ios": {
       "classPrefix": ""
     }
+  },
+  "dependencies": {
+    "bs-logger": "^0.2.6"
   }
 }

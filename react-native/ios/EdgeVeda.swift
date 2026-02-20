@@ -20,6 +20,15 @@ class EdgeVeda: RCTEventEmitter {
     private var activeGenerations: [String: Task<Void, Never>] = [:]
     private let actorQueue = DispatchQueue(label: "com.edgeveda.react-native", qos: .userInitiated)
 
+    // Vision context (loaded separately from the LLM)
+    private var visionEngine: EdgeVeda.VisionContext?
+
+    // Whisper STT context
+    private var whisperEngine: EdgeVeda.WhisperContext?
+
+    // Image generation context
+    private var imageEngine: EdgeVeda.ImageGenerationContext?
+
     // MARK: - Lifecycle
 
     override init() {
@@ -33,7 +42,8 @@ class EdgeVeda: RCTEventEmitter {
             "EdgeVeda_TokenGenerated",
             "EdgeVeda_GenerationComplete",
             "EdgeVeda_GenerationError",
-            "EdgeVeda_ModelLoadProgress"
+            "EdgeVeda_ModelLoadProgress",
+            "EdgeVeda_ImageProgress"
         ]
     }
 
@@ -328,6 +338,354 @@ class EdgeVeda: RCTEventEmitter {
         }
 
         return "[]"
+    }
+
+    // MARK: - Reset Context
+
+    /**
+     * Reset the KV context (clears conversation history while keeping model loaded)
+     */
+    @objc
+    func resetContext(_ resolve: @escaping RCTPromiseResolveBlock,
+                     reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            do {
+                try await edgeVedaEngine?.resetContext()
+                resolve(nil)
+            } catch {
+                reject("RESET_CONTEXT_FAILED", "Failed to reset context: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    // MARK: - Vision Inference
+
+    /**
+     * Initialize vision inference context (VLM + mmproj)
+     */
+    @objc
+    func initVision(_ config: String,
+                   resolve: @escaping RCTPromiseResolveBlock,
+                   reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let configData = config.data(using: .utf8),
+                  let configDict = try? JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
+                reject("INVALID_CONFIG", "Failed to parse vision configuration", nil)
+                return
+            }
+
+            do {
+                let visionConfig = EdgeVeda.VisionConfig(
+                    modelPath: configDict["modelPath"] as? String ?? "",
+                    mmprojPath: configDict["mmprojPath"] as? String ?? "",
+                    numThreads: configDict["numThreads"] as? Int ?? 4,
+                    contextSize: configDict["contextSize"] as? Int ?? 2048,
+                    gpuLayers: configDict["gpuLayers"] as? Int ?? -1
+                )
+                visionEngine = try await EdgeVeda.VisionContext(config: visionConfig)
+                resolve(visionEngine?.backendName ?? "cpu")
+            } catch {
+                reject("VISION_INIT_FAILED", "Failed to initialize vision context: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    /**
+     * Describe an image using vision inference
+     */
+    @objc
+    func describeImage(_ rgbBytes: String,
+                      width: Int,
+                      height: Int,
+                      prompt: String,
+                      params: String,
+                      resolve: @escaping RCTPromiseResolveBlock,
+                      reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let engine = visionEngine else {
+                reject("VISION_NOT_LOADED", "Vision context is not initialized", nil)
+                return
+            }
+
+            guard let paramsData = params.data(using: .utf8),
+                  let paramsDict = try? JSONSerialization.jsonObject(with: paramsData) as? [String: Any] else {
+                reject("INVALID_PARAMS", "Failed to parse vision params", nil)
+                return
+            }
+
+            do {
+                let result = try await engine.describeImage(
+                    rgbBase64: rgbBytes,
+                    width: width,
+                    height: height,
+                    prompt: prompt,
+                    maxTokens: paramsDict["maxTokens"] as? Int ?? 100,
+                    temperature: paramsDict["temperature"] as? Float ?? 0.3
+                )
+
+                if let jsonData = try? JSONSerialization.data(withJSONObject: result),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    resolve(jsonString)
+                } else {
+                    reject("SERIALIZATION_ERROR", "Failed to serialize vision result", nil)
+                }
+            } catch {
+                reject("VISION_INFERENCE_FAILED", "Vision inference failed: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    /**
+     * Free vision context
+     */
+    @objc
+    func freeVision(_ resolve: @escaping RCTPromiseResolveBlock,
+                   reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            await visionEngine?.free()
+            visionEngine = nil
+            resolve(nil)
+        }
+    }
+
+    /**
+     * Check if vision context is loaded
+     */
+    @objc
+    func isVisionLoaded() -> Bool {
+        return visionEngine != nil
+    }
+
+    // MARK: - Embedding
+
+    /**
+     * Generate a text embedding vector
+     */
+    @objc
+    func embed(_ text: String,
+              resolve: @escaping RCTPromiseResolveBlock,
+              reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let engine = edgeVedaEngine else {
+                reject("MODEL_NOT_LOADED", "Model is not loaded", nil)
+                return
+            }
+
+            do {
+                let result = try await engine.embed(text)
+                let resultDict: [String: Any] = [
+                    "embedding": result.embedding,
+                    "dimensions": result.dimensions,
+                    "tokenCount": result.tokenCount,
+                    "timeMs": result.timeMs ?? 0
+                ]
+                if let jsonData = try? JSONSerialization.data(withJSONObject: resultDict),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    resolve(jsonString)
+                } else {
+                    reject("SERIALIZATION_ERROR", "Failed to serialize embedding result", nil)
+                }
+            } catch {
+                reject("EMBED_FAILED", "Embedding failed: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    // MARK: - Whisper STT
+
+    /**
+     * Initialize Whisper STT context
+     */
+    @objc
+    func initWhisper(_ modelPath: String,
+                    config: String,
+                    resolve: @escaping RCTPromiseResolveBlock,
+                    reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let configData = config.data(using: .utf8),
+                  let configDict = try? JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
+                reject("INVALID_CONFIG", "Failed to parse Whisper config", nil)
+                return
+            }
+
+            do {
+                let whisperConfig = EdgeVeda.WhisperConfig(
+                    modelPath: modelPath,
+                    numThreads: configDict["numThreads"] as? Int ?? 4,
+                    useGpu: configDict["useGpu"] as? Bool ?? false
+                )
+                whisperEngine = try await EdgeVeda.WhisperContext(config: whisperConfig)
+                resolve(whisperEngine?.backendName ?? "cpu")
+            } catch {
+                reject("WHISPER_INIT_FAILED", "Failed to initialize Whisper: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    /**
+     * Transcribe audio to text
+     */
+    @objc
+    func transcribeAudio(_ pcmBase64: String,
+                        nSamples: Int,
+                        params: String,
+                        resolve: @escaping RCTPromiseResolveBlock,
+                        reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let engine = whisperEngine else {
+                reject("WHISPER_NOT_LOADED", "Whisper context is not initialized", nil)
+                return
+            }
+
+            guard let paramsData = params.data(using: .utf8),
+                  let paramsDict = try? JSONSerialization.jsonObject(with: paramsData) as? [String: Any] else {
+                reject("INVALID_PARAMS", "Failed to parse Whisper params", nil)
+                return
+            }
+
+            do {
+                let result = try await engine.transcribe(
+                    pcmBase64: pcmBase64,
+                    nSamples: nSamples,
+                    language: paramsDict["language"] as? String ?? "en",
+                    translate: paramsDict["translate"] as? Bool ?? false,
+                    maxTokens: paramsDict["maxTokens"] as? Int ?? 0
+                )
+
+                if let jsonData = try? JSONSerialization.data(withJSONObject: result),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    resolve(jsonString)
+                } else {
+                    reject("SERIALIZATION_ERROR", "Failed to serialize transcription result", nil)
+                }
+            } catch {
+                reject("TRANSCRIPTION_FAILED", "Transcription failed: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    /**
+     * Free Whisper STT context
+     */
+    @objc
+    func freeWhisper(_ resolve: @escaping RCTPromiseResolveBlock,
+                    reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            await whisperEngine?.free()
+            whisperEngine = nil
+            resolve(nil)
+        }
+    }
+
+    /**
+     * Check if Whisper context is loaded
+     */
+    @objc
+    func isWhisperLoaded() -> Bool {
+        return whisperEngine != nil
+    }
+
+    // MARK: - Image Generation
+
+    /**
+     * Initialize Stable Diffusion image generation context
+     */
+    @objc
+    func initImageGeneration(_ modelPath: String,
+                            config: String,
+                            resolve: @escaping RCTPromiseResolveBlock,
+                            reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let configData = config.data(using: .utf8),
+                  let configDict = try? JSONSerialization.jsonObject(with: configData) as? [String: Any] else {
+                reject("INVALID_CONFIG", "Failed to parse image generation config", nil)
+                return
+            }
+
+            do {
+                let imgConfig = EdgeVeda.ImageGenerationConfig(
+                    modelPath: modelPath,
+                    width: configDict["width"] as? Int ?? 512,
+                    height: configDict["height"] as? Int ?? 512
+                )
+                imageEngine = try await EdgeVeda.ImageGenerationContext(config: imgConfig)
+                resolve(nil)
+            } catch {
+                reject("IMAGE_GEN_INIT_FAILED", "Failed to initialize image generation: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    /**
+     * Generate an image from a text prompt
+     */
+    @objc
+    func generateImage(_ params: String,
+                      resolve: @escaping RCTPromiseResolveBlock,
+                      reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            guard let engine = imageEngine else {
+                reject("IMAGE_GEN_NOT_LOADED", "Image generation context is not initialized", nil)
+                return
+            }
+
+            guard let paramsData = params.data(using: .utf8),
+                  let paramsDict = try? JSONSerialization.jsonObject(with: paramsData) as? [String: Any] else {
+                reject("INVALID_PARAMS", "Failed to parse image generation params", nil)
+                return
+            }
+
+            do {
+                // Set up progress callback → emit EdgeVeda_ImageProgress events
+                engine.setProgressCallback { [weak self] step, totalSteps, elapsedSeconds in
+                    self?.sendEvent(withName: "EdgeVeda_ImageProgress", body: [
+                        "step": step,
+                        "totalSteps": totalSteps,
+                        "elapsedSeconds": elapsedSeconds
+                    ])
+                }
+
+                let result = try await engine.generate(
+                    prompt: paramsDict["prompt"] as? String ?? "",
+                    negativePrompt: paramsDict["negativePrompt"] as? String ?? "",
+                    width: paramsDict["width"] as? Int ?? 512,
+                    height: paramsDict["height"] as? Int ?? 512,
+                    steps: paramsDict["steps"] as? Int ?? 20,
+                    cfgScale: paramsDict["cfgScale"] as? Float ?? 7.0,
+                    seed: paramsDict["seed"] as? Int ?? -1
+                )
+
+                if let jsonData = try? JSONSerialization.data(withJSONObject: result),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    resolve(jsonString)
+                } else {
+                    reject("SERIALIZATION_ERROR", "Failed to serialize image result", nil)
+                }
+            } catch {
+                reject("IMAGE_GEN_FAILED", "Image generation failed: \(error.localizedDescription)", error)
+            }
+        }
+    }
+
+    /**
+     * Free image generation context
+     */
+    @objc
+    func freeImageGeneration(_ resolve: @escaping RCTPromiseResolveBlock,
+                            reject: @escaping RCTPromiseRejectBlock) {
+        Task {
+            await imageEngine?.free()
+            imageEngine = nil
+            resolve(nil)
+        }
+    }
+
+    /**
+     * Check if image generation context is loaded
+     */
+    @objc
+    func isImageGenerationLoaded() -> Bool {
+        return imageEngine != nil
     }
 
     // MARK: - Helper Methods

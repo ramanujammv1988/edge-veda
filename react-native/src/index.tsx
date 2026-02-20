@@ -15,12 +15,24 @@ export type {
   EdgeVedaConfig,
   GenerateOptions,
   MemoryUsage,
+  MemoryStats,
   ModelInfo,
   TokenCallback,
   ProgressCallback,
+  EmbeddingResult,
+  GenerateResponse,
+  TokenChunk,
+  CancelToken,
+  WhisperConfig,
+  WhisperParams,
+  WhisperResult,
+  WhisperSegment,
+  ImageGenerationConfig,
+  ImageProgress,
+  ImageResult,
 } from './types';
 
-export { EdgeVedaError, EdgeVedaErrorCode } from './types';
+export { EdgeVedaError, EdgeVedaErrorCode, GenerationError, QoSLevel, ImageSampler, ImageSchedule } from './types';
 
 // Export ChatSession and related types
 export { ChatSession } from './ChatSession';
@@ -38,6 +50,24 @@ export type {
   VisionGenerationParams,
   FrameData,
 } from './types';
+
+// Export WhisperSession
+export { WhisperSession } from './WhisperSession';
+
+// Export RAG pipeline
+export { VectorIndex, SearchResult } from './VectorIndex';
+export { RagPipeline } from './RagPipeline';
+export type { RagConfig, IEdgeVeda } from './RagPipeline';
+
+// Export ModelAdvisor
+export { detectDeviceCapabilities, estimateModelMemory, recommendModels } from './ModelAdvisor';
+export type { DeviceProfile } from './ModelAdvisor';
+
+// Export Tool calling
+export { ToolRegistry, ToolDefinition, ToolCall, ToolResult, ToolPriority, ToolCallParseException } from './ToolRegistry';
+export { ToolTemplate, ToolTemplateFormat } from './ToolTemplate';
+export { GbnfBuilder } from './GbnfBuilder';
+export { SchemaValidator, SchemaValidationResult } from './SchemaValidator';
 
 // Export native module spec (for advanced users)
 export { default as NativeEdgeVeda } from './NativeEdgeVeda';
