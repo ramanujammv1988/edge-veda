@@ -205,3 +205,6 @@ export 'src/types.dart' show
 
 // Image worker (persistent isolate)
 export 'src/isolate/image_worker.dart' show ImageWorker;
+
+// Text-to-Speech (TTS)
+export 'src/tts_service.dart' show TtsService, TtsVoice, TtsEvent, TtsEventType, TtsState;
