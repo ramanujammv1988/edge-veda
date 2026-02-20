@@ -31,6 +31,9 @@ class _VoiceScreenState extends State<VoiceScreen>
   StreamSubscription<VoicePipelineEvent>? _eventSubscription;
   VoicePipelineState _pipelineState = VoicePipelineState.idle;
 
+  // Audio level for orb visualization
+  double _audioLevel = 0.0;
+
   // Model setup
   bool _isCheckingModels = true;
   bool _whisperReady = false;
@@ -298,6 +301,7 @@ class _VoiceScreenState extends State<VoiceScreen>
     if (mounted) {
       setState(() {
         _pipelineState = VoicePipelineState.idle;
+        _audioLevel = 0.0;
         _currentUserText = null;
         _currentAssistantText = null;
         _currentIsPartial = false;
@@ -312,6 +316,7 @@ class _VoiceScreenState extends State<VoiceScreen>
     if (event is StateChanged) {
       setState(() {
         _pipelineState = event.state;
+        _audioLevel = event.audioLevel;
       });
       _updateOrbAnimation(event.state);
 
@@ -329,7 +334,7 @@ class _VoiceScreenState extends State<VoiceScreen>
         _currentIsPartial = event.isPartial;
 
         if (event.assistantText != null && !event.isPartial) {
-          // Final transcript — commit to conversation history
+          // Final transcript -- commit to conversation history
           _transcript.add(_ConversationTurn(
             userText: event.userText,
             assistantText: event.assistantText!,
@@ -377,10 +382,6 @@ class _VoiceScreenState extends State<VoiceScreen>
       case VoicePipelineState.error:
         _orbController.reset();
         break;
-      case VoicePipelineState.calibrating:
-        _orbController.duration = const Duration(milliseconds: 3000);
-        _orbController.repeat();
-        break;
       case VoicePipelineState.listening:
         _orbController.duration = const Duration(milliseconds: 2000);
         _orbController.repeat();
@@ -420,8 +421,6 @@ class _VoiceScreenState extends State<VoiceScreen>
     switch (state) {
       case VoicePipelineState.idle:
         return 'Ready';
-      case VoicePipelineState.calibrating:
-        return 'Calibrating...';
       case VoicePipelineState.listening:
         return 'Listening...';
       case VoicePipelineState.transcribing:
@@ -577,6 +576,7 @@ class _VoiceScreenState extends State<VoiceScreen>
                   painter: _OrbPainter(
                     state: _pipelineState,
                     animationValue: _orbController.value,
+                    audioLevel: _audioLevel,
                   ),
                 );
               },
@@ -820,8 +820,7 @@ class _TranscriptItem {
 ///
 /// Each state has a distinct visual:
 /// - idle: static dim teal circle
-/// - calibrating: slow breathing pulse
-/// - listening: medium pulse with glow
+/// - listening: audio-reactive pulse with glow (scales with voice volume)
 /// - transcribing: fast pulse, teal to accent
 /// - thinking: rotating gradient with concentric circles
 /// - speaking: pulsing concentric rings (waveform)
@@ -829,10 +828,12 @@ class _TranscriptItem {
 class _OrbPainter extends CustomPainter {
   final VoicePipelineState state;
   final double animationValue;
+  final double audioLevel;
 
   _OrbPainter({
     required this.state,
     required this.animationValue,
+    required this.audioLevel,
   });
 
   @override
@@ -843,9 +844,6 @@ class _OrbPainter extends CustomPainter {
     switch (state) {
       case VoicePipelineState.idle:
         _paintIdle(canvas, center, baseRadius);
-        break;
-      case VoicePipelineState.calibrating:
-        _paintCalibrating(canvas, center, baseRadius);
         break;
       case VoicePipelineState.listening:
         _paintListening(canvas, center, baseRadius);
@@ -872,33 +870,29 @@ class _OrbPainter extends CustomPainter {
     canvas.drawCircle(center, radius * 0.75, paint);
   }
 
-  void _paintCalibrating(Canvas canvas, Offset center, double radius) {
-    // Slow breathing: scale 0.95 - 1.05
-    final scale = 0.95 + 0.1 * sin(animationValue * 2 * pi);
-    final paint = Paint()
-      ..color = AppTheme.accent.withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius * 0.75 * scale, paint);
-  }
-
   void _paintListening(Canvas canvas, Offset center, double radius) {
-    // Medium pulse: scale 0.9 - 1.1
-    final scale = 0.9 + 0.2 * sin(animationValue * 2 * pi);
+    // Combine animation cycle with audio level for reactive orb
+    final baseScale = 0.9 + 0.1 * sin(animationValue * 2 * pi);
+    final levelScale = 1.0 + 0.3 * audioLevel; // up to 1.3x at max volume
+    final scale = baseScale * levelScale;
     final glowRadius = radius * 1.2 * scale;
 
-    // Glow effect using radial gradient
+    // Glow intensity scales with audio level
+    final glowAlpha = 0.15 + 0.35 * audioLevel; // 0.15 silent, 0.5 loud
+
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          AppTheme.accent.withValues(alpha: 0.3),
+          AppTheme.accent.withValues(alpha: glowAlpha),
           AppTheme.accent.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromCircle(center: center, radius: glowRadius));
     canvas.drawCircle(center, glowRadius, glowPaint);
 
-    // Core orb
+    // Core orb -- brighter with audio
+    final coreAlpha = 0.6 + 0.4 * audioLevel; // 0.6 silent, 1.0 loud
     final paint = Paint()
-      ..color = AppTheme.accent.withValues(alpha: 0.8)
+      ..color = AppTheme.accent.withValues(alpha: coreAlpha)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(center, radius * 0.75 * scale, paint);
   }
@@ -988,6 +982,7 @@ class _OrbPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _OrbPainter oldDelegate) {
     return oldDelegate.state != state ||
-        oldDelegate.animationValue != animationValue;
+        oldDelegate.animationValue != animationValue ||
+        oldDelegate.audioLevel != audioLevel;
   }
 }
