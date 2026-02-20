@@ -7,6 +7,7 @@
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/rv8qZMGC)
 
 ---
 
@@ -675,6 +676,13 @@ Contributions are welcome. Here's how to get started:
 - C++: match existing style in `core/src/`
 - All FFI calls must run in isolates (never on main thread)
 - New C API functions must be added to the podspec symbol whitelist
+
+---
+
+## Support
+
+- **Discord:** [Join our community](https://discord.gg/rv8qZMGC)
+- **GitHub Issues:** [Report bugs or request features](https://github.com/ramanujammv1988/edge-veda/issues)
 
 ---
 
