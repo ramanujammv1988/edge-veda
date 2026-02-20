@@ -37,6 +37,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 12: Chat Session API** - Multi-turn conversation management with context overflow summarization
 - [ ] **Phase 13: Compute Budget Contracts** - Declarative runtime guarantees (latency, battery, thermal, memory) enforced by central scheduler across concurrent workloads
 - [x] **Phase 22: On-Device Intent Engine Demo** - Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, HA connector
+- [ ] **Phase 24: Voice Pipeline** - Unified STT → LLM → TTS orchestration with VAD, interruptible TTS, real-time voice conversations
+- [ ] **Phase 25: LoRA Adapter Support** - Hot-swappable fine-tuned adapters for domain specialization
+- [ ] **Phase 26: Polished Example Apps** - Production-quality sample apps for developer adoption and marketing
 
 ## Phase Details
 
@@ -425,27 +428,31 @@ Phase 6 (Streaming)  ----+
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2026-02-04 |
-| 2. Flutter FFI + Model Management | 4/4 | **Complete** | 2026-02-04 |
-| 3. Demo App + Polish | 4/4 | **Complete** | 2026-02-04 |
-| 4. Release | 3/3 | **Complete** | 2026-02-04 |
+| 1. C++ Core + llama.cpp Integration | 4/4 | **Complete** | 2024-02-04 |
+| 2. Flutter FFI + Model Management | 4/4 | **Complete** | 2024-02-04 |
+| 3. Demo App + Polish | 4/4 | **Complete** | 2024-02-04 |
+| 4. Release | 3/3 | **Complete** | 2024-02-04 |
 | 5. Android CPU Build | 0/3 | **Planned** | -- |
 | 6. Streaming C++ + Dart Integration | 0/5 | **Planned** | -- |
 | 7. Android Vulkan + Demo Update | 0/? | Pending | -- |
-| 8. On-Device VLM | 5/5 | **Complete** | 2026-02-06 |
-| 9. v1.1.0 Release + App Redesign | 3/3 | **Complete** | 2026-02-08 |
-| 10. Premium App Redesign | 4/4 | **Complete** | 2026-02-06 |
-| 11. Production Runtime | 5/5 | **Complete** | 2026-02-07 |
-| 12. Chat Session API | 4/4 | **Complete** | 2026-02-08 |
-| 13. Compute Budget Contracts | 5/5 | **Complete** | 2026-02-09 |
-| 14. Whisper STT (Speech-to-Text) | 6/6 | **Complete** | 2026-02-14 |
-| 15. Structured Output & Function Calling | 7/7 | **Complete** | 2026-02-15 |
-| 16. Embeddings, Confidence & RAG | 6/6 | **Complete** | 2026-02-12 |
-| 17. RAG Demo Apps | 3/3 | **Complete** | 2026-02-15 |
-| 18. Phone Detective Mode | 3/3 | **Complete** | 2026-02-15 |
-| 20. Smart Model Advisor | 2/2 | **Complete** | 2026-02-14 |
+| 8. On-Device VLM | 5/5 | **Complete** | 2024-02-06 |
+| 9. v1.1.0 Release + App Redesign | 3/3 | **Complete** | 2024-02-08 |
+| 10. Premium App Redesign | 4/4 | **Complete** | 2024-02-06 |
+| 11. Production Runtime | 5/5 | **Complete** | 2024-02-07 |
+| 12. Chat Session API | 4/4 | **Complete** | 2024-02-08 |
+| 13. Compute Budget Contracts | 5/5 | **Complete** | 2024-02-09 |
+| 14. Whisper STT (Speech-to-Text) | 6/6 | **Complete** | 2024-02-14 |
+| 15. Structured Output & Function Calling | 7/7 | **Complete** | 2024-02-15 |
+| 16. Embeddings, Confidence & RAG | 6/6 | **Complete** | 2024-02-12 |
+| 17. RAG Demo Apps | 3/3 | **Complete** | 2024-02-15 |
+| 18. Phone Detective Mode | 3/3 | **Complete** | 2024-02-15 |
+| 20. Smart Model Advisor | 2/2 | **Complete** | 2024-02-14 |
 | 21. Standalone Sample Apps | 0/? | Planned | -- |
-| 22. On-Device Intent Engine Demo | 2/3 | Complete    | 2026-02-19 |
+| 22. On-Device Intent Engine Demo | 2/3 | Complete    | 2024-02-19 |
+| 23. Image Generation | 3/4 | **In Progress** | -- |
+| 24. Voice Pipeline | 0/3 | Planned | -- |
+| 25. LoRA Adapter Support | 0/? | Planned | -- |
+| 26. Polished Example Apps | 0/? | Planned | -- |
 
 ### v2.0 Phases (Planned)
 
@@ -714,30 +721,89 @@ Plans:
 - [ ] 23-03-PLAN.md -- ImageWorker isolate + Dart types + generateImage() on EdgeVeda + model registry + SDK exports
 - [ ] 23-04-PLAN.md -- Demo Image tab (prompt, gallery, advanced settings) + human verification on device
 
----
-*Roadmap created: 2026-02-04*
-*v1.1 phases added: 2026-02-05*
-*Phase 5 planned: 2026-02-05*
-*Phase 6 planned: 2026-02-05*
-*Phase 8 planned: 2026-02-06*
-*Phase 9 added: 2026-02-06*
-*Phase 11 added: 2026-02-07*
-*Phase 11 planned: 2026-02-07*
-*Depth: comprehensive (from config.json)*
-*Phase 13 added: 2026-02-09*
-*Phase 13 planned: 2026-02-09*
-*Phase 13 gap closure: 2026-02-09*
-*Phase 14 added: 2026-02-09*
-*Phase 14 planned: 2026-02-11*
-*Phase 15 added: 2026-02-09*
-*Phase 15 planned: 2026-02-11*
-*Phase 15 gap closure: 2026-02-14 (model/template mismatch fix)*
-*Phase 16 planned: 2026-02-12*
-*Phase 18 planned: 2026-02-12*
-*Phase 18 re-planned: 2026-02-12 (Phone Detective Mode)*
-*Phase 20 added: 2026-02-14 (Smart Model Advisor)*
-*Phase 20 planned: 2026-02-14 (2 plans in 2 waves)*
-*Phase 22 added: 2026-02-18 (On-Device Intent Engine Demo)*
-*Phase 23 planned: 2026-02-19 (4 plans in 4 waves)*
-*v1.0 Coverage: 19/19 requirements mapped*
-*v1.1 Coverage: 14/14 requirements mapped*
+### Phase 24: Voice Pipeline — Unified STT → LLM → TTS Orchestration
+**Goal**: Build a `VoicePipeline` class that orchestrates the full voice conversation loop: microphone → WhisperSTT → ChatSession LLM → TTS speech output. User taps a single button and has a voice conversation with the on-device LLM. Includes VAD (voice activity detection) for automatic turn-taking, interruptible TTS (user speaks → TTS stops → STT resumes), and a demo screen showing the live pipeline state. This is the "talk to your phone" feature that closes the competitive gap with RunAnywhere's voice pipeline.
+
+**Depends on**: Phase 23 (TTS service), Phase 14 (WhisperSTT), Phase 12 (ChatSession)
+
+**Requirements**: VoicePipeline orchestrator, VAD for turn detection, interruptible TTS, pipeline state machine, demo voice conversation screen
+
+**Success Criteria** (what must be TRUE):
+  1. Developer creates `VoicePipeline(chatSession, sttService, ttsService)` and calls `start()` — full voice loop runs automatically
+  2. User speaks → STT transcribes → LLM generates response → TTS speaks it back, all on-device
+  3. Voice Activity Detection detects speech end and triggers STT → LLM → TTS automatically (no manual button per turn)
+  4. User can interrupt TTS by speaking — TTS stops, STT picks up new input immediately
+  5. Pipeline state machine exposes current state: idle, listening, transcribing, thinking, speaking
+  6. `VoicePipeline.onStateChange` stream lets UI update in real-time (e.g., pulsing mic, thinking dots, speaking wave)
+  7. Conversation history maintained across voice turns (multi-turn voice chat)
+  8. Demo screen with single tap-to-start button, live state visualization, conversation transcript
+  9. Works fully offline after model downloads
+  10. Latency from end-of-speech to start-of-TTS-response < 3 seconds on iPhone 14+
+
+**Key Risks**:
+- **P1 (Critical)**: VAD accuracy with small models — may need energy-based VAD rather than model-based
+- **P2 (Critical)**: Memory pressure with STT + LLM + TTS all active — Scheduler must manage carefully
+- **P3 (Moderate)**: Interruption timing — TTS stop + STT resume transition must be seamless
+- **P4 (Low)**: Audio routing — AirPods/speaker switching during pipeline
+
+**Research flag**: Research complete (24-RESEARCH.md)
+
+**Plans:** 3 plans in 3 waves
+
+Plans:
+- [ ] 24-01-PLAN.md — AVAudioSession config + VoicePipeline core class with state machine, VAD, event stream
+- [ ] 24-02-PLAN.md — Full conversation loop (STT → LLM → TTS) with interruptible TTS/LLM, lifecycle, Scheduler
+- [ ] 24-03-PLAN.md — Voice demo screen with animated orb, 5-tab navigation, SDK exports, human verification
+
+### Phase 25: LoRA Adapter Support — Hot-Swappable Fine-Tuned Adapters
+**Goal**: Add LoRA (Low-Rank Adaptation) adapter support so developers can load fine-tuned adapters on top of base models for domain specialization. Developer downloads a base model once, then swaps lightweight LoRA adapters (10-50MB each) for different use cases (medical terminology, legal language, coding, brand voice). This is a key differentiator — RunAnywhere has open LoRA PRs but hasn't shipped it.
+
+**Depends on**: Phase 24 (voice pipeline complete), Phase 12 (ChatSession)
+
+**Requirements**: LoRA loading C API, adapter management, hot-swap without model reload, adapter registry
+
+**Success Criteria** (what must be TRUE):
+  1. Developer calls `loadAdapter(path)` to apply a LoRA adapter on top of loaded base model
+  2. `unloadAdapter()` removes adapter, returning to base model behavior — no model reload needed
+  3. Adapter swap takes < 500ms (just weight delta application, not full model load)
+  4. Multiple adapters can be downloaded and managed via `AdapterRegistry`
+  5. `AdapterInfo` includes name, description, baseModel compatibility, file size, parameter count
+  6. llama.cpp `llama_lora_adapter_set` / `llama_lora_adapter_remove` C APIs wrapped in ev_* layer
+  7. Demo screen shows adapter picker with before/after comparison (same prompt, different adapter)
+  8. Works with Llama 3.2 1B as base + community LoRA adapters from HuggingFace
+  9. Adapter download + verify follows existing ModelManager pattern (progress, SHA256, caching)
+
+**Key Risks**:
+- **P1 (Moderate)**: LoRA adapter format compatibility — must match base model architecture exactly
+- **P2 (Moderate)**: Memory overhead of loaded adapter — small but non-zero, affects budget calculations
+- **P3 (Low)**: Community adapter quality varies — need clear docs on compatible adapters
+- **P4 (Low)**: Hot-swap during active generation — must queue swap until generation completes
+
+**Research flag**: NEEDS RESEARCH — llama.cpp LoRA API, adapter format, compatible HF adapters
+
+**Plans:** TBD (run /gsd:plan-phase 25 to break down)
+
+### Phase 26: Polished Example Apps — Production-Quality Sample Apps for Developer Adoption
+**Goal**: Ship 3-4 polished, production-quality example apps that serve as both marketing demos and developer templates. Each app should be visually impressive (App Store quality screenshots), well-documented, and demonstrate a unique SDK capability combination. Focus on "I want to build this" moments. Update existing sample apps (Document Q&A, Health Advisor, Voice Journal) to match new SDK capabilities (TTS, voice pipeline, image gen) and add any new showcase apps needed.
+
+**Depends on**: Phase 25 (LoRA for adapter demo), Phase 24 (voice pipeline for voice apps)
+
+**Requirements**: Polished UI for each app, comprehensive README, App Store-quality screenshots, working on real device within 15 min of clone
+
+**Success Criteria** (what must be TRUE):
+  1. Each example app builds and runs on real iPhone within 15 minutes of `git clone`
+  2. UI quality is App Store-ready — not "demo app" quality, but "I'd download this" quality
+  3. Voice Journal upgraded with voice pipeline (tap-to-dictate with live transcription + TTS playback)
+  4. Document Q&A enhanced with confidence scoring UI and cloud handoff signal
+  5. At least one app showcases image generation (e.g., "AI Sketchpad" or image-in-chat)
+  6. Each app has comprehensive README with screenshots, architecture diagram, and "Adapt for Your App" section
+  7. All apps use consistent theming (dark mode, Veda branding) but distinct accent colors
+  8. Podfile uses `use_modular_headers!` + `platform :ios, '16.0'` (proven working pattern)
+
+**Key Risks**:
+- **P1 (Low)**: UI polish is time-intensive — focus on 2-3 apps rather than spreading thin
+- **P2 (Low)**: Model download time gates first-run experience — pre-download instructions in README
+
+**Research flag**: Skip research — uses existing SDK features + standard Flutter UI patterns
+
+**Plans:** TBD (run /gsd:plan-phase 26 to break down)
