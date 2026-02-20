@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "com.edgeveda.edge_veda_example"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pin NDK r27c to match plugin — r28+ has 16KB page alignment issues
+    // that can break mmap-based model loading in llama.cpp/whisper.cpp
+    ndkVersion = "27.2.12479018"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -37,6 +39,7 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
         }
     }
 }
