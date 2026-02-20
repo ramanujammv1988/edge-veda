@@ -68,6 +68,24 @@ export interface EdgeVedaConfig {
    * @default 512
    */
   batchSize?: number;
+
+  /**
+   * Flash attention mode: -1 = auto (default), 0 = disabled, 1 = enabled.
+   * Maps to ev_config.flash_attn in the C API.
+   */
+  flashAttn?: number;
+
+  /**
+   * KV-cache key data type: 1 = F16, 8 = Q8_0 (halves cache size).
+   * Maps to ev_config.kv_cache_type_k in the C API.
+   */
+  kvCacheTypeK?: number;
+
+  /**
+   * KV-cache value data type: 1 = F16, 8 = Q8_0.
+   * Maps to ev_config.kv_cache_type_v in the C API.
+   */
+  kvCacheTypeV?: number;
 }
 
 /**
@@ -103,10 +121,94 @@ export interface GenerateOptions {
    * Stop sequences
    */
   stopSequences?: string[];
+
+  /**
+   * Random seed for reproducibility
+   */
+  seed?: number;
+
+  /**
+   * Confidence threshold (0.0 = disabled). When set, enables per-token
+   * confidence values in TokenChunk. Mirrors Flutter SDK's confidenceThreshold.
+   */
+  confidenceThreshold?: number;
+
+  /**
+   * Force JSON mode output. Mirrors Flutter SDK's jsonMode.
+   */
+  jsonMode?: boolean;
+
+  /**
+   * GBNF grammar string for constrained decoding (used by GbnfBuilder).
+   * Mirrors Flutter SDK's grammarStr.
+   */
+  grammarStr?: string;
+
+  /**
+   * Grammar entry point name.
+   * @default 'root'
+   */
+  grammarRoot?: string;
 }
 
 /**
- * Memory usage statistics
+ * Complete generation response (non-streaming).
+ * Mirrors Flutter SDK's GenerateResponse.
+ */
+export interface GenerateResponse {
+  /** Generated text content */
+  text: string;
+  /** Number of tokens in the prompt */
+  promptTokens: number;
+  /** Number of tokens generated */
+  completionTokens: number;
+  /** Total tokens used (prompt + completion) */
+  totalTokens: number;
+  /** Time taken for generation in milliseconds */
+  latencyMs?: number;
+  /** Average confidence across all generated tokens (null if not tracked) */
+  avgConfidence?: number;
+  /** Whether cloud handoff was recommended during generation */
+  needsCloudHandoff: boolean;
+  /** Tokens per second throughput */
+  tokensPerSecond?: number;
+}
+
+/**
+ * Token chunk in a streaming response.
+ * Mirrors Flutter SDK's TokenChunk.
+ */
+export interface TokenChunk {
+  /** The token text content */
+  token: string;
+  /** Token index in the sequence */
+  index: number;
+  /** Whether this is the final token */
+  isFinal: boolean;
+  /** Per-token confidence score (0.0-1.0), undefined if confidence tracking disabled */
+  confidence?: number;
+  /** Whether cloud handoff is recommended at this point */
+  needsCloudHandoff: boolean;
+}
+
+/**
+ * Confidence information for a generated token or response.
+ * Mirrors Flutter SDK's ConfidenceInfo.
+ */
+export interface ConfidenceInfo {
+  /** Per-token confidence score (0.0-1.0), -1.0 if not computed */
+  confidence: number;
+  /** Running average confidence across all generated tokens */
+  avgConfidence: number;
+  /** Whether the model recommends cloud handoff */
+  needsCloudHandoff: boolean;
+  /** Token position in generated sequence */
+  tokenIndex: number;
+}
+
+/**
+ * Memory usage statistics (legacy — kept for backward compatibility).
+ * Prefer MemoryStats for new code.
  */
 export interface MemoryUsage {
   /**
@@ -128,6 +230,30 @@ export interface MemoryUsage {
    * Available memory in bytes
    */
   availableBytes: number;
+}
+
+/**
+ * Memory statistics matching the Flutter gold standard and C API ev_memory_stats.
+ *
+ * Mirrors Flutter SDK's MemoryStats with computed pressure properties.
+ */
+export interface MemoryStats {
+  /** Current total memory usage in bytes (maps to ev_memory_stats.current_bytes) */
+  currentBytes: number;
+  /** Peak memory usage in bytes since initialization (ev_memory_stats.peak_bytes) */
+  peakBytes: number;
+  /** Configured memory ceiling in bytes, 0 = no limit (ev_memory_stats.limit_bytes) */
+  limitBytes: number;
+  /** Memory used by loaded model weights in bytes (ev_memory_stats.model_bytes) */
+  modelBytes: number;
+  /** Memory used by KV inference context in bytes (ev_memory_stats.context_bytes) */
+  contextBytes: number;
+  /** Memory usage as ratio (0.0-1.0). Returns 0 if limitBytes is 0. */
+  usagePercent: number;
+  /** Whether memory usage exceeds 80% threshold */
+  isHighPressure: boolean;
+  /** Whether memory usage exceeds 90% threshold (critical) */
+  isCritical: boolean;
 }
 
 /**
@@ -203,6 +329,17 @@ export class EdgeVedaError extends Error {
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, EdgeVedaError);
     }
+  }
+}
+
+/**
+ * Thrown when token generation fails.
+ * Mirrors Flutter SDK's GenerationException.
+ */
+export class GenerationError extends EdgeVedaError {
+  constructor(message: string, details?: string) {
+    super(EdgeVedaErrorCode.GENERATION_FAILED, message, details);
+    this.name = 'GenerationError';
   }
 }
 
@@ -303,6 +440,41 @@ export interface DownloadableModelInfo {
   format: string;
   /** Quantization level (e.g., "Q4_K_M") */
   quantization?: string;
+  /** Model category — used to group models in the registry */
+  modelType?: 'text' | 'vision' | 'mmproj' | 'whisper' | 'embedding' | 'imageGeneration';
+}
+
+/**
+ * Quality of Service levels for runtime policy management.
+ *
+ * Used to adapt behavior under resource constraints (memory pressure,
+ * thermal throttling, battery level, etc.)
+ */
+export enum QoSLevel {
+  /** Full quality - all features enabled, no restrictions */
+  FULL = 'full',
+  /** Reduced quality - optional features disabled, smaller context */
+  REDUCED = 'reduced',
+  /** Minimal quality - bare minimum functionality */
+  MINIMAL = 'minimal',
+  /** Paused - inference suspended, cleanup in progress */
+  PAUSED = 'paused',
+}
+
+/**
+ * Configuration validation error.
+ *
+ * Thrown when SDK configuration is invalid (e.g., bad tool definitions,
+ * invalid parameters, etc.)
+ */
+export class ConfigurationException extends Error {
+  details?: string;
+
+  constructor(message: string, details?: string) {
+    super(message);
+    this.name = 'ConfigurationException';
+    this.details = details;
+  }
 }
 
 /**
@@ -477,4 +649,196 @@ export interface FrameData {
    * Frame height in pixels
    */
   height: number;
+}
+
+// =============================================================================
+// Whisper (Speech-to-Text) Types
+// =============================================================================
+
+/**
+ * Configuration for Whisper model initialization.
+ * Mirrors Flutter SDK's WhisperConfig.
+ */
+export interface WhisperConfig {
+  /**
+   * Path to the Whisper model file (GGUF format)
+   */
+  modelPath: string;
+
+  /**
+   * Number of threads for inference
+   * @default 4
+   */
+  numThreads?: number;
+
+  /**
+   * Enable GPU acceleration
+   * @default false
+   */
+  useGpu?: boolean;
+
+  /**
+   * Default language code for transcription (e.g., 'en', 'es', 'auto')
+   * @default 'en'
+   */
+  language?: string;
+
+  /**
+   * Context size for the model
+   * @default 1500
+   */
+  contextSize?: number;
+}
+
+/**
+ * Parameters for a Whisper transcription request.
+ * Mirrors Flutter SDK's WhisperParams.
+ */
+export interface WhisperParams {
+  /**
+   * Language code (e.g., 'en', 'es', 'fr', 'auto')
+   * @default 'en'
+   */
+  language?: string;
+
+  /**
+   * Translate transcription to English
+   * @default false
+   */
+  translate?: boolean;
+
+  /**
+   * Maximum tokens to generate
+   */
+  maxTokens?: number;
+}
+
+/**
+ * A single transcription segment with timing.
+ * Mirrors Flutter SDK's WhisperSegment.
+ */
+export interface WhisperSegment {
+  /** Transcribed text for this segment */
+  text: string;
+  /** Segment start time in milliseconds */
+  startMs: number;
+  /** Segment end time in milliseconds */
+  endMs: number;
+}
+
+/**
+ * Result from a Whisper transcription.
+ * Mirrors Flutter SDK's WhisperResult.
+ */
+export interface WhisperResult {
+  /** Array of transcription segments with timing */
+  segments: WhisperSegment[];
+  /** Full transcript (all segments concatenated) */
+  fullText: string;
+  /** Processing time in milliseconds */
+  processingTimeMs: number;
+}
+
+// =============================================================================
+// Image Generation Types (Stable Diffusion)
+// =============================================================================
+
+/**
+ * Sampler types for diffusion denoising.
+ * Maps to ev_image_sampler_t in edge_veda.h.
+ * Mirrors Flutter SDK's ImageSampler.
+ */
+export enum ImageSampler {
+  EULER_A = 0,
+  EULER = 1,
+  DPM_PP_2M = 2,
+  DPM_PP_2S_A = 3,
+  LCM = 4,
+}
+
+/**
+ * Schedule types for noise scheduling.
+ * Maps to ev_image_schedule_t in edge_veda.h.
+ * Mirrors Flutter SDK's ImageSchedule.
+ */
+export enum ImageSchedule {
+  DEFAULT = 0,
+  DISCRETE = 1,
+  KARRAS = 2,
+  AYS = 3,
+}
+
+/**
+ * Configuration for image generation.
+ * Mirrors Flutter SDK's ImageGenerationConfig.
+ */
+export interface ImageGenerationConfig {
+  /** Negative prompt to avoid certain features */
+  negativePrompt?: string;
+  /** Image width in pixels @default 512 */
+  width?: number;
+  /** Image height in pixels @default 512 */
+  height?: number;
+  /** Number of denoising steps (4 for turbo, 20-50 for standard) @default 4 */
+  steps?: number;
+  /** Classifier-free guidance scale (1.0 for turbo) @default 1.0 */
+  cfgScale?: number;
+  /** Random seed (-1 = random) @default -1 */
+  seed?: number;
+  /** Sampler type @default EULER_A */
+  sampler?: ImageSampler;
+  /** Schedule type @default DEFAULT */
+  schedule?: ImageSchedule;
+}
+
+/**
+ * Progress update during image generation.
+ * Fires once per denoising step.
+ * Mirrors Flutter SDK's ImageProgress.
+ */
+export interface ImageProgress {
+  /** Current step number (1-based) */
+  step: number;
+  /** Total number of denoising steps */
+  totalSteps: number;
+  /** Elapsed time in seconds since generation started */
+  elapsedSeconds: number;
+  /** Progress as a fraction (0.0 to 1.0) */
+  progress: number;
+}
+
+/**
+ * Result of image generation.
+ * Mirrors Flutter SDK's ImageResult.
+ */
+export interface ImageResult {
+  /** Raw pixel data (RGB bytes: width * height * channels) */
+  pixelData: Uint8Array;
+  /** Image width in pixels */
+  width: number;
+  /** Image height in pixels */
+  height: number;
+  /** Number of color channels (3 for RGB) */
+  channels: number;
+  /** Total generation time in milliseconds */
+  generationTimeMs: number;
+}
+
+// =============================================================================
+// Embeddings Types
+// =============================================================================
+
+/**
+ * Result from text embedding.
+ * Mirrors Flutter SDK's EmbeddingResult.
+ */
+export interface EmbeddingResult {
+  /** The embedding vector (L2-normalized floats) */
+  embedding: number[];
+  /** Number of dimensions in the embedding vector */
+  dimensions: number;
+  /** Number of tokens processed */
+  tokenCount: number;
+  /** Time taken to compute embedding in milliseconds */
+  timeMs?: number;
 }

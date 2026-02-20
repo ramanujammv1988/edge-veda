@@ -136,6 +136,85 @@ export interface Spec extends TurboModule {
    * @returns true if vision context is loaded
    */
   isVisionLoaded(): boolean;
+
+  // ---------------------------------------------------------------------------
+  // Embedding Methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Generate a text embedding vector
+   * @param text - Input text to embed
+   * @returns JSON string containing EmbeddingResult (embedding, dimensions, tokenCount, timeMs)
+   */
+  embed(text: string): Promise<string>;
+
+  // ---------------------------------------------------------------------------
+  // Whisper STT Methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Initialize Whisper STT context
+   * @param modelPath - Absolute path to the Whisper GGUF model file
+   * @param config - JSON string of WhisperConfig options
+   * @returns Promise resolving to backend name (e.g., "Metal", "CPU")
+   */
+  initWhisper(modelPath: string, config: string): Promise<string>;
+
+  /**
+   * Transcribe audio samples to text
+   * @param pcmBase64 - Base64-encoded 16 kHz mono Float32 PCM audio data
+   * @param nSamples - Number of float32 samples (not bytes)
+   * @param params - JSON string of WhisperParams options
+   * @returns JSON string containing WhisperResult (segments, fullText, processingTimeMs)
+   */
+  transcribeAudio(pcmBase64: string, nSamples: number, params: string): Promise<string>;
+
+  /**
+   * Free Whisper STT context
+   * @returns Promise that resolves when context is freed
+   */
+  freeWhisper(): Promise<void>;
+
+  /**
+   * Check if Whisper context is initialized
+   * @returns true if Whisper context is loaded
+   */
+  isWhisperLoaded(): boolean;
+
+  // ---------------------------------------------------------------------------
+  // Image Generation Methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Initialize image generation context
+   * @param modelPath - Absolute path to the Stable Diffusion GGUF model file
+   * @param config - JSON string of ImageGenerationConfig options
+   * @returns Promise that resolves when context is initialized
+   */
+  initImageGeneration(modelPath: string, config: string): Promise<void>;
+
+  /**
+   * Generate an image from a text prompt
+   *
+   * Progress events are emitted as 'EdgeVeda_ImageProgress' native events
+   * with { step, totalSteps, elapsedSeconds } payload.
+   *
+   * @param params - JSON string containing prompt and ImageGenerationConfig
+   * @returns JSON string containing base64-encoded RGB pixel data, width, height, generationTimeMs
+   */
+  generateImage(params: string): Promise<string>;
+
+  /**
+   * Free image generation context
+   * @returns Promise that resolves when context is freed
+   */
+  freeImageGeneration(): Promise<void>;
+
+  /**
+   * Check if image generation context is initialized
+   * @returns true if image generation context is loaded
+   */
+  isImageGenerationLoaded(): boolean;
 }
 
 /**
