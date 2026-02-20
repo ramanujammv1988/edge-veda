@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.MicNone
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -68,6 +70,7 @@ fun MainScreen() {
     val tabs = listOf(
         TabItem("Chat", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline),
         TabItem("Vision", Icons.Filled.Camera, Icons.Outlined.CameraAlt),
+        TabItem("Listen", Icons.Filled.Mic, Icons.Outlined.MicNone),
         TabItem("Settings", Icons.Filled.Settings, Icons.Outlined.Settings),
     )
 
@@ -104,7 +107,8 @@ fun MainScreen() {
         when (selectedTab) {
             0 -> ChatScreen(modifier = Modifier.padding(padding))
             1 -> VisionScreen(modifier = Modifier.padding(padding))
-            2 -> SettingsScreen(modifier = Modifier.padding(padding))
+            2 -> SttScreen(modifier = Modifier.padding(padding))
+            3 -> SettingsScreen(modifier = Modifier.padding(padding))
         }
     }
 }

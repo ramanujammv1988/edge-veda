@@ -680,6 +680,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val response = edgeVeda!!.generate(prompts[i], GenerateOptions(maxTokens = 100, temperature = 0.7f))
                     val elapsed = (System.currentTimeMillis() - start) / 1000.0
+                    // Approximation: chars ÷ 4 ≈ tokens (good enough for a demo benchmark)
                     val tokens = response.length / 4.0
                     tokenRates.add(tokens / elapsed)
 

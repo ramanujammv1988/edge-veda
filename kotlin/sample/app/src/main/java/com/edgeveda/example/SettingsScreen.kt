@@ -25,13 +25,35 @@ import kotlinx.coroutines.launch
 /**
  * Settings screen matching Flutter's SettingsScreen.
  *
- * Sections: Device Status, Generation (sliders), Storage, Models, About.
+ * Sections: Device Status, Capability Tier + Recommended Models,
+ * Generation (sliders), Storage, Models, About.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     var temperature by remember { mutableFloatStateOf(0.7f) }
     var maxTokens by remember { mutableFloatStateOf(256f) }
+
+    // Detect device capabilities once on composition
+    val deviceProfile = remember { detectDeviceCapabilities(context) }
+
+    // All models across every category
+    val allModels = remember {
+        ModelRegistry.getAllTextModels() +
+        ModelRegistry.getVisionModels() +
+        listOf(ModelRegistry.smolvlm2_500m_mmproj) +
+        ModelRegistry.getWhisperModels() +
+        ModelRegistry.getEmbeddingModels()
+    }
+
+    // Recommended models (text + whisper only; no vision/mmproj/embedding bloat in recommender)
+    val recommendedModels = remember {
+        recommendModels(
+            deviceProfile,
+            ModelRegistry.getAllTextModels() + ModelRegistry.getWhisperModels()
+        ).take(3)
+    }
 
     Column(modifier = modifier.fillMaxSize().background(AppTheme.background)) {
         CenterAlignedTopAppBar(
@@ -46,14 +68,18 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 .padding(bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            // Device Status
+            // ─── Device Status ───────────────────────────────────────────────
             SettingsSection("Device Status") {
                 SettingsCard {
                     AboutRow(Icons.Outlined.PhoneAndroid, "Model", Build.MODEL)
                     SettingsDivider()
                     AboutRow(Icons.Outlined.DeveloperBoard, "Chip", Build.HARDWARE)
                     SettingsDivider()
-                    AboutRow(Icons.Outlined.Memory, "Memory", "${Runtime.getRuntime().maxMemory() / (1024 * 1024)} MB max")
+                    AboutRow(
+                        Icons.Outlined.Memory,
+                        "Total RAM",
+                        "${deviceProfile.totalMemoryMb} MB",
+                    )
                     SettingsDivider()
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -70,10 +96,94 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                             modifier = Modifier.size(22.dp),
                         )
                     }
+                    SettingsDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Layers, contentDescription = null, tint = AppTheme.accent, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Vulkan", fontSize = 14.sp, color = AppTheme.textPrimary)
+                        Spacer(Modifier.weight(1f))
+                        Icon(
+                            if (deviceProfile.hasVulkan) Icons.Outlined.CheckCircle else Icons.Outlined.Cancel,
+                            contentDescription = null,
+                            tint = if (deviceProfile.hasVulkan) AppTheme.success else AppTheme.textTertiary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
 
-            // Generation
+            // ─── Capability Tier + Recommended Models ────────────────────────
+            SettingsSection("Device Capability") {
+                SettingsCard {
+                    val tier = when {
+                        deviceProfile.totalMemoryMb < 4096  -> "Low"
+                        deviceProfile.totalMemoryMb < 6144  -> "Medium"
+                        deviceProfile.totalMemoryMb < 8192  -> "High"
+                        else                                 -> "Ultra"
+                    }
+                    val tierColor = when (tier) {
+                        "Ultra"  -> AppTheme.accent
+                        "High"   -> AppTheme.success
+                        "Medium" -> AppTheme.warning
+                        else     -> AppTheme.textTertiary
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Speed, contentDescription = null, tint = AppTheme.accent, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Tier", fontSize = 14.sp, color = AppTheme.textPrimary)
+                        Spacer(Modifier.weight(1f))
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = tierColor.copy(alpha = 0.15f),
+                        ) {
+                            Text(
+                                tier,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = tierColor,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    if (recommendedModels.isNotEmpty()) {
+                        SettingsDivider()
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                            Text(
+                                "Recommended for this device",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = AppTheme.textTertiary,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            recommendedModels.forEach { model ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        modelIcon(model),
+                                        contentDescription = null,
+                                        tint = AppTheme.accent,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(model.name, fontSize = 13.sp, color = AppTheme.textPrimary, modifier = Modifier.weight(1f))
+                                    Text(modelSizeLabel(model), fontSize = 12.sp, color = AppTheme.textSecondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ─── Generation ──────────────────────────────────────────────────
             SettingsSection("Generation") {
                 SettingsCard {
                     SettingRow(Icons.Outlined.Thermostat, "Temperature", String.format("%.1f", temperature))
@@ -102,10 +212,9 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 }
             }
 
-            // Storage
+            // ─── Storage ─────────────────────────────────────────────────────
             SettingsSection("Storage") {
-                val models = listOf(ModelRegistry.llama32_1b, ModelRegistry.smolvlm2_500m, ModelRegistry.smolvlm2_500m_mmproj)
-                val totalBytes = models.sumOf { it.sizeBytes.toLong() }
+                val totalBytes = allModels.sumOf { it.sizeBytes }
                 val totalGb = totalBytes / (1024.0 * 1024 * 1024)
 
                 SettingsCard {
@@ -113,7 +222,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Outlined.Storage, contentDescription = null, tint = AppTheme.accent, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(12.dp))
-                            Text("Models", fontSize = 14.sp, color = AppTheme.textPrimary)
+                            Text("All Models", fontSize = 14.sp, color = AppTheme.textPrimary)
                             Spacer(Modifier.weight(1f))
                             Text("~${String.format("%.1f", totalGb)} GB", fontSize = 14.sp, color = AppTheme.textSecondary)
                         }
@@ -128,34 +237,33 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxHeight()
-                                    .fillMaxWidth((totalGb / 4.0).coerceIn(0.0, 1.0).toFloat())
+                                    .fillMaxWidth((totalGb / 8.0).coerceIn(0.0, 1.0).toFloat())
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(AppTheme.accent),
                             )
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("${String.format("%.1f", totalGb)} GB used", fontSize = 11.sp, color = AppTheme.textTertiary)
+                        Text("${String.format("%.1f", totalGb)} GB if all downloaded (of 8 GB scale)", fontSize = 11.sp, color = AppTheme.textTertiary)
                     }
                 }
             }
 
-            // Models
+            // ─── Models ──────────────────────────────────────────────────────
             SettingsSection("Models") {
-                val models = listOf(ModelRegistry.llama32_1b, ModelRegistry.smolvlm2_500m, ModelRegistry.smolvlm2_500m_mmproj)
                 SettingsCard {
-                    models.forEachIndexed { index, model ->
+                    allModels.forEachIndexed { index, model ->
                         ModelRowItem(model)
-                        if (index < models.size - 1) SettingsDivider()
+                        if (index < allModels.lastIndex) SettingsDivider()
                     }
                 }
             }
 
-            // About
+            // ─── About ───────────────────────────────────────────────────────
             SettingsSection("About") {
                 SettingsCard {
-                    AboutRow(Icons.Outlined.AutoAwesome, "Veda", "1.1.0")
+                    AboutRow(Icons.Outlined.AutoAwesome, "Veda", BuildConfig.VERSION_NAME)
                     SettingsDivider()
-                    AboutRow(Icons.Outlined.Code, "Veda SDK", "1.1.0")
+                    AboutRow(Icons.Outlined.Code, "Veda SDK", BuildConfig.VERSION_NAME)
                     SettingsDivider()
                     AboutRow(Icons.Outlined.Memory, "Backend", "CPU")
                     SettingsDivider()
@@ -176,6 +284,24 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
     }
 }
+
+// ─── Helper functions ────────────────────────────────────────────────────────
+
+private fun modelIcon(model: DownloadableModelInfo) = when (model.modelType) {
+    ModelType.WHISPER    -> Icons.Outlined.Mic
+    ModelType.EMBEDDING  -> Icons.Outlined.Analytics
+    ModelType.VISION     -> Icons.Outlined.Visibility
+    ModelType.MMPROJ     -> Icons.Outlined.Extension
+    else                 -> Icons.Outlined.SmartToy
+}
+
+private fun modelSizeLabel(model: DownloadableModelInfo): String {
+    val sizeMb = model.sizeBytes / (1024.0 * 1024)
+    return if (sizeMb >= 1024) "~${String.format("%.1f", sizeMb / 1024)} GB"
+    else "~${sizeMb.toInt()} MB"
+}
+
+// ─── Layout primitives ───────────────────────────────────────────────────────
 
 @Composable
 private fun SettingsSection(title: String, content: @Composable () -> Unit) {
@@ -206,7 +332,7 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun SettingsDivider() {
-    Divider(color = AppTheme.border, modifier = Modifier.padding(horizontal = 16.dp))
+    HorizontalDivider(color = AppTheme.border, modifier = Modifier.padding(horizontal = 16.dp))
 }
 
 @Composable
@@ -245,29 +371,19 @@ private fun ModelRowItem(model: DownloadableModelInfo) {
     var isDeleting by remember { mutableStateOf(false) }
 
     LaunchedEffect(model.id) {
-        val mm = ModelManager(context)
-        isDownloaded = mm.isModelDownloaded(model.id)
+        isDownloaded = ModelManager(context).isModelDownloaded(model.id)
     }
-
-    val icon = when {
-        model.id.contains("mmproj") -> Icons.Outlined.Extension
-        model.id.contains("vlm") || model.id.contains("smol") -> Icons.Outlined.Visibility
-        else -> Icons.Outlined.SmartToy
-    }
-
-    val sizeMb = model.sizeBytes / (1024.0 * 1024)
-    val sizeLabel = if (sizeMb >= 1024) "~${String.format("%.1f", sizeMb / 1024)} GB" else "~${sizeMb.toInt()} MB"
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = AppTheme.accent, modifier = Modifier.size(22.dp))
+        Icon(modelIcon(model), contentDescription = null, tint = AppTheme.accent, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(model.name, fontSize = 14.sp, color = AppTheme.textPrimary)
             Spacer(Modifier.height(2.dp))
-            Text(sizeLabel, fontSize = 12.sp, color = AppTheme.textSecondary)
+            Text(modelSizeLabel(model), fontSize = 12.sp, color = AppTheme.textSecondary)
         }
 
         if (isDeleting) {
@@ -282,8 +398,7 @@ private fun ModelRowItem(model: DownloadableModelInfo) {
                     modifier = Modifier.size(20.dp).clickable {
                         isDeleting = true
                         scope.launch {
-                            val mm = ModelManager(context)
-                            mm.deleteModel(model.id)
+                            ModelManager(context).deleteModel(model.id)
                             isDownloaded = false
                             isDeleting = false
                         }
