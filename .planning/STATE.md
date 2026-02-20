@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 Phase: 23 (Add Image Generation Capabilities)
 Plan: 23-03 complete (3/4 plans done)
 Status: **In Progress**
-Last activity: 2026-02-20 - Completed quick task 6: Fix image generation onProgress callback and add idle auto-disposal
+Last activity: 2026-02-20 - Completed quick task 7: Strengthen enterprise-safe JSON/tool behavior
 
 Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4 complete)
 
@@ -491,6 +491,7 @@ v1.1:
 | 4 | ModelAdvisor: canRun, checkStorageAvailability, validateMemoryAfterLoad | 2026-02-15 | e9f3e0c, 12cf91e | [4-modeladvisor-storage-check-real-time-mem](./quick/4-modeladvisor-storage-check-real-time-mem/) |
 | 5 | DX quick wins: real READMEs, ffi comments, magic number docs, download UX | 2026-02-15 | d12d61e, d3b9984, dc50d4c | [5-fix-dx-quick-wins-readmes-ffi-comments-m](./quick/5-fix-dx-quick-wins-readmes-ffi-comments-m/) |
 | 6 | Fix image generation onProgress callback and add idle auto-disposal | 2026-02-20 | ef665f0, 764ce17 | [1-fix-image-generation-onprogress-callback](./quick/1-fix-image-generation-onprogress-callback/) |
+| 7 | Strengthen enterprise-safe JSON/tool behavior (strict schema, recovery, telemetry) | 2026-02-20 | e822449, dcebd14 | [6-strengthen-enterprise-safe-tool-json-beh](./quick/6-strengthen-enterprise-safe-tool-json-beh/) |
 
 ### Blockers/Concerns
 
@@ -506,8 +507,8 @@ v1.1:
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 23-03-PLAN.md (ImageWorker isolate + generateImage API + types + model registry)
+Last session: 2026-02-20
+Stopped at: Completed quick task 7 (enterprise-safe JSON: strict schema, recovery, telemetry)
 Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
 
 ---

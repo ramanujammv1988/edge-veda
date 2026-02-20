@@ -60,6 +60,7 @@ class Scheduler {
   EdgeVedaBudget? _budget;
   final Map<WorkloadId, _WorkloadState> _workloads = {};
   final BatteryDrainTracker _batteryTracker = BatteryDrainTracker();
+  final Map<WorkloadId, Future<void> Function()> _memoryEvictionCallbacks = {};
 
   MeasuredBaseline? _measuredBaseline;
   EdgeVedaBudget? _resolvedBudget;
@@ -181,6 +182,24 @@ class Scheduler {
   /// for budget enforcement.
   void reportLatency(WorkloadId id, double latencyMs) {
     _workloads[id]?.latencyTracker.add(latencyMs);
+  }
+
+  /// Register a memory eviction callback for a workload.
+  ///
+  /// When memory ceiling is violated and the workload is idle (at
+  /// [QoSLevel.full]), the Scheduler may call [callback] to free the
+  /// workload's model memory. This is a one-shot mechanism: after
+  /// eviction fires, both the workload and callback are unregistered.
+  void registerMemoryEviction(
+      WorkloadId id, Future<void> Function() callback) {
+    _memoryEvictionCallbacks[id] = callback;
+  }
+
+  /// Unregister a memory eviction callback for a workload.
+  ///
+  /// Safe to call even if no callback was registered for [id].
+  void unregisterMemoryEviction(WorkloadId id) {
+    _memoryEvictionCallbacks.remove(id);
   }
 
   /// Start the periodic enforcement loop (every 2 seconds).
@@ -423,6 +442,11 @@ class Scheduler {
       );
     }
 
+    // 4b. Try to evict idle workers when memory ceiling is violated
+    if (observeOnlyViolations.contains(BudgetConstraint.memoryCeiling)) {
+      _tryEvictIdleWorkers(rssMb);
+    }
+
     // 5. Handle actionable violations (trigger degradation)
     if (actionableViolations.isNotEmpty) {
       _handleViolations(actionableViolations, budget, rssMb, snap, drainRate);
@@ -577,6 +601,65 @@ class Scheduler {
       }
     }
     return worst;
+  }
+
+  /// Try to evict idle workers when memory ceiling is exceeded.
+  ///
+  /// Only evicts workloads that have a registered eviction callback AND
+  /// are at [QoSLevel.full] (idle -- not currently degraded/under load).
+  /// Prefers evicting lowest-priority workloads first. Eviction is
+  /// fire-and-forget (async, not awaited in enforcement loop).
+  void _tryEvictIdleWorkers(double rssMb) {
+    final budget = _resolvedBudget;
+    if (budget == null || budget.memoryCeilingMb == null) return;
+
+    // Only evict if RSS exceeds ceiling by more than 10%
+    final ceiling = budget.memoryCeilingMb!;
+    if (rssMb <= ceiling * 1.1) return;
+
+    // Collect evictable workloads: have callback AND are at QoSLevel.full
+    final evictable = <WorkloadId>[];
+    for (final id in _memoryEvictionCallbacks.keys) {
+      final state = _workloads[id];
+      if (state != null && state.level == QoSLevel.full) {
+        evictable.add(id);
+      }
+    }
+    if (evictable.isEmpty) return;
+
+    // Sort by priority: lowest first (evict lowest priority first)
+    evictable.sort((a, b) {
+      final pa = _workloads[a]!.priority.index;
+      final pb = _workloads[b]!.priority.index;
+      return pa.compareTo(pb);
+    });
+
+    // Evict the lowest-priority idle workload
+    final target = evictable.first;
+    final callback = _memoryEvictionCallbacks[target];
+    if (callback == null) return;
+
+    _trace?.record(
+      stage: 'memory_eviction',
+      value: rssMb,
+      extra: {
+        'workload': target.name,
+        'ceiling_mb': ceiling,
+        'rss_mb': rssMb.round(),
+        'overshoot_pct':
+            (((rssMb - ceiling) / ceiling) * 100).toStringAsFixed(1),
+      },
+    );
+
+    // Fire-and-forget eviction
+    unawaited(callback());
+
+    // One-shot: unregister workload and eviction callback
+    _workloads.remove(target);
+    _memoryEvictionCallbacks.remove(target);
+
+    debugPrint('[Scheduler] Memory eviction: unloaded ${target.name} '
+        '(RSS ${rssMb.round()}MB > ceiling ${ceiling}MB)');
   }
 
   /// Attempt to restore workloads that have been degraded.
