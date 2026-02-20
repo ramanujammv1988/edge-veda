@@ -91,6 +91,12 @@ class EdgeVeda {
   /// Whether image generation has been initialized
   bool _isImageInitialized = false;
 
+  /// Idle timer for auto-disposing image model after inactivity
+  Timer? _imageIdleTimer;
+
+  /// Duration of inactivity before auto-disposing the image model (~2.5GB)
+  static const _imageIdleTimeout = Duration(seconds: 60);
+
   // Note: NO Pointer storage here - pointers can't transfer between isolates
 
   /// Whether the SDK is initialized
@@ -777,6 +783,18 @@ class EdgeVeda {
     }
   }
 
+  /// Reset the idle timer for image model auto-disposal
+  ///
+  /// Cancels any existing timer and starts a new 60-second countdown.
+  /// When the timer fires, the image model is disposed to free ~2.5GB.
+  void _resetImageIdleTimer() {
+    _imageIdleTimer?.cancel();
+    _imageIdleTimer = Timer(_imageIdleTimeout, () {
+      debugPrint('EdgeVeda: Image model idle for 60s, auto-disposing to free memory');
+      disposeImageGeneration();
+    });
+  }
+
   /// Dispose and free all resources
   ///
   /// Disposes vision and streaming resources, clears configuration state.
@@ -1089,6 +1107,7 @@ class EdgeVeda {
     }
 
     _isImageInitialized = true;
+    _resetImageIdleTimer();
   }
 
   /// Generate an image from a text prompt
@@ -1129,6 +1148,9 @@ class EdgeVeda {
 
     config ??= const ImageGenerationConfig();
 
+    // Cancel idle timer during generation
+    _imageIdleTimer?.cancel();
+
     final stream = _imageWorker!.generateImage(
       prompt: prompt,
       negativePrompt: config.negativePrompt,
@@ -1158,6 +1180,9 @@ class EdgeVeda {
     if (completeResponse == null) {
       throw const ImageGenerationException('Image generation produced no result');
     }
+
+    // Reset idle timer -- generation just completed
+    _resetImageIdleTimer();
 
     // Convert raw RGB pixels to PNG using the `image` package
     final rawImage = img.Image.fromBytes(
@@ -1191,6 +1216,9 @@ class EdgeVeda {
 
     config ??= const ImageGenerationConfig();
 
+    // Cancel idle timer during generation
+    _imageIdleTimer?.cancel();
+
     final stream = _imageWorker!.generateImage(
       prompt: prompt,
       negativePrompt: config.negativePrompt,
@@ -1221,6 +1249,9 @@ class EdgeVeda {
       throw const ImageGenerationException('Image generation produced no result');
     }
 
+    // Reset idle timer -- generation just completed
+    _resetImageIdleTimer();
+
     return ImageResult(
       pixelData: completeResponse.pixelData,
       width: completeResponse.width,
@@ -1235,6 +1266,8 @@ class EdgeVeda {
   /// Frees the SD model and terminates the image worker isolate.
   /// Does not affect text inference, vision, or STT.
   Future<void> disposeImageGeneration() async {
+    _imageIdleTimer?.cancel();
+    _imageIdleTimer = null;
     if (_imageWorker != null) {
       await _imageWorker!.dispose();
       _imageWorker = null;
