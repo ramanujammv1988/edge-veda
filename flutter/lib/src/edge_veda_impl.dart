@@ -35,10 +35,12 @@ import 'package:ffi/ffi.dart';
 
 import 'package:image/image.dart' as img;
 
+import 'budget.dart';
 import 'ffi/bindings.dart';
 import 'isolate/image_worker.dart';
 import 'isolate/image_worker_messages.dart';
 import 'isolate/worker_isolate.dart';
+import 'scheduler.dart';
 import 'types.dart' show
     EdgeVedaConfig,
     EdgeVedaException,
@@ -97,6 +99,9 @@ class EdgeVeda {
   /// Duration of inactivity before auto-disposing the image model (~2.5GB)
   static const _imageIdleTimeout = Duration(seconds: 60);
 
+  /// Optional Scheduler for budget-aware image generation
+  Scheduler? _scheduler;
+
   // Note: NO Pointer storage here - pointers can't transfer between isolates
 
   /// Whether the SDK is initialized
@@ -113,6 +118,15 @@ class EdgeVeda {
 
   /// Current configuration
   EdgeVedaConfig? get config => _config;
+
+  /// Connect a [Scheduler] for budget-aware image generation.
+  ///
+  /// Call this after creating both the EdgeVeda and Scheduler instances.
+  /// When set, image generation will register as a workload, gate on
+  /// QoS policy, and report latency to the Scheduler.
+  void setScheduler(Scheduler scheduler) {
+    _scheduler = scheduler;
+  }
 
   /// Initialize Edge Veda with the given configuration
   ///
@@ -1107,6 +1121,15 @@ class EdgeVeda {
     }
 
     _isImageInitialized = true;
+
+    // Register image workload with Scheduler for budget enforcement.
+    // Priority is low -- text/vision are more important than image generation.
+    _scheduler?.registerWorkload(WorkloadId.image,
+        priority: WorkloadPriority.low);
+    _scheduler?.registerMemoryEviction(
+        WorkloadId.image, () => disposeImageGeneration());
+    debugPrint('EdgeVeda: Image workload registered with Scheduler');
+
     _resetImageIdleTimer();
   }
 
@@ -1148,6 +1171,17 @@ class EdgeVeda {
 
     config ??= const ImageGenerationConfig();
 
+    // Check Scheduler QoS -- refuse to start if paused (thermal/battery)
+    if (_scheduler != null) {
+      final knobs = _scheduler!.getKnobsForWorkload(WorkloadId.image);
+      if (knobs.maxFps == 0) {
+        throw const ImageGenerationException(
+          'Image generation paused by Scheduler (thermal/battery pressure). '
+          'Try again when conditions improve.',
+        );
+      }
+    }
+
     // Cancel idle timer during generation
     _imageIdleTimer?.cancel();
 
@@ -1180,6 +1214,10 @@ class EdgeVeda {
     if (completeResponse == null) {
       throw const ImageGenerationException('Image generation produced no result');
     }
+
+    // Report generation latency to Scheduler for budget enforcement
+    _scheduler?.reportLatency(
+        WorkloadId.image, completeResponse.generationTimeMs);
 
     // Reset idle timer -- generation just completed
     _resetImageIdleTimer();
@@ -1216,6 +1254,17 @@ class EdgeVeda {
 
     config ??= const ImageGenerationConfig();
 
+    // Check Scheduler QoS -- refuse to start if paused (thermal/battery)
+    if (_scheduler != null) {
+      final knobs = _scheduler!.getKnobsForWorkload(WorkloadId.image);
+      if (knobs.maxFps == 0) {
+        throw const ImageGenerationException(
+          'Image generation paused by Scheduler (thermal/battery pressure). '
+          'Try again when conditions improve.',
+        );
+      }
+    }
+
     // Cancel idle timer during generation
     _imageIdleTimer?.cancel();
 
@@ -1249,6 +1298,10 @@ class EdgeVeda {
       throw const ImageGenerationException('Image generation produced no result');
     }
 
+    // Report generation latency to Scheduler for budget enforcement
+    _scheduler?.reportLatency(
+        WorkloadId.image, completeResponse.generationTimeMs);
+
     // Reset idle timer -- generation just completed
     _resetImageIdleTimer();
 
@@ -1266,6 +1319,12 @@ class EdgeVeda {
   /// Frees the SD model and terminates the image worker isolate.
   /// Does not affect text inference, vision, or STT.
   Future<void> disposeImageGeneration() async {
+    // Unregister from Scheduler before cleanup (defensive -- eviction may
+    // have already removed the callback, but remove is safe to call twice)
+    _scheduler?.unregisterWorkload(WorkloadId.image);
+    _scheduler?.unregisterMemoryEviction(WorkloadId.image);
+    debugPrint('EdgeVeda: Image workload unregistered from Scheduler');
+
     _imageIdleTimer?.cancel();
     _imageIdleTimer = null;
     if (_imageWorker != null) {
