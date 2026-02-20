@@ -1,6 +1,6 @@
 # Edge-Veda
 
-**A managed on-device AI runtime for Flutter — text, vision, speech, image generation, and RAG running sustainably on real phones under real constraints. Private by default.**
+**A managed on-device AI runtime for Flutter — text, vision, speech-to-text, text-to-speech, image generation, and RAG running sustainably on real phones under real constraints. Private by default.**
 
 `~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
@@ -86,6 +86,13 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - 48kHz native audio capture with automatic downsampling to 16kHz
 - WhisperWorker isolate for non-blocking transcription
 - ~670ms per chunk on iPhone with Metal GPU (whisper-tiny.en, 77MB)
+
+### Text-to-Speech
+- **On-device TTS** via iOS AVSpeechSynthesizer — zero additional binary size
+- Neural/enhanced voice selection with language filtering
+- Speak, stop, pause, resume with rate/pitch/volume control
+- Real-time **word boundary events** for text highlighting during speech
+- Completes the voice pipeline: **STT → LLM → TTS**
 
 ### Structured Output & Function Calling
 - **GBNF grammar-constrained generation** for structured JSON output
@@ -193,7 +200,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^2.2.0
+  edge_veda: ^2.3.0
 ```
 
 ### Text Generation
@@ -295,6 +302,25 @@ final audioSub = WhisperSession.microphone().listen((samples) {
 await session.flush();
 await session.stop();
 print(session.transcript);
+```
+
+### Text-to-Speech
+
+```dart
+final tts = TtsService();
+
+// List available neural voices
+final voices = await tts.availableVoices();
+final voice = voices.firstWhere((v) => v.language.startsWith('en'));
+
+// Speak with word-by-word highlighting
+tts.events.listen((event) {
+  if (event.type == TtsEventType.wordBoundary) {
+    print('Speaking: ${event.word}');
+  }
+});
+
+await tts.speak('Hello from on-device AI', voiceId: voice.id, rate: 0.5);
 ```
 
 ### Embeddings & RAG

@@ -5,6 +5,17 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-20
+
+### Added
+- **Text-to-Speech:** `TtsService` wrapping iOS AVSpeechSynthesizer via platform channels — zero binary size increase
+- Speak, stop, pause, resume with voice/rate/pitch/volume control
+- Real-time word boundary events via EventChannel for text highlighting
+- Neural/enhanced voice filtering (iOS 16+ high-quality voices)
+- `TtsVoice`, `TtsEvent`, `TtsEventType`, `TtsState` types exported
+- TTS demo screen with voice picker, rate/pitch sliders, and live word highlighting
+- Completes the voice pipeline: STT → LLM → TTS
+
 ## [2.2.0] - 2026-02-20
 
 ### Added
