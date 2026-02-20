@@ -450,7 +450,7 @@ Phase 6 (Streaming)  ----+
 | 21. Standalone Sample Apps | 0/? | Planned | -- |
 | 22. On-Device Intent Engine Demo | 2/3 | Complete    | 2024-02-19 |
 | 23. Image Generation | 3/4 | **In Progress** | -- |
-| 24. Voice Pipeline | 0/3 | Planned | -- |
+| 24. Voice Pipeline | 1/3 | **In Progress** | -- |
 | 25. LoRA Adapter Support | 0/? | Planned | -- |
 | 26. Polished Example Apps | 0/? | Planned | -- |
 
@@ -751,7 +751,7 @@ Plans:
 **Plans:** 3 plans in 3 waves
 
 Plans:
-- [ ] 24-01-PLAN.md — AVAudioSession config + VoicePipeline core class with state machine, VAD, event stream
+- [x] 24-01-PLAN.md — AVAudioSession config + VoicePipeline core class with state machine, VAD, event stream
 - [ ] 24-02-PLAN.md — Full conversation loop (STT → LLM → TTS) with interruptible TTS/LLM, lifecycle, Scheduler
 - [ ] 24-03-PLAN.md — Voice demo screen with animated orb, 5-tab navigation, SDK exports, human verification
 
