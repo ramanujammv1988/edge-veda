@@ -365,8 +365,11 @@ void _handleGenerateImage(
   // Allocate result struct
   final resultPtr = calloc<EvImageResult>();
 
-  // Set up progress callback using NativeCallable.listener
-  // This allows C code to call back into Dart within this isolate
+  // Set up progress callback using NativeCallable.isolateLocal
+  // .listener posts to event loop which is blocked by the synchronous
+  // evImageGenerate FFI call; .isolateLocal fires synchronously on the
+  // calling thread which is correct here since sd.cpp calls the progress
+  // callback on the same thread that called evImageGenerate
   late final ffi.NativeCallable<EvImageProgressCbNative> nativeCallback;
 
   void onProgress(
@@ -382,7 +385,7 @@ void _handleGenerateImage(
     ));
   }
 
-  nativeCallback = ffi.NativeCallable<EvImageProgressCbNative>.listener(
+  nativeCallback = ffi.NativeCallable<EvImageProgressCbNative>.isolateLocal(
     onProgress,
   );
 
