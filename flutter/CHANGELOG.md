@@ -5,6 +5,20 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-02-20
+
+### Added
+- **Image generation Scheduler integration:** `WorkloadId.image` registered with central Scheduler for QoS-gated generation, latency tracking, and thermal/battery awareness
+- **Cross-worker memory eviction:** Scheduler auto-disposes lowest-priority idle workers when RSS exceeds memory ceiling by >10% — prevents OOM on constrained devices
+- **Image idle auto-disposal:** SD model (2.3 GB) automatically freed after 60 seconds of inactivity
+- **Image progress callbacks fixed:** `NativeCallable.isolateLocal` replaces `.listener` — per-step progress now fires in real-time during generation
+- **Strict schema validation:** `SchemaValidator.validateStrict()` rejects extra keys at any nesting depth
+- **JSON recovery:** `JsonRecovery.tryRepair()` auto-fixes truncated/malformed model output (unclosed brackets, trailing garbage, unterminated strings)
+- **Validation telemetry:** `ValidationEvent` emitted on every `sendStructured()` call with pass/fail, recovery details, and timing
+
+### Fixed
+- Image generation: keep SD model weights alive across multiple generations (was crashing on 2nd image with GGML_ASSERT(buft) due to free_params_immediately freeing CLIP/UNet/VAE buffers)
+
 ## [2.1.2] - 2026-02-19
 
 ### Fixed
