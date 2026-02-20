@@ -7,7 +7,13 @@ import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
 import 'detective_screen.dart';
+import 'device_info_android.dart';
+import 'performance_screen.dart';
+import 'performance_trackers.dart';
 import 'soak_test_screen.dart';
+import 'storage_validation_screen.dart';
+import 'structured_output_screen.dart';
+import 'tool_calling_screen.dart';
 
 /// Settings tab with generation controls, storage overview, model management,
 /// and about section.
@@ -29,6 +35,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Model recommendation use case selector
   UseCase _selectedUseCase = UseCase.chat;
 
+  // Async device info for Android
+  String? _androidModel;
+  String? _androidChip;
+  int? _androidMemoryBytes;
+  bool? _androidNeuralEngine;
+
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isAndroid) {
+      _loadAndroidDeviceInfo();
+    }
+  }
+
+  Future<void> _loadAndroidDeviceInfo() async {
+    final model = await DeviceInfoAndroid.getDeviceModel();
+    final chip = await DeviceInfoAndroid.getChipName();
+    final mem = await DeviceInfoAndroid.getTotalMemory();
+    final neural = await DeviceInfoAndroid.hasNeuralEngine();
+    if (mounted) {
+      setState(() {
+        _androidModel = model;
+        _androidChip = chip;
+        _androidMemoryBytes = mem;
+        _androidNeuralEngine = neural;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,6 +84,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildGenerationSection(),
           const SizedBox(height: 24),
           _buildStorageSection(),
+          const SizedBox(height: 24),
+          _buildPerformanceSection(),
+          const SizedBox(height: 24),
+          _buildStructuredOutputSection(),
+          const SizedBox(height: 24),
+          _buildToolCallingSection(),
           const SizedBox(height: 24),
           _buildModelsSection(),
           const SizedBox(height: 24),
@@ -96,9 +137,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ── Device Status Helpers ─────────────────────────────────────────────
+
+  String get _deviceModel {
+    if (Platform.isIOS || Platform.isMacOS) return _DeviceInfo.model;
+    if (Platform.isAndroid) return _androidModel ?? 'Loading...';
+    return Platform.operatingSystem;
+  }
+
+  String get _deviceChip {
+    if (Platform.isIOS || Platform.isMacOS) return _DeviceInfo.chip;
+    if (Platform.isAndroid) return _androidChip ?? 'Loading...';
+    return 'Unknown';
+  }
+
+  String get _deviceMemory {
+    if (Platform.isIOS || Platform.isMacOS) return _DeviceInfo.memoryString;
+    if (Platform.isAndroid && _androidMemoryBytes != null) {
+      final gb = _androidMemoryBytes! / (1024 * 1024 * 1024);
+      return '${gb.toStringAsFixed(2)} GB';
+    }
+    return 'Unknown';
+  }
+
+  bool get _deviceHasNeuralEngine {
+    if (Platform.isIOS) return true;
+    if (Platform.isMacOS) return true;
+    if (Platform.isAndroid) return _androidNeuralEngine ?? false;
+    return false;
+  }
+
   // ── Section 0: Device Status ────────────────────────────────────────────
 
   Widget _buildDeviceStatusSection() {
+    final device = DeviceProfile.detect();
+    final estimate = MemoryEstimator.estimate(
+      model: ModelRegistry.llama32_1b,
+      device: device,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -109,21 +186,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildAboutRow(
                 icon: Icons.phone_iphone,
                 title: 'Model',
-                value: _DeviceInfo.model,
+                value: _deviceModel,
               ),
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.developer_board,
                 title: 'Chip',
-                value: _DeviceInfo.chip,
+                value: _deviceChip,
               ),
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.memory,
                 title: 'Memory',
-                value: _DeviceInfo.memoryString,
+                value: _deviceMemory,
               ),
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
@@ -144,10 +221,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const Spacer(),
                     Icon(
-                      _DeviceInfo.hasNeuralEngine
+                      _deviceHasNeuralEngine
                           ? Icons.check_circle
                           : Icons.cancel_outlined,
-                      color: _DeviceInfo.hasNeuralEngine
+                      color: _deviceHasNeuralEngine
                           ? AppTheme.success
                           : AppTheme.textTertiary,
                       size: 22,
@@ -158,6 +235,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildTierBadgeRow(),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              // MemoryEstimator display for recommended model
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    const Icon(Icons.analytics, color: AppTheme.accent, size: 22),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Memory Estimate',
+                            style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Llama 3.2 1B (recommended)',
+                            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: estimate.fits
+                            ? AppTheme.success.withValues(alpha: 0.15)
+                            : AppTheme.danger.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '~${estimate.totalMB} MB',
+                        style: TextStyle(
+                          color: estimate.fits ? AppTheme.success : AppTheme.danger,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -281,6 +403,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Section 1: Generation Settings ──────────────────────────────────────
 
   Widget _buildGenerationSection() {
+    // Default RAG config for display
+    const ragConfig = RagConfig();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -366,6 +491,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              // ChatTemplateFormat info
+              _buildAboutRow(
+                icon: Icons.code,
+                title: 'Chat Template',
+                value: 'Llama 3 Instruct',
+              ),
+              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              // RagConfig info
+              _buildAboutRow(
+                icon: Icons.search,
+                title: 'RAG topK',
+                value: '${ragConfig.topK}',
+              ),
+              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              _buildAboutRow(
+                icon: Icons.filter_alt_outlined,
+                title: 'RAG minScore',
+                value: ragConfig.minScore.toStringAsFixed(1),
+              ),
             ],
           ),
         ),
@@ -391,73 +536,224 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         _buildSectionHeader('Storage'),
         _buildCard(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    const Icon(Icons.storage, color: AppTheme.accent, size: 22),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Models',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '~${totalGb.toStringAsFixed(1)} GB',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Storage bar
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: SizedBox(
-                    height: 6,
-                    child: Stack(
+                    Row(
                       children: [
-                        // Background
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: AppTheme.surfaceVariant,
+                        const Icon(Icons.storage, color: AppTheme.accent, size: 22),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Models',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                        // Fill (proportional to ~1.3GB out of ~4GB capacity estimate)
-                        FractionallySizedBox(
-                          widthFactor: (totalGb / 4.0).clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppTheme.accent,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
+                        Text(
+                          '~${totalGb.toStringAsFixed(1)} GB',
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 14,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${totalGb.toStringAsFixed(1)} GB used',
-                    style: const TextStyle(
-                      color: AppTheme.textTertiary,
-                      fontSize: 11,
+                    const SizedBox(height: 12),
+                    // Storage bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: SizedBox(
+                        height: 6,
+                        child: Stack(
+                          children: [
+                            // Background
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: AppTheme.surfaceVariant,
+                              ),
+                            ),
+                            // Fill (proportional to ~1.3GB out of ~4GB capacity estimate)
+                            FractionallySizedBox(
+                              widthFactor: (totalGb / 4.0).clamp(0.0, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accent,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${totalGb.toStringAsFixed(1)} GB used',
+                        style: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              // Validation Details navigation
+              ListTile(
+                leading: const Icon(Icons.verified_user, color: AppTheme.accent),
+                title: const Text(
+                  'Validation Details',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                ),
+                subtitle: const Text(
+                  'StorageCheck, MemoryValidation, MemoryEstimator',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_right, color: AppTheme.textTertiary),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const StorageValidationScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Section: Performance ────────────────────────────────────────────────
+
+  Widget _buildPerformanceSection() {
+    final latency = PerformanceTrackers.latency;
+    final p50 = latency.p50;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Performance'),
+        _buildCard(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    const Icon(Icons.speed, color: AppTheme.accent, size: 22),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Latency p50',
+                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    ),
+                    const Spacer(),
+                    Text(
+                      p50 != null ? '${p50.toStringAsFixed(0)}ms' : 'No data',
+                      style: TextStyle(
+                        color: p50 != null ? AppTheme.accent : AppTheme.textTertiary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              ListTile(
+                leading: const Icon(Icons.analytics, color: AppTheme.accent),
+                title: const Text(
+                  'View Details',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                ),
+                subtitle: const Text(
+                  'Latency, battery drain, memory pressure',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_right, color: AppTheme.textTertiary),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const PerformanceScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Section: Structured Output ──────────────────────────────────────────
+
+  Widget _buildStructuredOutputSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Structured Output'),
+        _buildCard(
+          child: ListTile(
+            leading: const Icon(Icons.schema, color: AppTheme.accent),
+            title: const Text(
+              'Schema & Grammar Tools',
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
             ),
+            subtitle: const Text(
+              'SchemaValidator, GBNF Builder, ToolTemplate',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            ),
+            trailing: const Icon(Icons.chevron_right, color: AppTheme.textTertiary),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const StructuredOutputScreen(),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Section: Tool Calling ───────────────────────────────────────────────
+
+  Widget _buildToolCallingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Tool Calling'),
+        _buildCard(
+          child: ListTile(
+            leading: const Icon(Icons.build_outlined, color: AppTheme.accent),
+            title: const Text(
+              'Advanced Tool Calling',
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            ),
+            subtitle: const Text(
+              'ToolPriority, QoS budget filtering',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            ),
+            trailing: const Icon(Icons.chevron_right, color: AppTheme.textTertiary),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ToolCallingScreen(),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -943,7 +1239,7 @@ class _RecommendationRow extends StatelessWidget {
   }
 }
 
-// ── Device Info Helper (sysctlbyname FFI) ────────────────────────────────
+// ── Device Info Helper (sysctlbyname FFI — iOS/macOS only) ────────────────
 
 typedef _SysctlByNameC = ffi.Int Function(
   ffi.Pointer<ffi.Char>,

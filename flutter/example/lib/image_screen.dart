@@ -12,12 +12,20 @@ class _GeneratedImage {
   final String prompt;
   final DateTime timestamp;
   final double generationTimeMs;
+  final bool isRaw;
+  final int? rawWidth;
+  final int? rawHeight;
+  final int? rawChannels;
 
   const _GeneratedImage({
     required this.pngBytes,
     required this.prompt,
     required this.timestamp,
     required this.generationTimeMs,
+    this.isRaw = false,
+    this.rawWidth,
+    this.rawHeight,
+    this.rawChannels,
   });
 }
 
@@ -61,6 +69,9 @@ class _ImageScreenState extends State<ImageScreen> {
   // Gallery
   final List<_GeneratedImage> _generatedImages = [];
   int _selectedImageIndex = -1;
+
+  // Raw output toggle
+  bool _useRawOutput = false;
 
   // Advanced settings
   bool _showAdvanced = false;
@@ -205,35 +216,81 @@ class _ImageScreenState extends State<ImageScreen> {
 
       final stopwatch = Stopwatch()..start();
 
-      final pngBytes = await _edgeVeda.generateImage(
-        prompt,
-        config: config,
-        onProgress: (progress) {
-          if (mounted) {
-            setState(() {
-              _currentStep = progress.step;
-              _totalSteps = progress.totalSteps;
-            });
-          }
-        },
-      );
-
-      stopwatch.stop();
-
-      if (mounted) {
-        final newImage = _GeneratedImage(
-          pngBytes: pngBytes,
-          prompt: prompt,
-          timestamp: DateTime.now(),
-          generationTimeMs: stopwatch.elapsedMilliseconds.toDouble(),
+      if (_useRawOutput) {
+        // Use generateImageRaw() for raw RGB output
+        final result = await _edgeVeda.generateImageRaw(
+          prompt,
+          config: config,
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() {
+                _currentStep = progress.step;
+                _totalSteps = progress.totalSteps;
+              });
+            }
+          },
         );
 
-        setState(() {
-          _generatedImages.add(newImage);
-          _selectedImageIndex = _generatedImages.length - 1;
-          _isGenerating = false;
-          _currentStep = 0;
-        });
+        stopwatch.stop();
+
+        if (mounted) {
+          // Convert raw RGB to displayable PNG (use the raw data directly for display info)
+          // For display, we also generate a PNG version
+          final pngBytes = await _edgeVeda.generateImage(
+            prompt,
+            config: config,
+          );
+
+          final newImage = _GeneratedImage(
+            pngBytes: pngBytes,
+            prompt: prompt,
+            timestamp: DateTime.now(),
+            generationTimeMs: stopwatch.elapsedMilliseconds.toDouble(),
+            isRaw: true,
+            rawWidth: result.width,
+            rawHeight: result.height,
+            rawChannels: result.channels,
+          );
+
+          setState(() {
+            _generatedImages.add(newImage);
+            _selectedImageIndex = _generatedImages.length - 1;
+            _isGenerating = false;
+            _currentStep = 0;
+          });
+        }
+      } else {
+        // Standard PNG output
+        final pngBytes = await _edgeVeda.generateImage(
+          prompt,
+          config: config,
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() {
+                _currentStep = progress.step;
+                _totalSteps = progress.totalSteps;
+              });
+            }
+          },
+        );
+
+        stopwatch.stop();
+
+        if (mounted) {
+          final newImage = _GeneratedImage(
+            pngBytes: pngBytes,
+            prompt: prompt,
+            timestamp: DateTime.now(),
+            generationTimeMs: stopwatch.elapsedMilliseconds.toDouble(),
+          );
+
+          setState(() {
+            _generatedImages.add(newImage);
+            _selectedImageIndex = _generatedImages.length - 1;
+            _isGenerating = false;
+            _currentStep = 0;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -296,12 +353,28 @@ class _ImageScreenState extends State<ImageScreen> {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 8),
-            child: Text(
-              '${(image.generationTimeMs / 1000).toStringAsFixed(1)}s',
-              style: const TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 11,
-              ),
+            child: Column(
+              children: [
+                Text(
+                  '${(image.generationTimeMs / 1000).toStringAsFixed(1)}s',
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
+                if (image.isRaw && image.rawWidth != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      'Raw RGB: ${image.rawWidth}x${image.rawHeight} (${image.rawChannels}ch, ${image.rawWidth! * image.rawHeight! * image.rawChannels!} bytes)',
+                      style: const TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 10,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -709,6 +782,30 @@ class _ImageScreenState extends State<ImageScreen> {
                 child: SizedBox(
                   height: 32,
                   child: _buildSamplerDropdown(),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // Raw RGB output toggle
+          Row(
+            children: [
+              const Text(
+                'Raw RGB',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                height: 28,
+                child: Switch.adaptive(
+                  value: _useRawOutput,
+                  onChanged: (v) => setState(() => _useRawOutput = v),
+                  activeColor: AppTheme.accent,
                 ),
               ),
             ],

@@ -10,6 +10,7 @@ import 'package:edge_veda/edge_veda.dart';
 import 'app_theme.dart';
 import 'image_screen.dart';
 import 'model_selection_modal.dart';
+import 'performance_trackers.dart';
 import 'settings_screen.dart';
 import 'vision_screen.dart';
 import 'voice_screen.dart';
@@ -210,6 +211,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   int? _timeToFirstTokenMs;
   double? _tokensPerSecond;
   double? _memoryMb;
+  double? _lastConfidence;
+  bool _lastNeedsCloudHandoff = false;
   final _stopwatch = Stopwatch();
 
   @override
@@ -323,10 +326,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
         // Listen to download progress
         _modelManager.downloadProgress.listen((progress) {
+          final speedStr = progress.speedBytesPerSecond != null
+              ? ' @ ${_formatBytes(progress.speedBytesPerSecond!.round())}/s'
+              : '';
+          final etaStr = progress.estimatedSecondsRemaining != null
+              ? ' ~${progress.estimatedSecondsRemaining}s left'
+              : '';
           setState(() {
             _downloadProgress = progress.progress;
             _statusMessage =
-                'Downloading: ${progress.progressPercent}% (${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)})';
+                'Downloading: ${progress.progressPercent}% (${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)})$speedStr$etaStr';
           });
         });
 
@@ -900,6 +909,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _streamingText = '';
       _timeToFirstTokenMs = null;
       _tokensPerSecond = null;
+      _lastConfidence = null;
+      _lastNeedsCloudHandoff = false;
       _statusMessage = 'Initializing streaming worker (first call loads model)...';
     });
 
@@ -971,6 +982,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         buffer.write(chunk.token);
         _streamingTokenCount++;
 
+        // Track confidence and cloud handoff from token chunks
+        if (chunk.confidence != null) {
+          _lastConfidence = chunk.confidence;
+        }
+        if (chunk.needsCloudHandoff) {
+          _lastNeedsCloudHandoff = true;
+        }
+
         // Update UI on first token, then every 3 tokens or on newlines
         if (_streamingTokenCount == 1 || _streamingTokenCount % 3 == 0 || chunk.token.contains('\n')) {
           setState(() {
@@ -1000,6 +1019,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
           );
         }
+      }
+
+      // Record latency for PerformanceTrackers
+      if (stopwatch.elapsedMilliseconds > 0) {
+        PerformanceTrackers.latency.add(stopwatch.elapsedMilliseconds.toDouble());
       }
 
       // Get memory stats after streaming
@@ -1708,6 +1732,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 : '-',
             icon: Icons.memory,
           ),
+          if (_lastConfidence != null)
+            _buildMetricChip(
+              label: 'Confidence',
+              value: '${(_lastConfidence! * 100).toStringAsFixed(0)}%',
+              icon: Icons.psychology,
+            ),
+          if (_lastNeedsCloudHandoff)
+            const _CloudHandoffBadge(),
         ],
       ),
     );
@@ -2480,6 +2512,37 @@ class MessageBubble extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small badge shown in the metrics bar when the model recommends cloud handoff.
+class _CloudHandoffBadge extends StatelessWidget {
+  const _CloudHandoffBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.cloud_upload_outlined, size: 12, color: AppTheme.warning),
+          SizedBox(width: 3),
+          Text(
+            'Cloud',
+            style: TextStyle(
+              fontSize: 10,
+              color: AppTheme.warning,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
