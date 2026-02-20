@@ -6,6 +6,7 @@
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
+[![Discord](https://img.shields.io/discord/1341234567890?logo=discord&label=Discord&color=5865F2)](https://discord.gg/rv8qZMGC)
 
 ---
 
@@ -42,6 +43,31 @@ A **supervised on-device AI runtime** that:
 ```yaml
 dependencies:
   edge_veda: ^2.1.0
+```
+
+### iOS Setup
+
+Update your `ios/Podfile` with two required changes:
+
+```ruby
+# ios/Podfile — add this at the top
+platform :ios, '16.0'
+
+target 'Runner' do
+  # REQUIRED: use_modular_headers! instead of use_frameworks!
+  # Edge-Veda uses FFI via DynamicLibrary.process() which requires
+  # native symbols linked into the main app binary.
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  # ...
+end
+```
+
+**Important:** The default Flutter Podfile uses `use_frameworks!` which isolates native symbols inside framework bundles, making them invisible to Dart FFI. You **must** change this to `use_modular_headers!` for Edge-Veda to work. After changing, run a clean rebuild:
+
+```bash
+cd ios && rm -rf Pods Podfile.lock && cd .. && flutter clean && flutter pub get && cd ios && pod install
 ```
 
 ---
@@ -440,6 +466,12 @@ Any GGUF model compatible with llama.cpp or whisper.cpp can be loaded by file pa
 | iOS (device) | Metal | Fully validated on-device |
 | iOS (simulator) | CPU | Working (Metal stubs) |
 | Android | CPU | Scaffolded, validation pending |
+
+---
+
+## Community
+
+Join us on [Discord](https://discord.gg/rv8qZMGC) to ask questions, share what you're building, and get help from the community.
 
 ---
 
