@@ -50,6 +50,25 @@ export interface EdgeVedaConfig {
    */
   numThreads?: number;
 
+  // Archive C API v2.1.0 — KV-cache quantization and flash attention
+  /**
+   * Flash attention mode: -1 = auto (default), 0 = disabled, 1 = enabled.
+   * Maps to ev_config.flash_attn.
+   */
+  flashAttn?: number;
+
+  /**
+   * KV-cache key data type: 1 = F16, 8 = Q8_0 (default, halves cache size).
+   * Maps to ev_config.kv_cache_type_k.
+   */
+  kvCacheTypeK?: number;
+
+  /**
+   * KV-cache value data type: 1 = F16, 8 = Q8_0 (default).
+   * Maps to ev_config.kv_cache_type_v.
+   */
+  kvCacheTypeV?: number;
+
   /**
    * Enable model caching in IndexedDB
    * @default true
@@ -121,6 +140,30 @@ export interface GenerateOptions {
    * Random seed for reproducibility
    */
   seed?: number;
+
+  // Flutter gold standard — confidence scoring and grammar-constrained decoding
+  /**
+   * Confidence threshold (0.0 = disabled). When set, enables per-token confidence
+   * values in StreamChunk. Mirrors Flutter SDK's GenerateOptions.confidenceThreshold.
+   */
+  confidenceThreshold?: number;
+
+  /**
+   * Force JSON mode output. Mirrors Flutter SDK's GenerateOptions.jsonMode.
+   */
+  jsonMode?: boolean;
+
+  /**
+   * GBNF grammar string for constrained decoding (used by GbnfBuilder).
+   * Mirrors Flutter SDK's GenerateOptions.grammarStr.
+   */
+  grammarStr?: string;
+
+  /**
+   * Grammar entry point name (default: 'root').
+   * Mirrors Flutter SDK's GenerateOptions.grammarRoot.
+   */
+  grammarRoot?: string;
 }
 
 /**
@@ -635,6 +678,28 @@ export interface MemoryStats {
    * Bytes consumed by the KV context cache (ev_memory_stats.context_bytes)
    */
   contextBytes?: number;
+
+  // Flutter / archive-aligned computed fields (cross-platform parity)
+  /**
+   * Alias for `used` — current active bytes. Mirrors Flutter MemoryStats.currentBytes.
+   */
+  currentBytes?: number;
+
+  /**
+   * Ratio of currentBytes to limitBytes (0.0 if limitBytes is 0 or absent).
+   * Mirrors Flutter MemoryStats.usagePercent.
+   */
+  usagePercent?: number;
+
+  /**
+   * True when usagePercent exceeds 0.8. Mirrors Flutter MemoryStats.isHighPressure.
+   */
+  isHighPressure?: boolean;
+
+  /**
+   * True when usagePercent exceeds 0.9. Mirrors Flutter MemoryStats.isCritical.
+   */
+  isCritical?: boolean;
 }
 
 /**
