@@ -1,10 +1,12 @@
 /// Voice pipeline orchestrator for real-time voice conversations.
 ///
 /// [VoicePipeline] manages the full STT -> LLM -> TTS loop with
-/// energy-based VAD for turn detection, adaptive threshold calibration,
-/// and interruptible TTS. The pipeline is event-driven: audio frames
-/// from the microphone drive state transitions through a well-defined
-/// state machine.
+/// energy-based VAD for turn detection and stop-mic echo prevention.
+/// The pipeline is event-driven: audio frames from the microphone drive
+/// state transitions through a well-defined state machine.
+///
+/// The microphone is paused during transcribing, thinking, and speaking
+/// states to prevent echo. It resumes with a cooldown after TTS completes.
 ///
 /// The native [AVAudioSession] is configured for simultaneous mic capture
 /// and TTS playback with built-in echo cancellation before the microphone
@@ -46,21 +48,16 @@ import 'whisper_session.dart';
 /// Pipeline state machine states.
 ///
 /// Transitions:
-/// - idle -> calibrating (on start)
-/// - calibrating -> listening (after calibration completes)
+/// - idle -> listening (on start)
 /// - listening -> transcribing (after speech + silence detected)
 /// - transcribing -> thinking (after transcript obtained)
 /// - thinking -> speaking (after LLM response completes)
-/// - thinking -> listening (on user interruption or empty response)
-/// - speaking -> listening (after TTS finishes or user interrupts)
+/// - speaking -> listening (after TTS finishes + cooldown)
 /// - any -> error (on fatal error)
 /// - any -> idle (on stop)
 enum VoicePipelineState {
   /// Pipeline not running.
   idle,
-
-  /// Collecting ambient noise samples for adaptive VAD threshold.
-  calibrating,
 
   /// Waiting for user speech (mic active, VAD monitoring).
   listening,
@@ -85,7 +82,11 @@ sealed class VoicePipelineEvent {}
 class StateChanged extends VoicePipelineEvent {
   /// The new pipeline state.
   final VoicePipelineState state;
-  StateChanged(this.state);
+
+  /// Audio level (RMS energy) during listening state, 0.0 otherwise.
+  final double audioLevel;
+
+  StateChanged(this.state, {this.audioLevel = 0.0});
 }
 
 /// Emitted when a transcript is available or updated.
@@ -123,20 +124,11 @@ class VoicePipelineConfig {
   /// 10 frames at 100ms each = 1 second.
   final Duration silenceDuration;
 
-  /// Duration of ambient noise collection for threshold calibration.
-  /// 20 frames at 100ms each = 2 seconds.
-  final Duration calibrationDuration;
-
   /// VAD threshold multiplier: threshold = mean + (multiplier * stddev).
   /// 2.5 provides good speech/silence separation without false triggers.
   final double thresholdMultiplier;
 
-  /// TTS threshold multiplier applied during speaking state.
-  /// 1.5x mild elevation prevents echo from triggering interruption.
-  /// NOT 3x like RunAnywhere -- that misses real interruptions.
-  final double ttsThresholdMultiplier;
-
-  /// Cooldown after TTS finishes before re-enabling VAD at normal threshold.
+  /// Cooldown after TTS finishes before resuming microphone.
   /// Prevents residual audio from triggering false speech detection.
   final Duration ttsCooldown;
 
@@ -158,10 +150,8 @@ class VoicePipelineConfig {
 
   const VoicePipelineConfig({
     this.silenceDuration = const Duration(milliseconds: 1000),
-    this.calibrationDuration = const Duration(milliseconds: 2000),
     this.thresholdMultiplier = 2.5,
-    this.ttsThresholdMultiplier = 1.5,
-    this.ttsCooldown = const Duration(milliseconds: 300),
+    this.ttsCooldown = const Duration(milliseconds: 800),
     this.silenceTimeout = const Duration(seconds: 30),
     this.voiceId,
     this.ttsRate = 0.5,
@@ -176,16 +166,15 @@ class VoicePipelineConfig {
 /// microphone drive state transitions through a well-defined state
 /// machine. The pipeline:
 ///
-/// 1. Calibrates the VAD threshold from ambient noise
+/// 1. Starts listening immediately (no calibration phase)
 /// 2. Listens for speech using energy-based VAD
 /// 3. Transcribes speech via WhisperSession
 /// 4. Streams LLM response via ChatSession.sendStream() with CancelToken
 /// 5. Speaks the response via TtsService
 /// 6. Returns to listening for the next turn
 ///
-/// Supports interruption: user speech during thinking or speaking states
-/// cancels the current operation and starts a new listening turn. Post-TTS
-/// cooldown prevents residual audio from triggering false speech detection.
+/// Pauses the microphone during transcribing, thinking, and speaking
+/// states to prevent echo. Resumes with a cooldown after TTS completes.
 ///
 /// App lifecycle: call [pause] when going to background, [resume] when
 /// returning to foreground. The microphone subscription is paused (not
@@ -212,17 +201,16 @@ class VoicePipeline {
   CancelToken? _llmCancelToken;
 
   // VAD state
-  double _threshold = 0.015; // Default until calibrated
-  final List<double> _calibrationRmsValues = [];
+  /// Fixed VAD threshold. No calibration needed -- 0.03 works well across
+  /// typical environments.
+  final double _threshold = 0.03;
   int _silentFrameCount = 0;
   int _totalSilentFrameCount = 0;
   bool _speechDetected = false;
+  int _speechFrameCount = 0;
 
   // Conversation loop guards
   bool _isProcessingTurn = false;
-  bool _isCoolingDown = false;
-  Timer? _cooldownTimer;
-  Timer? _interruptionTransitionTimer;
 
   // Conversation transcript tracking
   final List<({String user, String assistant})> _turns = [];
@@ -232,7 +220,6 @@ class VoicePipeline {
 
   // Audio frame constants
   static const int _frameSizeMs = 100;
-  static const int _sampleRate = 16000;
   static const int _frameSizeSamples = 1600; // 100ms at 16kHz
 
   // Internal buffer for chunking incoming audio into fixed-size frames
@@ -275,20 +262,11 @@ class VoicePipeline {
   List<({String user, String assistant})> get turns =>
       List.unmodifiable(_turns);
 
-  /// Active VAD threshold, elevated during speaking state and cooldown
-  /// to prevent echo from triggering false interruption detection.
-  double get _activeThreshold {
-    if (_state == VoicePipelineState.speaking || _isCoolingDown) {
-      return _threshold * config.ttsThresholdMultiplier;
-    }
-    return _threshold;
-  }
-
   /// Start the voice pipeline.
   ///
   /// Configures the native audio session for simultaneous mic + speaker,
   /// creates a WhisperSession, registers with the Scheduler, subscribes
-  /// to TTS events, starts the microphone, and begins calibration.
+  /// to TTS events, starts the microphone, and begins listening.
   ///
   /// Throws [StateError] if the pipeline is already running.
   Future<void> start() async {
@@ -315,13 +293,13 @@ class VoicePipeline {
       // Start microphone -- called ONCE, never restarted
       _micSubscription = WhisperSession.microphone().listen(_onAudioFrame);
 
-      // Begin calibration
-      _calibrationRmsValues.clear();
+      // Begin listening immediately (no calibration phase)
       _silentFrameCount = 0;
       _totalSilentFrameCount = 0;
       _speechDetected = false;
+      _speechFrameCount = 0;
       _frameBuffer.clear();
-      _setState(VoicePipelineState.calibrating);
+      _setState(VoicePipelineState.listening);
     } catch (e) {
       _setState(VoicePipelineState.error);
       _eventController.add(PipelineError('Failed to start pipeline: $e',
@@ -366,16 +344,12 @@ class VoicePipeline {
 
       // Dispatch to state-specific handler
       switch (_state) {
-        case VoicePipelineState.calibrating:
-          _handleCalibrating(rms);
         case VoicePipelineState.listening:
           _handleListening(rms, frame);
-        case VoicePipelineState.thinking:
-          _handleThinking(rms, frame);
-        case VoicePipelineState.speaking:
-          _handleSpeaking(rms, frame);
+        // Mic paused -- no audio arrives in these states
         case VoicePipelineState.transcribing:
-          // Buffer audio but do NOT feed to WhisperSession (it is processing)
+        case VoicePipelineState.thinking:
+        case VoicePipelineState.speaking:
           break;
         case VoicePipelineState.idle:
         case VoicePipelineState.error:
@@ -384,47 +358,15 @@ class VoicePipeline {
     }
   }
 
-  /// Calibration: collect ambient noise RMS values to set adaptive threshold.
-  void _handleCalibrating(double rms) {
-    _calibrationRmsValues.add(rms);
-
-    final requiredFrames =
-        config.calibrationDuration.inMilliseconds ~/ _frameSizeMs;
-
-    if (_calibrationRmsValues.length >= requiredFrames) {
-      // Calculate mean
-      double sum = 0.0;
-      for (final v in _calibrationRmsValues) {
-        sum += v;
-      }
-      final mean = sum / _calibrationRmsValues.length;
-
-      // Calculate standard deviation
-      double varianceSum = 0.0;
-      for (final v in _calibrationRmsValues) {
-        varianceSum += (v - mean) * (v - mean);
-      }
-      final stddev = sqrt(varianceSum / _calibrationRmsValues.length);
-
-      // Set threshold: mean + multiplier * stddev
-      _threshold = mean + (config.thresholdMultiplier * stddev);
-
-      // Clamp minimum to avoid threshold being too low in very quiet rooms
-      if (_threshold < 0.005) _threshold = 0.005;
-
-      // Reset counters and transition to listening
-      _silentFrameCount = 0;
-      _totalSilentFrameCount = 0;
-      _speechDetected = false;
-      _setState(VoicePipelineState.listening);
-    }
-  }
-
   /// Listening: detect speech onset and end-of-speech silence.
   void _handleListening(double rms, Float32List frame) {
-    if (rms > _activeThreshold) {
+    // Emit audio level every frame for UI visualization
+    _eventController.add(StateChanged(VoicePipelineState.listening, audioLevel: rms));
+
+    if (rms > _threshold) {
       // Speech detected
       _speechDetected = true;
+      _speechFrameCount++;
       _silentFrameCount = 0;
       _totalSilentFrameCount = 0;
     } else {
@@ -446,108 +388,81 @@ class VoicePipeline {
       if (_speechDetected &&
           _silentFrameCount >= silenceFrames &&
           !_isProcessingTurn) {
-        _setState(VoicePipelineState.transcribing);
+        // Minimum buffer check: discard short utterances under 0.8s
+        // (8 frames at 100ms each)
+        if (_speechFrameCount < 8) {
+          _speechDetected = false;
+          _silentFrameCount = 0;
+          _speechFrameCount = 0;
+          _whisperSession?.resetTranscript();
+          return;
+        }
+
+        // Pause mic before processing (stop-mic pattern)
+        _micSubscription?.pause();
         _speechDetected = false;
         _silentFrameCount = 0;
+        _speechFrameCount = 0;
+        _setState(VoicePipelineState.transcribing);
         // Fire-and-forget with error handling
         _processUserSpeech().catchError((Object e) {
           _eventController.add(PipelineError('Speech processing error: $e'));
           if (_state == VoicePipelineState.transcribing ||
               _state == VoicePipelineState.thinking) {
+            _micSubscription?.resume();
             _setState(VoicePipelineState.listening);
             _speechDetected = false;
             _silentFrameCount = 0;
+            _speechFrameCount = 0;
           }
         });
         return;
       }
+
+      // Reset speech frame count when speech ends without triggering processing
+      if (!_speechDetected) {
+        _speechFrameCount = 0;
+      }
     }
 
     // Feed audio to WhisperSession ONLY during listening state
-    // NOT during speaking/thinking -- echo prevention per research
     _whisperSession?.feedAudio(frame);
   }
 
-  /// Thinking: VAD active for interruption detection during LLM generation.
-  void _handleThinking(double rms, Float32List frame) {
-    if (rms > _activeThreshold) {
-      // User interrupted during LLM generation
-      _llmCancelToken?.cancel();
-      _whisperSession?.resetTranscript();
-      _speechDetected = true;
-      _silentFrameCount = 0;
-      _totalSilentFrameCount = 0;
-      _setState(VoicePipelineState.listening);
-      // Feed the interrupting audio to WhisperSession
-      _whisperSession?.feedAudio(frame);
-    }
-  }
-
-  /// Speaking: VAD active with elevated threshold for TTS interruption.
-  void _handleSpeaking(double rms, Float32List frame) {
-    if (rms > _activeThreshold && _interruptionTransitionTimer == null) {
-      // User interrupted TTS -- stop immediately (fire-and-forget)
-      _tts.stop();
-      // Start cooldown to keep threshold elevated while residual TTS fades
-      _startCooldown();
-      _whisperSession?.resetTranscript();
-
-      // Wait briefly for AVSpeechSynthesizer to actually stop audio output
-      // before transitioning to listening. The stop() method returns immediately
-      // but the speaker may continue outputting audio for 50-100ms. If we
-      // transition to listening immediately, residual TTS audio gets picked up
-      // by the mic and fed to WhisperSession, causing echo transcription.
-      // This delay matches the observed speaker stop latency on iOS.
-      _interruptionTransitionTimer = Timer(const Duration(milliseconds: 100), () {
-        if (_state == VoicePipelineState.speaking) {
-          _speechDetected = true;
-          _silentFrameCount = 0;
-          _totalSilentFrameCount = 0;
-          _setState(VoicePipelineState.listening);
-        }
-        _interruptionTransitionTimer = null;
-      });
-    }
-  }
-
   /// Update state and emit StateChanged event.
-  void _setState(VoicePipelineState newState) {
+  void _setState(VoicePipelineState newState, {double audioLevel = 0.0}) {
     _state = newState;
-    _eventController.add(StateChanged(newState));
+    _eventController.add(StateChanged(newState, audioLevel: audioLevel));
   }
 
   /// Handle TTS events for state transitions.
+  ///
+  /// The [_processUserSpeech] finally block handles mic resume and state
+  /// transition after TTS completes (since `await _tts.speak()` returns
+  /// when TTS finishes). This handler is kept for potential future use.
   void _onTtsEvent(TtsEvent event) {
-    if (_state != VoicePipelineState.speaking) return;
-
-    if (event.type == TtsEventType.finish) {
-      // Natural finish -- cooldown then transition to listening.
-      // Cooldown prevents the last bit of TTS audio from being detected
-      // as user speech after the speaker stops.
-      _startCooldown();
-      Future<void>.delayed(config.ttsCooldown).then((_) {
-        if (_state == VoicePipelineState.speaking) {
-          _silentFrameCount = 0;
-          _totalSilentFrameCount = 0;
-          _speechDetected = false;
-          _setState(VoicePipelineState.listening);
-        }
-      });
-    }
-    // TtsEventType.cancel is handled by _handleSpeaking -- the interruption
-    // handler calls stop(), starts cooldown, and transitions to listening
-    // after a brief delay to let speaker audio fully stop.
+    // No-op: mic resume and state transition handled by _processUserSpeech
+    // finally block after await _tts.speak() returns.
   }
 
-  /// Start the post-TTS cooldown period.
+  /// Immediately flush accumulated audio and process as speech.
   ///
-  /// During cooldown, [_activeThreshold] stays elevated to prevent
-  /// residual TTS audio from being detected as user speech.
-  void _startCooldown() {
-    _cooldownTimer?.cancel();
-    _isCoolingDown = true;
-    _cooldownTimer = Timer(config.ttsCooldown, () {
-      _isCoolingDown = false;
+  /// Push-to-talk: call this when the user presses a button to force
+  /// processing regardless of VAD silence detection. Pauses the mic
+  /// and triggers the full STT -> LLM -> TTS pipeline.
+  Future<void> sendNow() async {
+    if (_state != VoicePipelineState.listening) return;
+    _micSubscription?.pause();
+    _speechDetected = false;
+    _silentFrameCount = 0;
+    _speechFrameCount = 0;
+    _setState(VoicePipelineState.transcribing);
+    await _processUserSpeech().catchError((Object e) {
+      _eventController.add(PipelineError('Speech processing error: $e'));
+      if (_state != VoicePipelineState.idle) {
+        _micSubscription?.resume();
+        _setState(VoicePipelineState.listening);
+      }
     });
   }
 
@@ -559,13 +474,15 @@ class VoicePipeline {
   /// 3. Accumulate tokens with partial TranscriptUpdated events
   /// 4. Speak the complete response via TtsService
   ///
-  /// Supports interruption at every stage:
-  /// - During thinking: CancelToken cancels LLM generation
-  /// - During speaking: TtsService.stop() cancels TTS playback
-  /// - Re-entrancy guard prevents concurrent calls
+  /// The mic is paused for the entire duration. It resumes with a cooldown
+  /// after TTS finishes to prevent residual audio from triggering false
+  /// speech detection.
   Future<void> _processUserSpeech() async {
     if (_isProcessingTurn) return;
     _isProcessingTurn = true;
+
+    // Ensure mic is paused during entire processing
+    _micSubscription?.pause();
 
     try {
       // Step 1: Flush WhisperSession to get final transcription
@@ -656,11 +573,7 @@ class VoicePipeline {
 
       _llmCancelToken = null;
 
-      // If cancelled (user interrupted during thinking), we are already in
-      // listening state (set by _handleThinking). Don't proceed to speaking.
-      // Note: ChatSession.sendStream() rolls back the user message on
-      // cancellation. The partial response is emitted via TranscriptUpdated
-      // events so the UI can still display it.
+      // If cancelled, don't proceed to speaking.
       if (wasCancelled || _state != VoicePipelineState.thinking) {
         return;
       }
@@ -698,6 +611,18 @@ class VoicePipeline {
       }
     } finally {
       _isProcessingTurn = false;
+      // Resume mic after cooldown to prevent residual TTS audio pickup
+      if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
+        await Future<void>.delayed(config.ttsCooldown);
+        _micSubscription?.resume();
+        _speechDetected = false;
+        _silentFrameCount = 0;
+        _speechFrameCount = 0;
+        _totalSilentFrameCount = 0;
+        if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
+          _setState(VoicePipelineState.listening);
+        }
+      }
     }
   }
 
@@ -729,6 +654,7 @@ class VoicePipeline {
     _setState(VoicePipelineState.listening);
     _speechDetected = false;
     _silentFrameCount = 0;
+    _speechFrameCount = 0;
     _totalSilentFrameCount = 0;
     _isProcessingTurn = false;
     _pausedFromState = null;
@@ -788,13 +714,8 @@ class VoicePipeline {
     // Clear internal state
     _llmCancelToken = null;
     _frameBuffer.clear();
-    _calibrationRmsValues.clear();
-    _cooldownTimer?.cancel();
-    _cooldownTimer = null;
-    _isCoolingDown = false;
-    _interruptionTransitionTimer?.cancel();
-    _interruptionTransitionTimer = null;
     _isProcessingTurn = false;
+    _speechFrameCount = 0;
     _pausedFromState = null;
   }
 
