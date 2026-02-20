@@ -9,6 +9,7 @@ class DeviceInfoAndroid {
   DeviceInfoAndroid._();
 
   static const _channel = MethodChannel('com.edgeveda.edge_veda/device_info');
+  static const _telemetryChannel = MethodChannel('com.edgeveda.edge_veda/telemetry');
 
   /// Get the device model name (e.g. "Pixel 8 Pro").
   static Future<String> getDeviceModel() async {
@@ -55,6 +56,18 @@ class DeviceInfoAndroid {
       return false;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Get the active GPU backend name ("Vulkan" or "CPU").
+  static Future<String> getGpuBackend() async {
+    try {
+      final result = await _telemetryChannel.invokeMethod<String>('getGpuBackend');
+      return result ?? 'CPU';
+    } on MissingPluginException {
+      return 'CPU';
+    } catch (_) {
+      return 'CPU';
     }
   }
 }

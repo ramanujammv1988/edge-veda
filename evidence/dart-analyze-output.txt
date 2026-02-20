@@ -1,0 +1,2 @@
+# PENDING — Dart not installed on build machine (Windows)
+# Run: cd flutter && dart analyze 2>&1 | tee evidence/dart-analyze-output.txt

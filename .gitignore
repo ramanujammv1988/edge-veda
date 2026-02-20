@@ -192,6 +192,9 @@ tools/EXPERIMENTS.md
 # Internal / Planning
 .claude/
 .planning/
+.knowledge/
+.OpenClaw/
+.openclaw/
 prd.txt
 report.pdf
 EdgeVeda.xlsx

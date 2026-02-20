@@ -116,7 +116,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _promptController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Android memory pressure EventChannel
+  // Memory pressure EventChannel (Android + iOS)
   static const _memoryPressureChannel = EventChannel(
     'com.edgeveda.edge_veda/memory_pressure',
   );
@@ -224,10 +224,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _checkAndDownloadModel();
   }
 
-  /// Set up Android memory pressure listener via EventChannel
-  /// This receives onTrimMemory events from EdgeVedaPlugin.kt
+  /// Set up memory pressure listener via EventChannel (Android + iOS)
+  /// Android: receives onTrimMemory events from EdgeVedaPlugin.kt
+  /// iOS: receives UIApplicationDidReceiveMemoryWarningNotification from EdgeVedaPlugin.m
   void _setupMemoryPressureListener() {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       _memorySubscription = _memoryPressureChannel
           .receiveBroadcastStream()
           .listen((event) {

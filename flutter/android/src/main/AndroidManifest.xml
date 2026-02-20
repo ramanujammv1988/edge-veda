@@ -5,6 +5,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Audio capture for STT -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Photo library access (API 33+) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- Photo library access (API < 33) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Calendar access for Detective feature -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
     <!-- Optional: Vulkan feature for hardware acceleration -->
     <uses-feature android:name="android.hardware.vulkan.version" android:required="false" />
     <uses-feature android:name="android.hardware.vulkan.level" android:required="false" />

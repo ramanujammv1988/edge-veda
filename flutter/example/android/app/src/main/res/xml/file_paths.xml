@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Cache directory for temporary share files (e.g., detective report screenshots) -->
+    <cache-path name="cache" path="/" />
+    <!-- External files directory for shared content -->
+    <external-files-path name="external_files" path="/" />
+</paths>

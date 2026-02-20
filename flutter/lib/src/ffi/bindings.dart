@@ -79,6 +79,9 @@ enum EvBackend {
   /// Metal (iOS/macOS)
   metal(1),
 
+  /// Vulkan (Android)
+  vulkan(2),
+
   /// CPU fallback
   cpu(3);
 

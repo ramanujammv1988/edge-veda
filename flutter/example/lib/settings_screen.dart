@@ -40,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _androidChip;
   int? _androidMemoryBytes;
   bool? _androidNeuralEngine;
+  String? _androidGpuBackend;
 
   @override
   void initState() {
@@ -54,12 +55,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final chip = await DeviceInfoAndroid.getChipName();
     final mem = await DeviceInfoAndroid.getTotalMemory();
     final neural = await DeviceInfoAndroid.hasNeuralEngine();
+    final gpu = await DeviceInfoAndroid.getGpuBackend();
     if (mounted) {
       setState(() {
         _androidModel = model;
         _androidChip = chip;
         _androidMemoryBytes = mem;
         _androidNeuralEngine = neural;
+        _androidGpuBackend = gpu;
       });
     }
   }
@@ -881,7 +884,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildAboutRow(
                 icon: Icons.memory,
                 title: 'Backend',
-                value: Platform.isIOS ? 'Metal GPU' : 'CPU',
+                value: Platform.isIOS
+                    ? 'Metal GPU'
+                    : Platform.isAndroid
+                        ? '${_androidGpuBackend ?? 'CPU'} GPU'
+                        : 'CPU',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               const Padding(
