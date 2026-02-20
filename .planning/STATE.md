@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 Phase: 23 (Add Image Generation Capabilities)
 Plan: 23-03 complete (3/4 plans done)
 Status: **In Progress**
-Last activity: 2026-02-19 - Completed 23-03: ImageWorker isolate + generateImage API + types + model registry
+Last activity: 2026-02-20 - Completed quick task 6: Fix image generation onProgress callback and add idle auto-disposal
 
 Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4 complete)
 
@@ -490,6 +490,7 @@ v1.1:
 | 3 | Phone Detective noir fallback + GBNF grammar-constrained narration | 2026-02-15 | ce3c482, c276deb | [3-make-phone-detective-demo-more-exciting-](./quick/3-make-phone-detective-demo-more-exciting-/) |
 | 4 | ModelAdvisor: canRun, checkStorageAvailability, validateMemoryAfterLoad | 2026-02-15 | e9f3e0c, 12cf91e | [4-modeladvisor-storage-check-real-time-mem](./quick/4-modeladvisor-storage-check-real-time-mem/) |
 | 5 | DX quick wins: real READMEs, ffi comments, magic number docs, download UX | 2026-02-15 | d12d61e, d3b9984, dc50d4c | [5-fix-dx-quick-wins-readmes-ffi-comments-m](./quick/5-fix-dx-quick-wins-readmes-ffi-comments-m/) |
+| 6 | Fix image generation onProgress callback and add idle auto-disposal | 2026-02-20 | ef665f0, 764ce17 | [1-fix-image-generation-onprogress-callback](./quick/1-fix-image-generation-onprogress-callback/) |
 
 ### Blockers/Concerns
 
@@ -521,5 +522,6 @@ Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
 - Phase 21 added: Standalone Sample Apps -- 3 clone-and-run Flutter apps (Document Q&A, Health Advisor + RAG, Voice Journal with STT) for developer adoption
 - Phase 22 added: On-Device Intent Engine Demo -- Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, Home Assistant connector architecture
 - Phase 23 added: Add image generation capabilities
+- Phase 24 added: PR-1: Fix Image Worker Request Isolation -- prevent concurrent generateImage() cross-talk with per-request routing
 
 *Phase 20 (Smart Model Advisor) COMPLETE: DeviceProfile with 27-entry iPhone DB, MemoryEstimator calibrated to real-world 400-550MB data, ModelAdvisor 4D scoring (fit/quality/speed/context) with use-case weighted recommendations. Settings screen shows tier badge + Recommended Models section with use-case selector chips and scored model cards. Human verified on real iPhone. Android work (Phases 5, 6, 7) deferred.*
