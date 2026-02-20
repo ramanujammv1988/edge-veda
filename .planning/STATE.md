@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 ## Current Position
 
 Phase: 24 (Voice Pipeline — Unified STT -> LLM -> TTS Orchestration)
-Plan: 24-01 complete (1/3 plans done)
+Plan: 24-02 complete (2/3 plans done)
 Status: **In Progress**
-Last activity: 2026-02-20 - Completed 24-01: VoicePipeline core with state machine, VAD, native audio session
+Last activity: 2026-02-20 - Completed 24-02: VoicePipeline conversation loop with LLM streaming, TTS, interruption
 
-Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4, Phase 24: 1/3 complete)
+Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4, Phase 24: 2/3 complete)
 
 ## Milestone Summary
 
@@ -195,6 +195,15 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Phase 24 Plan 2 decisions:
+- LLM generation uses ChatSession.sendStream() with CancelToken for interruptible streaming
+- Post-TTS cooldown uses Timer-based _isCoolingDown flag + Future.delayed for state transition
+- Re-entrancy guard _isProcessingTurn prevents concurrent _processUserSpeech calls
+- Scheduler QoS uses local variable pattern for Dart null promotion on nullable _scheduler
+- Conversation turns stored in _turns list independent of ChatSession history (rollback/summarize safe)
+- TTS interruption starts cooldown before listening transition (prevents residual audio false detection)
+- pause() sets state to idle rather than adding a new "paused" enum value (simpler reuse)
 
 Phase 24 Plan 1 decisions:
 - VoicePipeline event-driven state machine: audio frames drive transitions, no async* generators
@@ -527,8 +536,8 @@ v1.1:
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 24-01-PLAN.md — VoicePipeline core with state machine, VAD, native audio session
-Resume file: .planning/phases/24-voice-pipeline-unified-stt-to-llm-to-tts-orchestration-with-real-time-voice-conversations/24-02-PLAN.md
+Stopped at: Completed 24-02-PLAN.md — VoicePipeline conversation loop with LLM streaming, TTS, interruption, lifecycle
+Resume file: .planning/phases/24-voice-pipeline-unified-stt-to-llm-to-tts-orchestration-with-real-time-voice-conversations/24-03-PLAN.md
 
 ---
 ### Roadmap Evolution

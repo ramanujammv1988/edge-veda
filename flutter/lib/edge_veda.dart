@@ -208,3 +208,13 @@ export 'src/isolate/image_worker.dart' show ImageWorker;
 
 // Text-to-Speech (TTS)
 export 'src/tts_service.dart' show TtsService, TtsVoice, TtsEvent, TtsEventType, TtsState;
+
+// Voice Pipeline (unified STT -> LLM -> TTS conversation)
+export 'src/voice_pipeline.dart' show
+    VoicePipeline,
+    VoicePipelineConfig,
+    VoicePipelineState,
+    VoicePipelineEvent,
+    StateChanged,
+    TranscriptUpdated,
+    PipelineError;
