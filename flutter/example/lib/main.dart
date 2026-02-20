@@ -12,6 +12,7 @@ import 'image_screen.dart';
 import 'model_selection_modal.dart';
 import 'settings_screen.dart';
 import 'stt_screen.dart';
+import 'tts_screen.dart';
 import 'vision_screen.dart';
 import 'welcome_screen.dart';
 
@@ -60,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const ChatScreen(),
           VisionScreen(isActive: _currentIndex == 1),
           const SttScreen(),
+          const TtsScreen(),
           const ImageScreen(),
           const SettingsScreen(),
         ],
@@ -85,6 +87,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.mic_none),
             selectedIcon: Icon(Icons.mic),
             label: 'STT',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.volume_up_outlined),
+            selectedIcon: Icon(Icons.volume_up),
+            label: 'TTS',
           ),
           NavigationDestination(
             icon: Icon(Icons.image_outlined),
