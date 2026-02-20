@@ -107,3 +107,7 @@ export type { RuntimePolicy, RuntimePolicyOptions, RuntimeCapabilities, Throttle
 export { Telemetry, latencyStatsToString } from './Telemetry';
 export type { LatencyMetric, BudgetViolationRecord, ResourceSnapshot, LatencyStats } from './Telemetry';
 export { BudgetViolationType, ViolationSeverity } from './Telemetry';
+
+// PerfTrace
+export { PerfTrace } from './PerfTrace';
+export type { TraceRecord } from './PerfTrace';

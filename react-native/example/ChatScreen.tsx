@@ -124,7 +124,6 @@ export function ChatScreen(): React.JSX.Element {
 
       await session.sendStream(
         prompt,
-        { maxTokens: 256, temperature: 0.7, topP: 0.9 },
         (token: string) => {
           if (!receivedFirst) {
             setTtft(Date.now() - start);
@@ -137,6 +136,7 @@ export function ChatScreen(): React.JSX.Element {
             setStatusMessage(`Streaming... (${tokenCount} tokens)`);
           }
         },
+        { maxTokens: 256, temperature: 0.7, topP: 0.9 },
       );
 
       const elapsed = (Date.now() - start) / 1000;
