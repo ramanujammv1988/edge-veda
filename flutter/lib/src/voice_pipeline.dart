@@ -5,8 +5,9 @@
 /// The pipeline is event-driven: audio frames from the microphone drive
 /// state transitions through a well-defined state machine.
 ///
-/// The microphone is paused during transcribing, thinking, and speaking
-/// states to prevent echo. It resumes with a cooldown after TTS completes.
+/// Audio frames are dropped (not processed) during transcribing, thinking,
+/// and speaking states to prevent echo. Processing resumes with a cooldown
+/// after TTS completes.
 ///
 /// The native [AVAudioSession] is configured for simultaneous mic capture
 /// and TTS playback with built-in echo cancellation before the microphone
@@ -173,8 +174,8 @@ class VoicePipelineConfig {
 /// 5. Speaks the response via TtsService
 /// 6. Returns to listening for the next turn
 ///
-/// Pauses the microphone during transcribing, thinking, and speaking
-/// states to prevent echo. Resumes with a cooldown after TTS completes.
+/// Drops audio frames during transcribing, thinking, and speaking states
+/// to prevent echo. Resumes processing with a cooldown after TTS completes.
 ///
 /// App lifecycle: call [pause] when going to background, [resume] when
 /// returning to foreground. The microphone subscription is paused (not
@@ -211,6 +212,16 @@ class VoicePipeline {
 
   // Conversation loop guards
   bool _isProcessingTurn = false;
+
+  // Mic gating flag: when false, _onAudioFrame drops all frames.
+  // We do NOT use StreamSubscription.pause()/resume() for turn-cycle
+  // mic control because Dart broadcast stream subscriptions buffer events
+  // during pause. On resume, the entire backlog (containing TTS speaker
+  // audio picked up by the mic) would be delivered at once and fed to
+  // Whisper, causing the assistant's response to spill over as the next
+  // "user" transcript. Instead, the subscription runs continuously and
+  // this flag gates processing.
+  bool _micListening = false;
 
   // Conversation transcript tracking
   final List<({String user, String assistant})> _turns = [];
@@ -299,6 +310,7 @@ class VoicePipeline {
       _speechDetected = false;
       _speechFrameCount = 0;
       _frameBuffer.clear();
+      _micListening = true;
       _setState(VoicePipelineState.listening);
     } catch (e) {
       _setState(VoicePipelineState.error);
@@ -313,13 +325,12 @@ class VoicePipeline {
   /// Core audio frame processing callback.
   ///
   /// Runs on every microphone delivery (~300ms at a time from native).
+  /// Gated by [_micListening] -- frames are dropped when not listening
+  /// to avoid processing stale buffered audio from during TTS playback.
   /// Chunks into 100ms (1600 sample) frames, calculates RMS energy,
   /// and dispatches to the current state handler.
   void _onAudioFrame(Float32List samples) {
-    if (_state == VoicePipelineState.idle ||
-        _state == VoicePipelineState.error) {
-      return;
-    }
+    if (!_micListening) return;
 
     // Accumulate into frame buffer
     for (int i = 0; i < samples.length; i++) {
@@ -346,7 +357,8 @@ class VoicePipeline {
       switch (_state) {
         case VoicePipelineState.listening:
           _handleListening(rms, frame);
-        // Mic paused -- no audio arrives in these states
+        // Not listening -- _micListening gate should prevent reaching here,
+        // but defense-in-depth: drop frames in non-listening states.
         case VoicePipelineState.transcribing:
         case VoicePipelineState.thinking:
         case VoicePipelineState.speaking:
@@ -398,8 +410,8 @@ class VoicePipeline {
           return;
         }
 
-        // Pause mic before processing (stop-mic pattern)
-        _micSubscription?.pause();
+        // Stop processing mic frames before handling turn
+        _micListening = false;
         _speechDetected = false;
         _silentFrameCount = 0;
         _speechFrameCount = 0;
@@ -409,7 +421,9 @@ class VoicePipeline {
           _eventController.add(PipelineError('Speech processing error: $e'));
           if (_state == VoicePipelineState.transcribing ||
               _state == VoicePipelineState.thinking) {
-            _micSubscription?.resume();
+            _frameBuffer.clear();
+            _whisperSession?.resetTranscript();
+            _micListening = true;
             _setState(VoicePipelineState.listening);
             _speechDetected = false;
             _silentFrameCount = 0;
@@ -452,7 +466,7 @@ class VoicePipeline {
   /// and triggers the full STT -> LLM -> TTS pipeline.
   Future<void> sendNow() async {
     if (_state != VoicePipelineState.listening) return;
-    _micSubscription?.pause();
+    _micListening = false;
     _speechDetected = false;
     _silentFrameCount = 0;
     _speechFrameCount = 0;
@@ -460,7 +474,9 @@ class VoicePipeline {
     await _processUserSpeech().catchError((Object e) {
       _eventController.add(PipelineError('Speech processing error: $e'));
       if (_state != VoicePipelineState.idle) {
-        _micSubscription?.resume();
+        _frameBuffer.clear();
+        _whisperSession?.resetTranscript();
+        _micListening = true;
         _setState(VoicePipelineState.listening);
       }
     });
@@ -474,18 +490,15 @@ class VoicePipeline {
   /// 3. Accumulate tokens with partial TranscriptUpdated events
   /// 4. Speak the complete response via TtsService
   ///
-  /// The mic is paused for the entire duration. It resumes with a cooldown
-  /// after TTS finishes to prevent residual audio from triggering false
-  /// speech detection.
+  /// Mic audio processing is gated off for the entire duration. It resumes
+  /// with a cooldown after TTS finishes to prevent residual audio from
+  /// triggering false speech detection.
   Future<void> _processUserSpeech() async {
     if (_isProcessingTurn) return;
     _isProcessingTurn = true;
 
-    // NOTE: Do NOT pause mic here -- callers (_handleListening, sendNow)
-    // already pause before calling this method. Dart StreamSubscription
-    // pause() is counted: pausing twice requires two resumes. The finally
-    // block only resumes once, so a double-pause here would leave the mic
-    // permanently paused after the first turn.
+    // NOTE: Do NOT set _micListening here -- callers (_handleListening,
+    // sendNow) already set it to false before calling this method.
 
     try {
       // Step 1: Flush WhisperSession to get final transcription
@@ -614,18 +627,24 @@ class VoicePipeline {
       }
     } finally {
       _isProcessingTurn = false;
-      // Resume mic after cooldown to prevent residual TTS audio pickup.
-      // Now that speak() awaits TTS completion, the cooldown prevents
-      // residual reverb/echo from triggering false speech detection.
+      // Resume mic processing after cooldown.
+      // The cooldown prevents residual TTS reverb/echo from triggering
+      // false speech detection. We clear _frameBuffer and reset
+      // WhisperSession before re-enabling mic processing to ensure no
+      // stale audio contaminates the next turn.
       if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
         await Future<void>.delayed(config.ttsCooldown);
-        // Clear frame buffer to discard any stale audio from before the pause
+        // Clear all audio state to ensure a clean slate for the next turn
         _frameBuffer.clear();
-        _micSubscription?.resume();
+        _whisperSession?.resetTranscript();
         _speechDetected = false;
         _silentFrameCount = 0;
         _speechFrameCount = 0;
         _totalSilentFrameCount = 0;
+        // Re-enable mic processing -- only frames arriving AFTER this
+        // point will be processed. No buffered backlog exists because
+        // we use a flag gate instead of StreamSubscription.pause().
+        _micListening = true;
         if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
           _setState(VoicePipelineState.listening);
         }
@@ -644,7 +663,8 @@ class VoicePipeline {
     // Cancel any in-progress work
     _llmCancelToken?.cancel();
     _tts.stop();
-    // Pause mic by pausing the subscription (native stream stays alive)
+    // Gate off mic processing and pause subscription to save battery
+    _micListening = false;
     _micSubscription?.pause();
     _setState(VoicePipelineState.idle);
   }
@@ -657,7 +677,13 @@ class VoicePipeline {
     if (_pausedFromState == null) return;
     // Reconfigure audio session (may have been deactivated by iOS)
     await _configureAudioSession();
+    // Clear any stale audio that may have been buffered during pause.
+    // Broadcast stream subscriptions buffer events when paused, so we
+    // must discard them before processing new audio.
+    _frameBuffer.clear();
+    _whisperSession?.resetTranscript();
     _micSubscription?.resume();
+    _micListening = true;
     _setState(VoicePipelineState.listening);
     _speechDetected = false;
     _silentFrameCount = 0;
@@ -669,7 +695,7 @@ class VoicePipeline {
 
   /// Configure native audio session for voice pipeline.
   ///
-  /// Sets PlayAndRecord category with VoiceChat mode and echo cancellation.
+  /// Sets PlayAndRecord category with Default mode and echo cancellation.
   /// Used by both [start] and [resume] to ensure correct audio configuration.
   Future<void> _configureAudioSession() async {
     await _methodChannel.invokeMethod<bool>('configureVoicePipelineAudio');
@@ -721,6 +747,7 @@ class VoicePipeline {
     // Clear internal state
     _llmCancelToken = null;
     _frameBuffer.clear();
+    _micListening = false;
     _isProcessingTurn = false;
     _speechFrameCount = 0;
     _pausedFromState = null;
