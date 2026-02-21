@@ -851,6 +851,156 @@ EV_API void ev_whisper_free(ev_whisper_context ctx);
  */
 EV_API bool ev_whisper_is_valid(ev_whisper_context ctx);
 
+/* ============================================================================
+ * Image Generation API (Text-to-Image via Stable Diffusion)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda image generation engine
+ *
+ * Image generation context is SEPARATE from text (ev_context), vision
+ * (ev_vision_context), and whisper (ev_whisper_context) contexts.
+ * Create with ev_image_init(), free with ev_image_free().
+ */
+typedef struct ev_image_context_impl* ev_image_context;
+
+/**
+ * @brief Configuration for initializing image generation context
+ */
+typedef struct {
+    const char* model_path;      /**< Path to SD GGUF model file */
+    int num_threads;             /**< CPU threads (0 = auto) */
+    bool use_gpu;                /**< Metal on iOS/macOS */
+    int wtype;                   /**< Weight type override (-1 = auto from GGUF) */
+    void* reserved;
+} ev_image_config;
+
+/**
+ * @brief Sampler types for diffusion denoising
+ */
+typedef enum {
+    EV_SAMPLER_EULER_A = 0,
+    EV_SAMPLER_EULER = 1,
+    EV_SAMPLER_DPM_PLUS_PLUS_2M = 2,
+    EV_SAMPLER_DPM_PLUS_PLUS_2S_A = 3,
+    EV_SAMPLER_LCM = 4,
+} ev_image_sampler_t;
+
+/**
+ * @brief Schedule types for noise scheduling
+ */
+typedef enum {
+    EV_SCHEDULE_DEFAULT = 0,
+    EV_SCHEDULE_DISCRETE = 1,
+    EV_SCHEDULE_KARRAS = 2,
+    EV_SCHEDULE_AYS = 3,
+} ev_image_schedule_t;
+
+/**
+ * @brief Parameters for image generation
+ */
+typedef struct {
+    const char* prompt;            /**< Text prompt describing desired image */
+    const char* negative_prompt;   /**< Negative prompt (NULL = "") */
+    int width;                     /**< Image width in pixels (default 512) */
+    int height;                    /**< Image height in pixels (default 512) */
+    int steps;                     /**< Number of inference steps (default 4 for turbo) */
+    float cfg_scale;               /**< Classifier-free guidance scale (default 1.0 for turbo) */
+    int64_t seed;                  /**< Random seed (-1 = random) */
+    ev_image_sampler_t sampler;    /**< Sampler type (default EULER_A) */
+    ev_image_schedule_t schedule;  /**< Schedule type (default DEFAULT) */
+    void* reserved;
+} ev_image_gen_params;
+
+/**
+ * @brief Result of image generation
+ *
+ * Contains raw RGB pixel data. Caller must free with ev_image_free_result().
+ */
+typedef struct {
+    uint8_t* data;       /**< Raw pixel data (RGB, width * height * 3) */
+    uint32_t width;      /**< Image width */
+    uint32_t height;     /**< Image height */
+    uint32_t channels;   /**< Number of channels (3 for RGB) */
+    size_t data_size;    /**< Total bytes in data */
+} ev_image_result;
+
+/**
+ * @brief Progress callback for image generation
+ */
+typedef void (*ev_image_progress_cb)(int step, int total_steps, float elapsed_s, void* user_data);
+
+/**
+ * @brief Get default image generation configuration
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_image_config_default(ev_image_config* config);
+
+/**
+ * @brief Get default image generation parameters
+ * @param params Pointer to parameters structure to fill
+ */
+EV_API void ev_image_gen_params_default(ev_image_gen_params* params);
+
+/**
+ * @brief Initialize image generation context with SD model
+ *
+ * Loads the Stable Diffusion model for text-to-image generation.
+ * The image context is independent from text, vision, and whisper contexts.
+ *
+ * @param config Image generation configuration (model_path required)
+ * @param error Optional pointer to receive error code
+ * @return Image context handle on success, NULL on failure
+ */
+EV_API ev_image_context ev_image_init(const ev_image_config* config, ev_error_t* error);
+
+/**
+ * @brief Free image generation context and release all resources
+ * @param ctx Image context handle to free
+ */
+EV_API void ev_image_free(ev_image_context ctx);
+
+/**
+ * @brief Check if image generation context is valid and ready
+ * @param ctx Image context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_image_is_valid(ev_image_context ctx);
+
+/**
+ * @brief Set progress callback for image generation
+ *
+ * The callback is invoked on each denoising step during generation.
+ *
+ * @param ctx Image context handle
+ * @param cb Progress callback function (NULL to unregister)
+ * @param user_data User data to pass to callback
+ */
+EV_API void ev_image_set_progress_callback(ev_image_context ctx, ev_image_progress_cb cb, void* user_data);
+
+/**
+ * @brief Generate an image from a text prompt
+ *
+ * This is a blocking call that runs the full diffusion pipeline:
+ * CLIP text encoding -> noise scheduling -> iterative denoising -> VAE decode.
+ * Use ev_image_set_progress_callback() for step-by-step progress updates.
+ *
+ * @param ctx Image context handle
+ * @param params Generation parameters (prompt required)
+ * @param result Pointer to result structure to fill (caller must free with ev_image_free_result)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_params* params, ev_image_result* result);
+
+/**
+ * @brief Free image generation result
+ *
+ * Frees the pixel data allocated by ev_image_generate().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_image_free_result(ev_image_result* result);
+
 #ifdef __cplusplus
 }
 #endif

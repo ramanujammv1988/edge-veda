@@ -41,6 +41,7 @@ import 'chat_template.dart';
 import 'chat_types.dart';
 import 'edge_veda_impl.dart';
 import 'gbnf_builder.dart';
+import 'json_recovery.dart';
 import 'schema_validator.dart';
 import 'tool_registry.dart';
 import 'tool_template.dart';
@@ -52,6 +53,47 @@ import 'types.dart'
         GenerateOptions,
         GenerationException,
         TokenChunk;
+
+/// Event emitted during structured output validation.
+///
+/// Enterprise consumers can use these events to monitor JSON validation
+/// pass/fail rates, track recovery attempts, and log schema mismatches.
+class ValidationEvent {
+  /// Whether the final output passed validation
+  final bool passed;
+
+  /// The validation mode used (standard or strict)
+  final SchemaValidationMode mode;
+
+  /// Whether JSON recovery was attempted on the raw output
+  final bool recoveryAttempted;
+
+  /// Whether recovery succeeded (raw output was malformed but repair worked)
+  final bool recoverySucceeded;
+
+  /// List of repairs applied (empty if no recovery needed)
+  final List<String> repairs;
+
+  /// Validation errors (empty if passed)
+  final List<String> errors;
+
+  /// The raw model output before any recovery
+  final String rawOutput;
+
+  /// Wall-clock time for the validation step in milliseconds
+  final int validationTimeMs;
+
+  const ValidationEvent({
+    required this.passed,
+    required this.mode,
+    required this.recoveryAttempted,
+    required this.recoverySucceeded,
+    required this.repairs,
+    required this.errors,
+    required this.rawOutput,
+    required this.validationTimeMs,
+  });
+}
 
 /// Manages multi-turn conversation state on top of [EdgeVeda]
 ///
@@ -79,6 +121,13 @@ class ChatSession {
   /// Optional tool registry for function calling support.
   final ToolRegistry? _tools;
 
+  /// Optional callback for structured output validation events.
+  ///
+  /// When set, [sendStructured] emits a [ValidationEvent] on every call
+  /// with pass/fail status, recovery details, and timing. Enterprise
+  /// consumers can use this to monitor validation rates in production.
+  final void Function(ValidationEvent)? onValidationEvent;
+
   /// Create a new chat session
   ///
   /// Requires an initialized [EdgeVeda] instance. Throws
@@ -95,6 +144,10 @@ class ChatSession {
   ///
   /// [tools] is an optional [ToolRegistry] for function calling. When
   /// provided, [sendWithTools] can invoke tools based on model output.
+  ///
+  /// [onValidationEvent] is an optional callback that fires on every
+  /// [sendStructured] call with validation pass/fail, recovery details,
+  /// and timing information.
   ChatSession({
     required EdgeVeda edgeVeda,
     String? systemPrompt,
@@ -102,6 +155,7 @@ class ChatSession {
     this.templateFormat = ChatTemplateFormat.llama3Instruct,
     int maxResponseTokens = 512,
     ToolRegistry? tools,
+    this.onValidationEvent,
   })  : _edgeVeda = edgeVeda,
         systemPrompt = systemPrompt ?? preset?.prompt,
         _contextLength = edgeVeda.config?.contextLength ?? 2048,
@@ -398,10 +452,18 @@ class ChatSession {
   /// is valid JSON conforming to [schema]. The response is validated
   /// before delivery.
   ///
+  /// If the raw output is malformed JSON, [JsonRecovery] attempts to
+  /// repair it before failing. The [onValidationEvent] callback (if set)
+  /// fires with full details on every call.
+  ///
+  /// [mode] controls validation strictness: [SchemaValidationMode.standard]
+  /// (default) checks types and required fields; [SchemaValidationMode.strict]
+  /// additionally rejects extra keys not in the schema.
+  ///
   /// Returns the validated JSON as a Map.
   ///
   /// Throws [GenerationException] if the model output fails schema
-  /// validation even with grammar constraints (should be rare).
+  /// validation even with grammar constraints and recovery (should be rare).
   ///
   /// Example:
   /// ```dart
@@ -415,15 +477,19 @@ class ChatSession {
   ///     },
   ///     'required': ['name', 'age'],
   ///   },
+  ///   mode: SchemaValidationMode.strict,
   /// );
   /// print(result); // {name: John, age: 30}
   /// ```
   Future<Map<String, dynamic>> sendStructured(
     String prompt, {
     required Map<String, dynamic> schema,
+    SchemaValidationMode mode = SchemaValidationMode.standard,
     GenerateOptions? options,
     CancelToken? cancelToken,
   }) async {
+    final validationStart = DateTime.now();
+
     // Generate GBNF grammar from schema
     final grammar = GbnfBuilder.fromJsonSchema(schema);
 
@@ -440,19 +506,92 @@ class ChatSession {
       cancelToken: cancelToken,
     );
 
-    // Parse the response as JSON
-    final Map<String, dynamic> parsed;
+    final rawOutput = reply.content;
+    var recoveryAttempted = false;
+    var recoverySucceeded = false;
+    var repairs = const <String>[];
+
+    // Parse the response as JSON, with recovery fallback
+    Map<String, dynamic> parsed;
     try {
-      parsed = jsonDecode(reply.content) as Map<String, dynamic>;
-    } catch (e) {
-      throw GenerationException(
-        'Model output is not valid JSON',
-        details: 'Output: "${reply.content.length > 200 ? '${reply.content.substring(0, 200)}...' : reply.content}"',
-      );
+      parsed = jsonDecode(rawOutput) as Map<String, dynamic>;
+    } catch (_) {
+      // JSON parse failed -- attempt recovery
+      recoveryAttempted = true;
+      final recovery = JsonRecovery.tryRepairWithDetails(rawOutput);
+
+      if (recovery.repaired != null) {
+        try {
+          parsed = jsonDecode(recovery.repaired!) as Map<String, dynamic>;
+          recoverySucceeded = true;
+          repairs = recovery.repairs;
+        } catch (_) {
+          // Recovery parse also failed
+          final validationTimeMs = DateTime.now()
+              .difference(validationStart)
+              .inMilliseconds;
+          onValidationEvent?.call(ValidationEvent(
+            passed: false,
+            mode: mode,
+            recoveryAttempted: true,
+            recoverySucceeded: false,
+            repairs: recovery.repairs,
+            errors: ['JSON parse failed even after recovery'],
+            rawOutput: rawOutput,
+            validationTimeMs: validationTimeMs,
+          ));
+          throw GenerationException(
+            'Model output is not valid JSON (recovery failed)',
+            details:
+                'Output: "${rawOutput.length > 200 ? '${rawOutput.substring(0, 200)}...' : rawOutput}"',
+          );
+        }
+      } else {
+        // Unrecoverable
+        final validationTimeMs = DateTime.now()
+            .difference(validationStart)
+            .inMilliseconds;
+        onValidationEvent?.call(ValidationEvent(
+          passed: false,
+          mode: mode,
+          recoveryAttempted: true,
+          recoverySucceeded: false,
+          repairs: recovery.repairs,
+          errors: ['JSON unrecoverable: no structure found'],
+          rawOutput: rawOutput,
+          validationTimeMs: validationTimeMs,
+        ));
+        throw GenerationException(
+          'Model output is not valid JSON',
+          details:
+              'Output: "${rawOutput.length > 200 ? '${rawOutput.substring(0, 200)}...' : rawOutput}"',
+        );
+      }
     }
 
-    // Validate against schema
-    final validation = SchemaValidator.validate(parsed, schema);
+    // Validate against schema using the selected mode
+    final SchemaValidationResult validation;
+    if (mode == SchemaValidationMode.strict) {
+      validation = SchemaValidator.validateStrict(parsed, schema);
+    } else {
+      validation = SchemaValidator.validate(parsed, schema);
+    }
+
+    final validationTimeMs =
+        DateTime.now().difference(validationStart).inMilliseconds;
+
+    // Emit validation event regardless of pass/fail
+    onValidationEvent?.call(ValidationEvent(
+      passed: validation.isValid,
+      mode: mode,
+      recoveryAttempted: recoveryAttempted,
+      recoverySucceeded: recoverySucceeded,
+      repairs: repairs,
+      errors: validation.isValid ? const [] : validation.errors,
+      rawOutput: rawOutput,
+      validationTimeMs: validationTimeMs,
+    ));
+
     if (!validation.isValid) {
       throw GenerationException(
         'Model output failed schema validation',
