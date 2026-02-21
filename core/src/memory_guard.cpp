@@ -55,6 +55,17 @@ struct MemoryGuardState {
     std::chrono::milliseconds check_interval{1000}; // Check every 1 second
     float pressure_threshold{0.9f}; // Trigger callback at 90% of limit
     bool auto_cleanup{true};
+
+    ~MemoryGuardState() noexcept {
+        monitoring_active.store(false, std::memory_order_release);
+        if (monitor_thread.joinable()) {
+            try {
+                monitor_thread.join();
+            } catch (...) {
+                // Never throw from static teardown.
+            }
+        }
+    }
 };
 
 MemoryGuardState g_memory_guard;

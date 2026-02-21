@@ -76,6 +76,7 @@ endif()
 
 # Source files
 set(EDGE_VEDA_SOURCES
+    src/backend_lifecycle.cpp
     src/engine.cpp
     src/memory_guard.cpp
     src/vision_engine.cpp

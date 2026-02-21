@@ -26,6 +26,7 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'budget.dart';
@@ -106,12 +107,64 @@ class WhisperSession {
   /// Call [Stream.listen] to start capture, cancel the subscription to stop.
   static Stream<Float32List> microphone() {
     const channel = EventChannel('com.edgeveda.edge_veda/audio_capture');
-    return channel.receiveBroadcastStream().map((data) {
-      if (data is Float32List) return data;
-      // FlutterStandardTypedData comes as Float64List on some platforms
-      if (data is List<double>) return Float32List.fromList(data);
-      return Float32List(0);
-    });
+    return channel
+        .receiveBroadcastStream()
+        .map((data) => _decodeAudioSamples(data))
+        .where((samples) => samples.isNotEmpty);
+  }
+
+  static Float32List _decodeAudioSamples(dynamic data) {
+    if (data is Float32List) return data;
+
+    if (data is Float64List) {
+      return Float32List.fromList(data);
+    }
+
+    if (data is List) {
+      final numeric = data.whereType<num>().toList(growable: false);
+      if (numeric.length == data.length) {
+        return Float32List.fromList(
+          numeric.map((n) => n.toDouble()).toList(growable: false),
+        );
+      }
+    }
+
+    ByteBuffer? buffer;
+    int offsetInBytes = 0;
+    int lengthInBytes = 0;
+
+    if (data is Uint8List) {
+      buffer = data.buffer;
+      offsetInBytes = data.offsetInBytes;
+      lengthInBytes = data.lengthInBytes;
+    } else if (data is ByteData) {
+      buffer = data.buffer;
+      offsetInBytes = data.offsetInBytes;
+      lengthInBytes = data.lengthInBytes;
+    }
+
+    if (buffer != null && lengthInBytes >= 4) {
+      final sampleCount = lengthInBytes ~/ 4;
+      final bytesLength = sampleCount * 4;
+      if (sampleCount == 0) return Float32List(0);
+
+      if (offsetInBytes % 4 == 0) {
+        return Float32List.view(buffer, offsetInBytes, sampleCount);
+      }
+
+      final byteView = Uint8List.view(buffer, offsetInBytes, bytesLength);
+      final byteData = ByteData.sublistView(byteView);
+      final out = Float32List(sampleCount);
+      for (int i = 0; i < sampleCount; i++) {
+        out[i] = byteData.getFloat32(i * 4, Endian.little);
+      }
+      return out;
+    }
+
+    debugPrint(
+      'EdgeVeda: Unsupported microphone payload type ${data.runtimeType}',
+    );
+    return Float32List(0);
   }
 
   /// Request microphone recording permission.
@@ -160,8 +213,7 @@ class WhisperSession {
     // Priority is low by default -- vision and text are typically more
     // important than background transcription. The Scheduler will degrade
     // STT first when thermal/battery/latency budgets are violated.
-    scheduler?.registerWorkload(WorkloadId.stt,
-        priority: WorkloadPriority.low);
+    scheduler?.registerWorkload(WorkloadId.stt, priority: WorkloadPriority.low);
 
     _isActive = true;
   }

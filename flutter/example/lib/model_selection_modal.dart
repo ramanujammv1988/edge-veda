@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'device_status_info.dart';
 
 /// Model selection bottom sheet showing device info and available models.
 ///
@@ -13,6 +14,14 @@ class ModelSelectionModal extends StatelessWidget {
   final ModelManager modelManager;
 
   const ModelSelectionModal({super.key, required this.modelManager});
+
+  String get _deviceLabel => DeviceStatusInfo.deviceDisplay;
+
+  String get _backendLabel => DeviceStatusInfo.backendLabel;
+
+  IconData get _deviceIcon => (Platform.isIOS || Platform.isAndroid)
+      ? Icons.phone_iphone
+      : Icons.laptop_mac;
 
   /// Show the model selection bottom sheet.
   static void show(BuildContext context, ModelManager modelManager) {
@@ -141,8 +150,8 @@ class ModelSelectionModal extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.phone_iphone,
+          Icon(
+            _deviceIcon,
             color: AppTheme.accent,
             size: 28,
           ),
@@ -159,7 +168,7 @@ class ModelSelectionModal extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  Platform.isIOS ? 'iOS' : 'Android',
+                  _deviceLabel,
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppTheme.textPrimary,
@@ -180,7 +189,7 @@ class ModelSelectionModal extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  Platform.isIOS ? 'Metal GPU' : 'CPU',
+                  _backendLabel,
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppTheme.textPrimary,

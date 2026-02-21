@@ -29,7 +29,7 @@ dependencies:
   json_schema: ^5.0.0
   local_hnsw: ^1.0.0
   path: ^1.9.0
-  path_provider: ^2.1.0
+  path_provider: 2.1.4
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +45,10 @@ flutter:
         pluginClass: EdgeVedaPlugin
       macos:
         pluginClass: EdgeVedaPlugin
+
+dependency_overrides:
+  path_provider_android: 2.2.18
+  path_provider_foundation: 2.4.2
 
 ffigen:
   name: EdgeVedaNativeBindings

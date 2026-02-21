@@ -10,6 +10,7 @@
  */
 
 #include "edge_veda.h"
+#include "backend_lifecycle.h"
 #include <cstring>
 #include <cstdlib>
 #include <string>
@@ -147,8 +148,8 @@ ev_vision_context ev_vision_init(
     ctx->mmproj_path = config->mmproj_path;
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // Initialize llama.cpp backend
-    llama_backend_init();
+    // Initialize shared llama backend
+    edge_veda_backend_acquire();
 
     // Configure model parameters
     llama_model_params model_params = llama_model_default_params();
@@ -159,7 +160,7 @@ ev_vision_context ev_vision_init(
     ctx->model = llama_model_load_from_file(ctx->model_path.c_str(), model_params);
     if (!ctx->model) {
         ctx->last_error = "Failed to load VLM model from: " + ctx->model_path;
-        llama_backend_free();
+        edge_veda_backend_release();
         delete ctx;
         if (error) *error = EV_ERROR_MODEL_LOAD_FAILED;
         return nullptr;
@@ -191,7 +192,7 @@ ev_vision_context ev_vision_init(
         ctx->last_error = "Failed to create llama context for VLM";
         llama_model_free(ctx->model);
         ctx->model = nullptr;
-        llama_backend_free();
+        edge_veda_backend_release();
         delete ctx;
         if (error) *error = EV_ERROR_BACKEND_INIT_FAILED;
         return nullptr;
@@ -215,7 +216,7 @@ ev_vision_context ev_vision_init(
         ctx->llama_ctx = nullptr;
         llama_model_free(ctx->model);
         ctx->model = nullptr;
-        llama_backend_free();
+        edge_veda_backend_release();
         delete ctx;
         if (error) *error = EV_ERROR_MODEL_LOAD_FAILED;
         return nullptr;
@@ -230,7 +231,7 @@ ev_vision_context ev_vision_init(
         ctx->llama_ctx = nullptr;
         llama_model_free(ctx->model);
         ctx->model = nullptr;
-        llama_backend_free();
+        edge_veda_backend_release();
         delete ctx;
         if (error) *error = EV_ERROR_MODEL_LOAD_FAILED;
         return nullptr;
@@ -265,7 +266,7 @@ void ev_vision_free(ev_vision_context ctx) {
         llama_model_free(ctx->model);
         ctx->model = nullptr;
     }
-    llama_backend_free();
+    edge_veda_backend_release();
 #endif
 
     delete ctx;

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -18,7 +18,8 @@ import 'app_theme.dart';
 /// A computed insight candidate with type, headline, and evidence.
 /// Produced deterministically by [InsightEngine] -- the LLM never computes these.
 class InsightCandidate {
-  final String type; // 'photo_pattern', 'calendar_pattern', 'cross_pattern', 'surprising'
+  final String
+      type; // 'photo_pattern', 'calendar_pattern', 'cross_pattern', 'surprising'
   final String headline;
   final String evidence;
   final bool lowConfidence;
@@ -85,8 +86,7 @@ class InsightEngine {
     final insights = <InsightCandidate>[];
 
     final photoCount = (photoData['total_photos'] as num?)?.toInt() ?? 0;
-    final calendarCount =
-        (calendarData['total_events'] as num?)?.toInt() ?? 0;
+    final calendarCount = (calendarData['total_events'] as num?)?.toInt() ?? 0;
 
     // Extract histograms
     final photoDayOfWeek =
@@ -117,8 +117,8 @@ class InsightEngine {
 
     // Rule 2: Weekend vs weekday photographer
     if (photoDayOfWeek.isNotEmpty) {
-      final weekendCount =
-          (photoDayOfWeek['7'] ?? 0) + (photoDayOfWeek['1'] ?? 0); // Sun=1, Sat=7
+      final weekendCount = (photoDayOfWeek['7'] ?? 0) +
+          (photoDayOfWeek['1'] ?? 0); // Sun=1, Sat=7
       int weekdayTotal = 0;
       for (final d in ['2', '3', '4', '5', '6']) {
         weekdayTotal += photoDayOfWeek[d] ?? 0;
@@ -253,8 +253,7 @@ class InsightEngine {
         if (second.value > 0 && top.value / second.value >= 2.0) {
           insights.add(InsightCandidate(
             type: 'surprising',
-            headline:
-                '${_dayName(top.key)}: your secret photo day',
+            headline: '${_dayName(top.key)}: your secret photo day',
             evidence:
                 '${_dayName(top.key)} has ${top.value} photos -- ${(top.value / second.value).toStringAsFixed(1)}x more than ${_dayName(second.key)} (${second.value} photos).',
             lowConfidence: top.value < 3,
@@ -498,7 +497,12 @@ const _detectiveReportSchema = {
     'surprising_fact': {'type': 'string'},
     'privacy_statement': {'type': 'string'},
   },
-  'required': ['headline', 'deductions', 'surprising_fact', 'privacy_statement'],
+  'required': [
+    'headline',
+    'deductions',
+    'surprising_fact',
+    'privacy_statement'
+  ],
 };
 
 // ==============================================================================
@@ -540,7 +544,8 @@ class _DetectiveScreenState extends State<DetectiveScreen>
   // Scan steps tracking
   final List<_ScanStep> _scanSteps = [
     _ScanStep(icon: Icons.photo_library, label: 'Scanning photo metadata...'),
-    _ScanStep(icon: Icons.calendar_month, label: 'Cross-referencing calendar...'),
+    _ScanStep(
+        icon: Icons.calendar_month, label: 'Cross-referencing calendar...'),
     _ScanStep(icon: Icons.shield, label: 'Verifying device privacy...'),
     _ScanStep(icon: Icons.lightbulb, label: 'Deriving patterns...'),
     _ScanStep(icon: Icons.edit_note, label: 'Composing detective report...'),
@@ -573,6 +578,20 @@ class _DetectiveScreenState extends State<DetectiveScreen>
   late AnimationController _pulseController;
 
   // -- Lifecycle ------------------------------------------------------------
+
+  bool get _isPhonePlatform => Platform.isIOS || Platform.isAndroid;
+
+  String get _detectiveTitle {
+    if (Platform.isMacOS) return 'macOS Detective';
+    if (_isPhonePlatform) return 'Phone Detective';
+    return 'Device Detective';
+  }
+
+  String get _deviceNoun {
+    if (Platform.isMacOS) return 'Mac';
+    if (_isPhonePlatform) return 'phone';
+    return 'device';
+  }
 
   @override
   void initState() {
@@ -764,7 +783,8 @@ class _DetectiveScreenState extends State<DetectiveScreen>
       final calendarStatus = status?['calendar'] as String? ?? 'notDetermined';
 
       // If either is not yet determined, request permissions
-      if (photosStatus == 'notDetermined' || calendarStatus == 'notDetermined') {
+      if (photosStatus == 'notDetermined' ||
+          calendarStatus == 'notDetermined') {
         final result = await _telemetryChannel
             .invokeMethod<Map>('requestDetectivePermissions');
         final photosResult = result?['photos'] as String? ?? 'denied';
@@ -788,8 +808,13 @@ class _DetectiveScreenState extends State<DetectiveScreen>
   /// Day name (from native) → day-of-week number (InsightEngine format).
   /// NSCalendar weekday: 1=Sunday, 2=Monday, ..., 7=Saturday.
   static const _dayNameToNumber = {
-    'Sun': '1', 'Mon': '2', 'Tue': '3', 'Wed': '4',
-    'Thu': '5', 'Fri': '6', 'Sat': '7',
+    'Sun': '1',
+    'Mon': '2',
+    'Tue': '3',
+    'Wed': '4',
+    'Thu': '5',
+    'Fri': '6',
+    'Sat': '7',
   };
 
   /// Convert native camelCase photo response to snake_case format expected by InsightEngine.
@@ -1008,7 +1033,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     final toolSession = ChatSession(
       edgeVeda: _edgeVeda!,
       systemPrompt:
-          'You are a data analyst. Call get_photo_metadata and get_calendar_events to gather data about the user\'s phone. Then call device_assert_offline to verify privacy. Call each tool exactly once.',
+          'You are a data analyst. Call get_photo_metadata and get_calendar_events to gather data about the user\'s $_deviceNoun. Then call device_assert_offline to verify privacy. Call each tool exactly once.',
       templateFormat: ChatTemplateFormat.qwen3,
       tools: ToolRegistry(_toolDefinitions),
       maxResponseTokens: 256,
@@ -1016,7 +1041,7 @@ class _DetectiveScreenState extends State<DetectiveScreen>
 
     try {
       await toolSession.sendWithTools(
-        'Analyze the user\'s phone: scan their photos and calendar, then verify privacy.',
+        'Analyze the user\'s $_deviceNoun: scan photos and calendar, then verify privacy.',
         onToolCall: (call) async {
           // Update scan step UI based on which tool was called
           if (call.name == 'get_photo_metadata') {
@@ -1074,10 +1099,8 @@ class _DetectiveScreenState extends State<DetectiveScreen>
     final calendarData = _cachedCalendarData ?? {'total_events': 0};
 
     // Check for empty data (both sources empty and not demo mode)
-    final photoCount =
-        (photoData['total_photos'] as num?)?.toInt() ?? 0;
-    final calendarCount =
-        (calendarData['total_events'] as num?)?.toInt() ?? 0;
+    final photoCount = (photoData['total_photos'] as num?)?.toInt() ?? 0;
+    final calendarCount = (calendarData['total_events'] as num?)?.toInt() ?? 0;
     if (photoCount == 0 && calendarCount == 0 && !_demoMode) {
       setState(() {
         _state = _DetectiveState.ready;
@@ -1142,15 +1165,14 @@ class _DetectiveScreenState extends State<DetectiveScreen>
   Future<DetectiveReport> _narrateInsights(
       List<InsightCandidate> insights) async {
     // Prefer high-confidence insights for narration
-    final highConfidence =
-        insights.where((i) => !i.lowConfidence).toList();
+    final highConfidence = insights.where((i) => !i.lowConfidence).toList();
     final insightsForNarration =
         highConfidence.length >= 3 ? highConfidence : insights;
     final insightsJson =
         jsonEncode(insightsForNarration.map((i) => i.toJson()).toList());
 
     final narrationPrompt = '''/nothink
-Given the following computed deductions about a person's phone data, write a dramatic noir detective report.
+Given the following computed deductions about a person's $_deviceNoun data, write a dramatic noir detective report.
 
 RULES:
 - You MUST use ONLY the provided deductions. Do not invent new findings.
@@ -1185,7 +1207,10 @@ $insightsJson''';
 
   /// Extract all numbers from a string for cross-reference validation.
   static Set<String> _extractNumbers(String text) {
-    return RegExp(r'\d+\.?\d*').allMatches(text).map((m) => m.group(0)!).toSet();
+    return RegExp(r'\d+\.?\d*')
+        .allMatches(text)
+        .map((m) => m.group(0)!)
+        .toSet();
   }
 
   /// Build a DetectiveReport from grammar-constrained JSON output.
@@ -1207,8 +1232,8 @@ $insightsJson''';
 
     // Check insight types for field validation -- reject deductions referencing
     // data fields that were not present in the computed insight candidates.
-    final hasLocationData =
-        insights.any((i) => i.evidence.contains('location') || i.evidence.contains('geotagged'));
+    final hasLocationData = insights.any((i) =>
+        i.evidence.contains('location') || i.evidence.contains('geotagged'));
     final hasPhotoData =
         insights.any((i) => i.type == 'photo_pattern' && !i.lowConfidence);
     final hasCalendarData =
@@ -1233,8 +1258,7 @@ $insightsJson''';
         continue;
       }
       if (!hasPhotoData &&
-          (evidenceLower.contains('photo') ||
-              findingLower.contains('photo'))) {
+          (evidenceLower.contains('photo') || findingLower.contains('photo'))) {
         debugPrint(
             'Detective: Rejected fabricated photo deduction (no photo data): $finding');
         continue;
@@ -1288,7 +1312,8 @@ $insightsJson''';
     final finalDeductions = validatedDeductions.take(3).toList();
 
     return DetectiveReport(
-      headline: (parsed['headline'] as String?) ?? 'Case File: Subject Analysis',
+      headline:
+          (parsed['headline'] as String?) ?? 'Case File: Subject Analysis',
       deductions: finalDeductions,
       surprisingFact: (parsed['surprising_fact'] as String?) ??
           insights
@@ -1322,7 +1347,9 @@ $insightsJson''';
 
   String _dramaticFinding(InsightCandidate insight) {
     final h = insight.headline.toLowerCase();
-    if (h.contains('night owl')) return 'The subject operates under cover of darkness';
+    if (h.contains('night owl')) {
+      return 'The subject operates under cover of darkness';
+    }
     if (h.contains('early bird')) return 'Subject rises before the city wakes';
     if (h.contains('peak photography')) {
       return 'Surveillance patterns reveal preferred operating hours';
@@ -1330,7 +1357,9 @@ $insightsJson''';
     if (h.contains('weekend photographer')) {
       return 'The subject leads a double life on weekends';
     }
-    if (h.contains('home base')) return 'A single location keeps pulling them back';
+    if (h.contains('home base')) {
+      return 'A single location keeps pulling them back';
+    }
     if (h.contains('heaviest meeting')) {
       return 'One day a week, they vanish into back-to-back meetings';
     }
@@ -1382,12 +1411,10 @@ $insightsJson''';
     }
 
     // Surprising fact: prefer 'surprising' type, then cross_pattern, then any high-confidence
-    final surprisingInsight = insights
-        .where((i) => i.type == 'surprising')
-        .firstOrNull;
-    final crossInsight = insights
-        .where((i) => i.type == 'cross_pattern')
-        .firstOrNull;
+    final surprisingInsight =
+        insights.where((i) => i.type == 'surprising').firstOrNull;
+    final crossInsight =
+        insights.where((i) => i.type == 'cross_pattern').firstOrNull;
     final bestSurprise = surprisingInsight ??
         crossInsight ??
         insights.where((i) => !i.lowConfidence).firstOrNull;
@@ -1484,9 +1511,9 @@ $insightsJson''';
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text(
-          'Phone Detective',
-          style: TextStyle(color: AppTheme.textPrimary),
+        title: Text(
+          _detectiveTitle,
+          style: const TextStyle(color: AppTheme.textPrimary),
         ),
         backgroundColor: AppTheme.background,
         leading: IconButton(
@@ -1554,9 +1581,9 @@ $insightsJson''';
           children: [
             const Icon(Icons.policy, size: 72, color: AppTheme.accent),
             const SizedBox(height: 24),
-            const Text(
-              'Phone Detective',
-              style: TextStyle(
+            Text(
+              _detectiveTitle,
+              style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
@@ -1646,10 +1673,10 @@ $insightsJson''';
           children: [
             const Icon(Icons.policy, size: 80, color: AppTheme.accent),
             const SizedBox(height: 24),
-            const Text(
-              'Your phone knows things\nabout you.',
+            Text(
+              'Your ${_deviceNoun.toLowerCase()} knows things\nabout you.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
@@ -1802,8 +1829,8 @@ $insightsJson''';
                       color: isComplete
                           ? AppTheme.success.withValues(alpha: 0.15)
                           : isActive
-                              ? AppTheme.accent
-                                  .withValues(alpha: 0.15 + 0.1 * _pulseController.value)
+                              ? AppTheme.accent.withValues(
+                                  alpha: 0.15 + 0.1 * _pulseController.value)
                               : AppTheme.surfaceVariant,
                     ),
                     child: Icon(
