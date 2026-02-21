@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, InternetAddress, Platform;
+import 'dart:io' show File, InternetAddress, Platform, Process;
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
@@ -606,9 +606,26 @@ Answer:
       r'\b(obj|endobj|xref|trailer|stream|endstream)\b|/(Type|Filter|Length|Font|Catalog|Page|XObject|CIDToGIDMap)\b',
       caseSensitive: false,
     ).allMatches(sample).length;
-    if (words < 20 || letters < 80) return false;
-    if (artifactTokens > (words ~/ 3)) return false;
+    if (sample.length < 400) {
+      if (words < 8 || letters < 25) return false;
+    } else if (sample.length < 1200) {
+      if (words < 14 || letters < 50) return false;
+    } else {
+      if (words < 20 || letters < 80) return false;
+    }
+    final artifactLimit = words < 30 ? (words / 2).ceil() : (words ~/ 3);
+    if (artifactTokens > artifactLimit) return false;
     return true;
+  }
+
+  static bool _isUsableRagChunk(String text) {
+    final cleaned = text.trim();
+    if (cleaned.isEmpty) return false;
+    if (cleaned.length < 40) return false;
+    if (_looksLikePdfObjectDump(cleaned)) return false;
+    final words = RegExp(r'[A-Za-z0-9]{2,}').allMatches(cleaned).length;
+    final letters = RegExp(r'[A-Za-z]').allMatches(cleaned).length;
+    return words >= 6 && letters >= 20;
   }
 
   static List<String> _postCleanChunks(List<String> chunks) {
@@ -616,11 +633,7 @@ Answer:
     final seen = <String>{};
     for (final raw in chunks) {
       final cleaned = _postCleanDocumentText(raw);
-      if (cleaned.length < 40) continue;
-      final words = RegExp(r'[A-Za-z0-9]{2,}').allMatches(cleaned).length;
-      if (words < 8) continue;
-      if (_looksLikePdfObjectDump(cleaned)) continue;
-      if (!_hasMinimumTextQuality(cleaned)) continue;
+      if (!_isUsableRagChunk(cleaned)) continue;
       final key = cleaned.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
       if (!seen.add(key)) continue;
       out.add(cleaned);
@@ -630,6 +643,67 @@ Answer:
 
   static String _preCleanUserQuery(String query) {
     return query.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static bool _isLikelyFollowUpQuestion(String query) {
+    final cleaned = query.trim().toLowerCase();
+    if (cleaned.isEmpty) return false;
+
+    final wordCount = RegExp(r'\S+').allMatches(cleaned).length;
+    final containsReferencePronoun = RegExp(
+      r'\b(she|her|he|him|they|them|their|it|its|that|this|these|those|there)\b',
+    ).hasMatch(cleaned);
+    final startsLikeFollowUp = RegExp(
+      r'^(and|also|what about|how about|where|when|which|who|does she|does he|did she|did he|what else|tell me more)\b',
+    ).hasMatch(cleaned);
+
+    return containsReferencePronoun || startsLikeFollowUp || wordCount <= 5;
+  }
+
+  String? _previousRagUserQuestion() {
+    bool skippedCurrent = false;
+    for (int i = _ragMessages.length - 1; i >= 0; i--) {
+      final msg = _ragMessages[i];
+      if (msg.role != ChatRole.user) continue;
+      final cleaned = _preCleanUserQuery(msg.content);
+      if (cleaned.isEmpty) continue;
+      if (!skippedCurrent) {
+        skippedCurrent = true;
+        continue;
+      }
+      return cleaned;
+    }
+    return null;
+  }
+
+  String? _lastRagAssistantAnswer() {
+    for (int i = _ragMessages.length - 1; i >= 0; i--) {
+      final msg = _ragMessages[i];
+      if (msg.role != ChatRole.assistant) continue;
+      final cleaned = _postCleanModelResponse(msg.content);
+      if (cleaned.isNotEmpty) return cleaned;
+    }
+    return null;
+  }
+
+  String _buildRagRetrievalQuery(String query) {
+    final cleaned = _preCleanUserQuery(query);
+    final previousUserQuestion = _previousRagUserQuestion();
+    if (previousUserQuestion == null || !_isLikelyFollowUpQuestion(cleaned)) {
+      return cleaned;
+    }
+
+    final parts = <String>[
+      cleaned,
+      'Previous question: $previousUserQuestion',
+    ];
+
+    final previousAssistant = _lastRagAssistantAnswer();
+    if (previousAssistant != null && previousAssistant.length <= 220) {
+      parts.add('Previous answer: $previousAssistant');
+    }
+
+    return parts.join('\n');
   }
 
   static String _postCleanModelResponse(String response) {
@@ -651,6 +725,111 @@ Answer:
     ).allMatches(sample).length;
     final words = RegExp(r'[A-Za-z]{3,}').allMatches(sample).length;
     return pdfTokens > 20 && pdfTokens > (words ~/ 3);
+  }
+
+  Future<String?> _trySystemPdfTextExtraction(String filePath) async {
+    if (!Platform.isMacOS) return null;
+
+    String normalizeExtracted(String raw) => _postCleanDocumentText(
+          _preCleanDocumentText(
+            raw.replaceAll(r'\n', '\n').replaceAll(r'\"', '"'),
+            fromPdf: false,
+          ),
+        );
+
+    try {
+      final probe = await Process.run('which', const ['pdftotext']);
+      if (probe.exitCode == 0 && probe.stdout.toString().trim().isNotEmpty) {
+        final pdftotext = await Process.run(
+          'pdftotext',
+          ['-layout', filePath, '-'],
+        );
+        if (pdftotext.exitCode == 0) {
+          final extracted = normalizeExtracted(pdftotext.stdout.toString());
+          if (extracted.isNotEmpty &&
+              !_looksLikePdfObjectDump(extracted) &&
+              _hasMinimumTextQuality(extracted)) {
+            return extracted;
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore and try next fallback.
+    }
+
+    try {
+      final mdls = await Process.run(
+        'mdls',
+        ['-raw', '-name', 'kMDItemTextContent', filePath],
+      );
+      if (mdls.exitCode == 0) {
+        var out = mdls.stdout.toString().trim();
+        if (out.startsWith('"') && out.endsWith('"') && out.length >= 2) {
+          out = out.substring(1, out.length - 1);
+        }
+        if (out.isNotEmpty && out != '(null)' && out != '""') {
+          final extracted = normalizeExtracted(out);
+          if (extracted.isNotEmpty &&
+              !_looksLikePdfObjectDump(extracted) &&
+              _hasMinimumTextQuality(extracted)) {
+            return extracted;
+          }
+        }
+      }
+    } catch (_) {
+      // No-op.
+    }
+
+    return null;
+  }
+
+  Future<String?> _trySystemDocumentTextExtraction(String filePath) async {
+    if (!Platform.isMacOS) return null;
+
+    String normalizeExtracted(String raw) => _postCleanDocumentText(
+          _preCleanDocumentText(
+            raw.replaceAll(r'\n', '\n').replaceAll(r'\"', '"'),
+            fromPdf: false,
+          ),
+        );
+
+    try {
+      final textutil = await Process.run(
+        'textutil',
+        ['-stdout', '-convert', 'txt', filePath],
+      );
+      if (textutil.exitCode == 0) {
+        final extracted = normalizeExtracted(textutil.stdout.toString());
+        if (extracted.isNotEmpty && _hasMinimumTextQuality(extracted)) {
+          return extracted;
+        }
+      }
+    } catch (_) {
+      // Ignore and try mdls fallback.
+    }
+
+    try {
+      final mdls = await Process.run(
+        'mdls',
+        ['-raw', '-name', 'kMDItemTextContent', filePath],
+      );
+      if (mdls.exitCode == 0) {
+        var out = mdls.stdout.toString().trim();
+        if (out.startsWith('"') && out.endsWith('"') && out.length >= 2) {
+          out = out.substring(1, out.length - 1);
+        }
+        if (out.isNotEmpty && out != '(null)' && out != '""') {
+          final extracted = normalizeExtracted(out);
+          if (extracted.isNotEmpty && _hasMinimumTextQuality(extracted)) {
+            return extracted;
+          }
+        }
+      }
+    } catch (_) {
+      // No-op.
+    }
+
+    return null;
   }
 
   Future<(String text, String source)> _extractDocumentText(
@@ -684,9 +863,17 @@ Answer:
           );
         }
         extracted = _postCleanDocumentText(extracted);
+        if (extracted.isEmpty ||
+            _looksLikePdfObjectDump(extracted) ||
+            !_hasMinimumTextQuality(extracted)) {
+          final fallback = await _trySystemPdfTextExtraction(filePath);
+          if (fallback != null) {
+            return (fallback, 'PDF (system)');
+          }
+        }
         if (extracted.isEmpty) {
           throw const FormatException(
-            'No extractable text found in PDF. Try a text-based PDF.',
+            'No extractable text found in PDF. This PDF may be image-only/scanned. Please upload a searchable PDF or TXT/MD file.',
           );
         }
         if (_looksLikePdfObjectDump(extracted)) {
@@ -714,6 +901,11 @@ Answer:
       }
       return (text, 'UTF-8');
     } catch (_) {
+      final systemExtracted = await _trySystemDocumentTextExtraction(filePath);
+      if (systemExtracted != null) {
+        return (systemExtracted, 'System');
+      }
+
       final bytes = await File(filePath).readAsBytes();
       final sampleLength = math.min(bytes.length, 4096);
       final sample = bytes.take(sampleLength);
@@ -723,7 +915,7 @@ Answer:
       final binaryRatio = sampleLength == 0 ? 0.0 : nonPrintable / sampleLength;
       if (binaryRatio > 0.25) {
         throw const FormatException(
-          'Unsupported binary file. Please use TXT, Markdown, JSON, CSV, or PDF.',
+          'Unsupported binary file. Please use TXT, Markdown, JSON, CSV, PDF, DOCX, RTF, or ODT.',
         );
       }
       final decoded = _postCleanDocumentText(
@@ -745,6 +937,11 @@ Answer:
         lower.endsWith('.csv') ||
         lower.endsWith('.json') ||
         lower.endsWith('.log') ||
+        lower.endsWith('.doc') ||
+        lower.endsWith('.docx') ||
+        lower.endsWith('.rtf') ||
+        lower.endsWith('.rtfd') ||
+        lower.endsWith('.odt') ||
         lower.endsWith('.yaml') ||
         lower.endsWith('.yml');
   }
@@ -764,6 +961,11 @@ Answer:
         'csv',
         'json',
         'log',
+        'doc',
+        'docx',
+        'rtf',
+        'rtfd',
+        'odt',
         'yaml',
         'yml',
       ],
@@ -775,7 +977,7 @@ Answer:
     final fileSize = result.files.single.size;
     if (!_isSupportedDocument(fileName)) {
       _showError(
-        'Unsupported file type. Use PDF/TXT/MD/CSV/JSON. Use Vision tab for images.',
+        'Unsupported file type. Use PDF/TXT/MD/CSV/JSON/DOCX/RTF/ODT. Use Vision tab for images.',
       );
       return;
     }
@@ -808,7 +1010,7 @@ Answer:
         setState(() => _isIndexingDocument = false);
         return;
       }
-      if (chunks.length < math.min(3, rawChunks.length)) {
+      if (rawChunks.length >= 6 && chunks.length <= 1) {
         _showError(
           'The extracted text is too noisy for reliable Q&A. Please use a searchable PDF or cleaner text file.',
         );
@@ -1078,15 +1280,43 @@ Answer:
       // Retrieve relevant chunks and stream response
       setState(() => _statusMessage = 'Retrieving relevant context...');
 
-      final retrieved = await _ragPipeline!.retrieve(cleanedPrompt, k: 6);
+      final retrievalQuery = _buildRagRetrievalQuery(cleanedPrompt);
+      final followUpMode = retrievalQuery != cleanedPrompt;
+
+      final retrieved = await _ragPipeline!.retrieve(retrievalQuery, k: 8);
       retrievedCount = retrieved.length;
-      final relevant = retrieved.where((r) {
+      for (int i = 0; i < math.min(3, retrieved.length); i++) {
+        final chunkText =
+            (retrieved[i].metadata['text'] as String? ?? '').trim();
+        final preview = chunkText.length > 90
+            ? '${chunkText.substring(0, 90)}...'
+            : chunkText;
+        debugPrint(
+          'EdgeVeda: RAG hit[$i] score=${retrieved[i].score.toStringAsFixed(3)} text="$preview"',
+        );
+      }
+      final minScore = followUpMode ? 0.10 : 0.16;
+      var relevant = retrieved.where((r) {
         final text = (r.metadata['text'] as String? ?? '').trim();
-        if (text.isEmpty) return false;
-        if (_looksLikePdfObjectDump(text)) return false;
-        if (!_hasMinimumTextQuality(text)) return false;
-        return r.score >= 0.18;
-      }).toList()..sort((a, b) => b.score.compareTo(a.score));
+        if (!_isUsableRagChunk(text)) return false;
+        return r.score >= minScore;
+      }).toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
+
+      if (relevant.isEmpty) {
+        final relaxed = retrieved.where((r) {
+          final text = (r.metadata['text'] as String? ?? '').trim();
+          if (!_isUsableRagChunk(text)) return false;
+          return r.score >= 0.05;
+        }).toList()
+          ..sort((a, b) => b.score.compareTo(a.score));
+
+        if (relaxed.isNotEmpty) {
+          final keep = math.min(3, relaxed.length);
+          relevant = relaxed.take(keep).toList();
+          setState(() => _statusMessage = 'Using best-effort context match...');
+        }
+      }
       if (relevant.isEmpty) {
         const fallback = "I couldn't find that in the attached document.";
         _ragMessages.add(

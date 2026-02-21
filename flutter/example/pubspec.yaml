@@ -16,8 +16,9 @@ dependencies:
   ffi: ">=2.0.0 <3.0.0"
   cupertino_icons: ^1.0.6
   camera: ^0.11.0+2
-  path_provider: ^2.1.0
-  file_picker: ^7.0.2
+  path_provider: 2.1.4
+  file_picker: ^10.3.10
+  syncfusion_flutter_pdf: ^31.2.5
 
 dev_dependencies:
   flutter_test:
@@ -27,6 +28,8 @@ dev_dependencies:
 
 dependency_overrides:
   win32: ^5.15.0
+  path_provider_android: 2.2.18
+  path_provider_foundation: 2.4.2
 
 flutter:
   uses-material-design: true
