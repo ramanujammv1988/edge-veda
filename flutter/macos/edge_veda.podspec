@@ -56,7 +56,7 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-framework IOKit', '-framework AppKit',
       # Path assumes universal (arm64+x86_64) XCFramework layout produced by
       # build-macos.sh. If building single-arch, this directory name will differ.
-      '-force_load "${PODS_ROOT}/../.symlinks/plugins/edge_veda/macos/Frameworks/EdgeVedaCore.xcframework/macos-arm64_x86_64/libedge_veda_full.a"',
+      '-force_load "${PODS_ROOT}/../Flutter/ephemeral/.symlinks/plugins/edge_veda/macos/Frameworks/EdgeVedaCore.xcframework/macos-arm64_x86_64/libedge_veda_full.a"',
       # Xcode 26 debug dylib entry points (required for debug blank executor stub)
       '-Wl,-exported_symbol,_main',
       '-Wl,-exported_symbol,___debug_main_executable_dylib_entry_point',
