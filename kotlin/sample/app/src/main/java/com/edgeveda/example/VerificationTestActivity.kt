@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.edgeveda.sdk.Backend
 import com.edgeveda.sdk.EdgeVeda
 import com.edgeveda.sdk.EdgeVedaConfig
 import com.edgeveda.sdk.GenerateOptions
@@ -52,6 +53,7 @@ class VerificationTestActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun VerificationTestScreen() {
         val context = this
@@ -177,7 +179,7 @@ class VerificationTestActivity : ComponentActivity() {
                 onOutput("Initializing model...\n")
                 val edgeVeda = EdgeVeda.create(this@VerificationTestActivity)
                 val config = EdgeVedaConfig(
-                    backend = EdgeVedaConfig.Backend.CPU,
+                    backend = Backend.CPU,
                     numThreads = 4,
                     contextSize = 2048,
                     useGpu = false,
@@ -269,7 +271,7 @@ class VerificationTestActivity : ComponentActivity() {
                 onOutput("Initializing model...\n")
                 val edgeVeda = EdgeVeda.create(this@VerificationTestActivity)
                 val config = EdgeVedaConfig(
-                    backend = EdgeVedaConfig.Backend.CPU,
+                    backend = Backend.CPU,
                     numThreads = 4,
                     contextSize = 2048,
                     useGpu = false,
@@ -313,8 +315,8 @@ class VerificationTestActivity : ComponentActivity() {
 
                 // maxTokens is the ceiling; actual output may be shorter
                 onOutput("Throughput (estimated @ ${options.maxTokens} tokens):\n")
-                onOutput("P50: %.1f tokens/sec\n".format(options.maxTokens * 1000.0 / p50))
-                onOutput("P95: %.1f tokens/sec\n".format(options.maxTokens * 1000.0 / p95))
+                onOutput("P50: %.1f tokens/sec\n".format(options.maxTokens!! * 1000.0 / p50))
+                onOutput("P95: %.1f tokens/sec\n".format(options.maxTokens!! * 1000.0 / p95))
                 onOutput("\n")
 
                 onOutput("=== DEVICE INFO ===\n")

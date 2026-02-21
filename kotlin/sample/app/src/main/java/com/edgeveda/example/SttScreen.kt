@@ -51,7 +51,7 @@ import kotlinx.coroutines.withContext
  *
  * States: notReady → downloading → ready → recording → (segments accumulate)
  */
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SttScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
