@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 /// State of the TTS engine.
@@ -130,7 +132,11 @@ class TtsService {
   /// Current state of the TTS engine.
   TtsState get state => _state;
 
-  /// Speak the given [text] aloud.
+  /// Speak the given [text] aloud and wait for speech to finish.
+  ///
+  /// Returns when the utterance finishes or is cancelled. This blocking
+  /// behavior is essential for the voice pipeline -- callers need to know
+  /// when TTS is done before resuming the microphone.
   ///
   /// Optional parameters:
   /// - [voiceId]: Platform voice identifier from [availableVoices].
@@ -145,6 +151,22 @@ class TtsService {
     double? volume,
   }) async {
     try {
+      // Set up a completer that resolves when TTS finishes or is cancelled.
+      // Must subscribe to events BEFORE invoking speak to avoid race where
+      // the finish event fires before we start listening.
+      final completer = Completer<void>();
+      StreamSubscription<TtsEvent>? subscription;
+
+      subscription = events.listen((event) {
+        if (event.type == TtsEventType.finish ||
+            event.type == TtsEventType.cancel) {
+          subscription?.cancel();
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        }
+      });
+
       await _methodChannel.invokeMethod('tts_speak', {
         'text': text,
         'voiceId': voiceId,
@@ -152,6 +174,9 @@ class TtsService {
         'pitch': pitch,
         'volume': volume,
       });
+
+      // Wait for TTS to finish speaking (or be cancelled).
+      await completer.future;
     } on MissingPluginException {
       // Non-iOS platform -- silently ignore.
     }
