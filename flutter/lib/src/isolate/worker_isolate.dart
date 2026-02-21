@@ -172,7 +172,8 @@ class StreamingWorker {
     ));
 
     try {
-      await completer.future.timeout(const Duration(seconds: 30));
+      // First stream setup can take longer on large prompts / constrained devices.
+      await completer.future.timeout(const Duration(seconds: 60));
     } finally {
       await subscription.cancel();
     }
@@ -199,7 +200,9 @@ class StreamingWorker {
     _commandPort!.send(NextTokenCommand());
 
     try {
-      return await completer.future.timeout(const Duration(seconds: 30));
+      // Token latency can exceed 30s for long-context RAG prompts; keep a larger
+      // timeout to avoid false failures in offline/on-device mode.
+      return await completer.future.timeout(const Duration(seconds: 120));
     } finally {
       await subscription.cancel();
     }
@@ -228,7 +231,7 @@ class StreamingWorker {
     _commandPort!.send(GetMemoryStatsCommand());
 
     try {
-      return await completer.future.timeout(const Duration(seconds: 5));
+      return await completer.future.timeout(const Duration(seconds: 30));
     } finally {
       await subscription.cancel();
     }
@@ -328,6 +331,10 @@ void _workerEntryPoint(SendPort mainSendPort) {
         ));
         return;
       }
+      if (currentStream != null) {
+        bindings!.evStreamFree(currentStream!);
+        currentStream = null;
+      }
       currentConfidenceThreshold = message.confidenceThreshold;
       currentStream = _handleStartStream(
         message,
@@ -340,8 +347,13 @@ void _workerEntryPoint(SendPort mainSendPort) {
         responseSendPort.send(TokenResponse.end());
         return;
       }
-      _handleNextToken(currentStream!, bindings!, responseSendPort,
+      final streamEnded = _handleNextToken(
+          currentStream!, bindings!, responseSendPort,
           confidenceThreshold: currentConfidenceThreshold);
+      if (streamEnded && currentStream != null) {
+        bindings!.evStreamFree(currentStream!);
+        currentStream = null;
+      }
     } else if (message is CancelStreamCommand) {
       if (currentStream != null && bindings != null) {
         bindings!.evStreamCancel(currentStream!);
@@ -352,8 +364,11 @@ void _workerEntryPoint(SendPort mainSendPort) {
     } else if (message is GetMemoryStatsCommand) {
       if (nativeContext == null || bindings == null) {
         responseSendPort.send(MemoryStatsResponse(
-          currentBytes: 0, peakBytes: 0, limitBytes: 0,
-          modelBytes: 0, contextBytes: 0,
+          currentBytes: 0,
+          peakBytes: 0,
+          limitBytes: 0,
+          modelBytes: 0,
+          contextBytes: 0,
         ));
         return;
       }
@@ -488,7 +503,7 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
   }
 }
 
-void _handleNextToken(
+bool _handleNextToken(
   ffi.Pointer<EvStreamImpl> stream,
   EdgeVedaNativeBindings bindings,
   SendPort responseSendPort, {
@@ -507,7 +522,7 @@ void _handleNextToken(
         isFinal: true,
         errorCode: errorCode,
       ));
-      return;
+      return true;
     }
 
     // Got a token
@@ -537,6 +552,7 @@ void _handleNextToken(
       confidence: tokenConfidence,
       needsCloudHandoff: needsHandoff,
     ));
+    return false;
   } finally {
     calloc.free(errorPtr);
   }
@@ -552,8 +568,11 @@ void _handleGetMemoryStats(
     final result = bindings.evGetMemoryUsage(ctx, statsPtr);
     if (result != 0) {
       responseSendPort.send(MemoryStatsResponse(
-        currentBytes: 0, peakBytes: 0, limitBytes: 0,
-        modelBytes: 0, contextBytes: 0,
+        currentBytes: 0,
+        peakBytes: 0,
+        limitBytes: 0,
+        modelBytes: 0,
+        contextBytes: 0,
       ));
       return;
     }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'soak_test_service.dart';
 
 /// STT (Speech-to-Text) demo tab with live microphone transcription.
 ///
@@ -42,6 +43,9 @@ class _SttScreenState extends State<SttScreen>
   DateTime? _recordingStartTime;
   Timer? _durationTimer;
   Duration _recordingDuration = Duration.zero;
+  int _audioChunksReceived = 0;
+  int _audioSamplesReceived = 0;
+  String? _recordingHint;
 
   // Session and subscriptions
   WhisperSession? _session;
@@ -158,6 +162,13 @@ class _SttScreenState extends State<SttScreen>
 
       // Listen for segments
       _segmentSubscription = _session!.onSegment.listen((segment) {
+        final latencyMs = (segment.endMs - segment.startMs).clamp(1, 60000);
+        SoakTestService.instance.recordExternalInference(
+          source: 'STT',
+          latencyMs: latencyMs,
+          generatedTokens: (segment.text.trim().length / 4).round(),
+          workloadId: WorkloadId.stt,
+        );
         if (mounted) {
           setState(() {
             _segments.add(segment);
@@ -172,6 +183,8 @@ class _SttScreenState extends State<SttScreen>
       // error event on the stream. The onError handler shows a SnackBar.
       _audioSubscription = WhisperSession.microphone().listen(
         (samples) {
+          _audioChunksReceived++;
+          _audioSamplesReceived += samples.length;
           _session?.feedAudio(samples);
         },
         onError: (error) {
@@ -194,6 +207,13 @@ class _SttScreenState extends State<SttScreen>
           setState(() {
             _recordingDuration =
                 DateTime.now().difference(_recordingStartTime!);
+            if (_segments.isEmpty && _recordingDuration.inSeconds >= 6) {
+              _recordingHint = _audioChunksReceived == 0
+                  ? 'No microphone audio detected. Check macOS Input device.'
+                  : 'Audio detected. Transcribing in the background...';
+            } else {
+              _recordingHint = null;
+            }
           });
         }
       });
@@ -203,6 +223,9 @@ class _SttScreenState extends State<SttScreen>
           _isRecording = true;
           _isInitializing = false;
           _recordingDuration = Duration.zero;
+          _audioChunksReceived = 0;
+          _audioSamplesReceived = 0;
+          _recordingHint = null;
         });
       }
     } catch (e) {
@@ -237,6 +260,18 @@ class _SttScreenState extends State<SttScreen>
       setState(() {
         _isRecording = false;
       });
+
+      if (_segments.isEmpty) {
+        final message = _audioChunksReceived == 0
+            ? 'No microphone audio received. Check macOS input source and mic permission.'
+            : 'No speech recognized yet. Try speaking louder/closer to the mic and retry.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+      }
     }
   }
 
@@ -379,6 +414,12 @@ class _SttScreenState extends State<SttScreen>
 
   /// Listening indicator shown during recording before first segment arrives
   Widget _buildListeningIndicator() {
+    final audioSeconds = (_audioSamplesReceived / 16000).toStringAsFixed(1);
+    final status = _recordingHint ??
+        (_audioChunksReceived > 0
+            ? 'Audio detected ($_audioChunksReceived chunks, ${audioSeconds}s). Transcription appears every few seconds.'
+            : 'Waiting for microphone audio...');
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -403,9 +444,10 @@ class _SttScreenState extends State<SttScreen>
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Transcription will appear shortly',
-            style: TextStyle(
+          Text(
+            status,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               color: AppTheme.textTertiary,
               fontSize: 13,
             ),
@@ -595,8 +637,9 @@ class _SttScreenState extends State<SttScreen>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (_isRecording ? AppTheme.danger : AppTheme.accent)
-                            .withValues(alpha: 0.4),
+                        color:
+                            (_isRecording ? AppTheme.danger : AppTheme.accent)
+                                .withValues(alpha: 0.4),
                         blurRadius: _isRecording ? 20 : 12,
                         spreadRadius: _isRecording ? 2 : 0,
                       ),

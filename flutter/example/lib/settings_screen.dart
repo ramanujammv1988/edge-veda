@@ -1,11 +1,8 @@
-import 'dart:ffi' as ffi;
-import 'dart:io' show Platform;
-
-import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'device_status_info.dart';
 import 'detective_screen.dart';
 import 'soak_test_screen.dart';
 
@@ -28,6 +25,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Model recommendation use case selector
   UseCase _selectedUseCase = UseCase.chat;
+
+  String get _detectiveTitle {
+    if (DeviceStatusInfo.platformLabel == 'macOS') return 'macOS Detective';
+    if (DeviceStatusInfo.platformLabel == 'iOS' ||
+        DeviceStatusInfo.platformLabel == 'Android') {
+      return 'Phone Detective';
+    }
+    return 'Device Detective';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,23 +113,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             children: [
               _buildAboutRow(
-                icon: Icons.phone_iphone,
+                icon: DeviceStatusInfo.platformLabel == 'macOS'
+                    ? Icons.laptop_mac
+                    : Icons.phone_iphone,
                 title: 'Model',
-                value: _DeviceInfo.model,
+                value: DeviceStatusInfo.model,
               ),
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.developer_board,
                 title: 'Chip',
-                value: _DeviceInfo.chip,
+                value: DeviceStatusInfo.chip,
               ),
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.memory,
                 title: 'Memory',
-                value: _DeviceInfo.memoryString,
+                value: DeviceStatusInfo.memoryString,
               ),
               const Divider(
                   color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
@@ -144,10 +152,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const Spacer(),
                     Icon(
-                      _DeviceInfo.hasNeuralEngine
+                      DeviceStatusInfo.hasNeuralEngine
                           ? Icons.check_circle
                           : Icons.cancel_outlined,
-                      color: _DeviceInfo.hasNeuralEngine
+                      color: DeviceStatusInfo.hasNeuralEngine
                           ? AppTheme.success
                           : AppTheme.textTertiary,
                       size: 22,
@@ -167,7 +175,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildTierBadgeRow() {
     final device = DeviceProfile.detect();
-    final tierLabel = device.tier.name[0].toUpperCase() + device.tier.name.substring(1);
+    final tierLabel =
+        device.tier.name[0].toUpperCase() + device.tier.name.substring(1);
     final tierColor = switch (device.tier) {
       DeviceTier.minimum => AppTheme.danger,
       DeviceTier.low => AppTheme.warning,
@@ -182,7 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Icon(Icons.speed, color: AppTheme.accent, size: 22),
           const SizedBox(width: 12),
           const Text('Capability Tier',
-            style: TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -192,7 +201,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               border: Border.all(color: tierColor.withValues(alpha: 0.4)),
             ),
             child: Text(tierLabel,
-              style: TextStyle(color: tierColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    color: tierColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -219,7 +231,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (final uc in [UseCase.chat, UseCase.reasoning, UseCase.vision, UseCase.stt, UseCase.fast])
+                for (final uc in [
+                  UseCase.chat,
+                  UseCase.reasoning,
+                  UseCase.vision,
+                  UseCase.stt,
+                  UseCase.fast
+                ])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
@@ -231,14 +249,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       selectedColor: AppTheme.accent.withValues(alpha: 0.2),
                       backgroundColor: AppTheme.surface,
                       labelStyle: TextStyle(
-                        color: _selectedUseCase == uc ? AppTheme.accent : AppTheme.textSecondary,
+                        color: _selectedUseCase == uc
+                            ? AppTheme.accent
+                            : AppTheme.textSecondary,
                         fontSize: 12,
-                        fontWeight: _selectedUseCase == uc ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: _selectedUseCase == uc
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                       side: BorderSide(
-                        color: _selectedUseCase == uc ? AppTheme.accent : AppTheme.border,
+                        color: _selectedUseCase == uc
+                            ? AppTheme.accent
+                            : AppTheme.border,
                       ),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
                       showCheckmark: false,
                     ),
                   ),
@@ -257,7 +282,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   isBest: recommendation.ranked[i] == recommendation.bestMatch,
                 ),
                 if (i < recommendation.ranked.length - 1)
-                  const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+                  const Divider(
+                      color: AppTheme.border,
+                      indent: 16,
+                      endIndent: 16,
+                      height: 1),
               ],
             ],
           ),
@@ -326,7 +355,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               const SizedBox(height: 8),
               // Max Tokens
               _buildSettingRow(
@@ -530,12 +560,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
                 },
               ),
-              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               ListTile(
                 leading: const Icon(Icons.policy, color: AppTheme.accent),
-                title: const Text(
-                  'Phone Detective',
-                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                title: Text(
+                  _detectiveTitle,
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 14),
                 ),
                 subtitle: const Text(
                   'On-device behavioral insights with Qwen3',
@@ -575,24 +607,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Veda',
                 value: '1.1.0',
               ),
-              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.code,
                 title: 'Veda SDK',
                 value: '1.1.0',
               ),
-              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.memory,
                 title: 'Backend',
-                value: Platform.isIOS ? 'Metal GPU' : 'CPU',
+                value: DeviceStatusInfo.backendLabel,
               ),
-              const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
+              const Divider(
+                  color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
-                    Icon(Icons.shield_outlined, color: AppTheme.accent, size: 22),
+                    Icon(Icons.shield_outlined,
+                        color: AppTheme.accent, size: 22),
                     SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -730,7 +766,8 @@ class _ModelRowState extends State<_ModelRow> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text('Delete Model', style: TextStyle(color: AppTheme.textPrimary)),
+        title: const Text('Delete Model',
+            style: TextStyle(color: AppTheme.textPrimary)),
         content: Text(
           'Delete "${widget.model.name}" (${_formatSize(widget.model.sizeBytes)})?\n\nIt will be re-downloaded when needed.',
           style: const TextStyle(color: AppTheme.textSecondary),
@@ -738,11 +775,13 @@ class _ModelRowState extends State<_ModelRow> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: AppTheme.danger)),
+            child:
+                const Text('Delete', style: TextStyle(color: AppTheme.danger)),
           ),
         ],
       ),
@@ -798,7 +837,8 @@ class _ModelRowState extends State<_ModelRow> {
                   ],
                 ),
               ),
-              if (snapshot.connectionState == ConnectionState.waiting || _isDeleting)
+              if (snapshot.connectionState == ConnectionState.waiting ||
+                  _isDeleting)
                 const SizedBox(
                   width: 20,
                   height: 20,
@@ -809,8 +849,11 @@ class _ModelRowState extends State<_ModelRow> {
                 )
               else ...[
                 Icon(
-                  isDownloaded ? Icons.check_circle : Icons.cloud_download_outlined,
-                  color: isDownloaded ? AppTheme.success : AppTheme.textTertiary,
+                  isDownloaded
+                      ? Icons.check_circle
+                      : Icons.cloud_download_outlined,
+                  color:
+                      isDownloaded ? AppTheme.success : AppTheme.textTertiary,
                   size: 20,
                 ),
                 if (isDownloaded) ...[
@@ -861,30 +904,36 @@ class _RecommendationRow extends StatelessWidget {
                 ),
               Expanded(
                 child: Text(score.model.name,
-                  style: TextStyle(color: textColor, fontSize: 14,
-                    fontWeight: isBest ? FontWeight.w600 : FontWeight.normal)),
+                    style: TextStyle(
+                        color: textColor,
+                        fontSize: 14,
+                        fontWeight:
+                            isBest ? FontWeight.w600 : FontWeight.normal)),
               ),
               // Fits badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: score.fits
-                    ? AppTheme.success.withValues(alpha: 0.15)
-                    : AppTheme.danger.withValues(alpha: 0.15),
+                      ? AppTheme.success.withValues(alpha: 0.15)
+                      : AppTheme.danger.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   score.fits ? 'Fits' : 'Too Large',
                   style: TextStyle(
-                    color: score.fits ? AppTheme.success : AppTheme.danger,
-                    fontSize: 10, fontWeight: FontWeight.w600),
+                      color: score.fits ? AppTheme.success : AppTheme.danger,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
               const SizedBox(width: 8),
               // Score number
               Text('${score.finalScore}',
-                style: TextStyle(color: dimmed ? AppTheme.textTertiary : AppTheme.accent,
-                  fontSize: 18, fontWeight: FontWeight.bold)),
+                  style: TextStyle(
+                      color: dimmed ? AppTheme.textTertiary : AppTheme.accent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 8),
@@ -922,7 +971,7 @@ class _RecommendationRow extends StatelessWidget {
               _dimensionChip('CTX', score.contextScore, subColor),
               const Spacer(),
               Text('~${score.memoryEstimate.totalMB} MB',
-                style: TextStyle(color: subColor, fontSize: 11)),
+                  style: TextStyle(color: subColor, fontSize: 11)),
             ],
           ),
           // Warning text
@@ -930,7 +979,8 @@ class _RecommendationRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(score.warning!,
-                style: const TextStyle(color: AppTheme.warning, fontSize: 11)),
+                  style:
+                      const TextStyle(color: AppTheme.warning, fontSize: 11)),
             ),
         ],
       ),
@@ -939,100 +989,6 @@ class _RecommendationRow extends StatelessWidget {
 
   Widget _dimensionChip(String label, int value, Color color) {
     return Text('$label:$value',
-      style: TextStyle(color: color, fontSize: 10, fontFamily: 'monospace'));
-  }
-}
-
-// ── Device Info Helper (sysctlbyname FFI) ────────────────────────────────
-
-typedef _SysctlByNameC = ffi.Int Function(
-  ffi.Pointer<ffi.Char>,
-  ffi.Pointer<ffi.Void>,
-  ffi.Pointer<ffi.Size>,
-  ffi.Pointer<ffi.Void>,
-  ffi.Size,
-);
-typedef _SysctlByNameDart = int Function(
-  ffi.Pointer<ffi.Char>,
-  ffi.Pointer<ffi.Void>,
-  ffi.Pointer<ffi.Size>,
-  ffi.Pointer<ffi.Void>,
-  int,
-);
-
-class _DeviceInfo {
-  static final _sysctlbyname = ffi.DynamicLibrary.process()
-      .lookupFunction<_SysctlByNameC, _SysctlByNameDart>('sysctlbyname');
-
-  static String? _cachedModel;
-  static double? _cachedMemory;
-
-  static String get model {
-    if (_cachedModel != null) return _cachedModel!;
-    try {
-      _cachedModel = _readString('hw.machine');
-    } catch (_) {
-      _cachedModel = Platform.operatingSystem;
-    }
-    return _cachedModel!;
-  }
-
-  static String get chip {
-    if (Platform.isIOS || Platform.isMacOS) return 'Apple Silicon';
-    return 'Unknown';
-  }
-
-  static double get memoryGB {
-    if (_cachedMemory != null) return _cachedMemory!;
-    try {
-      _cachedMemory = _readInt64('hw.memsize') / (1024 * 1024 * 1024);
-    } catch (_) {
-      _cachedMemory = 0;
-    }
-    return _cachedMemory!;
-  }
-
-  static String get memoryString {
-    final gb = memoryGB;
-    if (gb <= 0) return 'Unknown';
-    return '${gb.toStringAsFixed(2)} GB';
-  }
-
-  static bool get hasNeuralEngine => Platform.isIOS;
-
-  static String _readString(String name) {
-    final namePtr = name.toNativeUtf8();
-    final sizePtr = calloc<ffi.Size>();
-    try {
-      _sysctlbyname(namePtr.cast(), ffi.nullptr, sizePtr, ffi.nullptr, 0);
-      final bufLen = sizePtr.value;
-      if (bufLen == 0) return 'Unknown';
-
-      final buf = calloc<ffi.Uint8>(bufLen);
-      try {
-        _sysctlbyname(namePtr.cast(), buf.cast(), sizePtr, ffi.nullptr, 0);
-        return buf.cast<Utf8>().toDartString();
-      } finally {
-        calloc.free(buf);
-      }
-    } finally {
-      calloc.free(sizePtr);
-      calloc.free(namePtr);
-    }
-  }
-
-  static int _readInt64(String name) {
-    final namePtr = name.toNativeUtf8();
-    final sizePtr = calloc<ffi.Size>();
-    final valPtr = calloc<ffi.Int64>();
-    try {
-      sizePtr.value = ffi.sizeOf<ffi.Int64>();
-      _sysctlbyname(namePtr.cast(), valPtr.cast(), sizePtr, ffi.nullptr, 0);
-      return valPtr.value;
-    } finally {
-      calloc.free(valPtr);
-      calloc.free(sizePtr);
-      calloc.free(namePtr);
-    }
+        style: TextStyle(color: color, fontSize: 10, fontFamily: 'monospace'));
   }
 }

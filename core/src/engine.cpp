@@ -7,6 +7,7 @@
  */
 
 #include "edge_veda.h"
+#include "backend_lifecycle.h"
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
@@ -297,8 +298,8 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     }
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // Initialize llama.cpp backend
-    llama_backend_init();
+    // Initialize shared llama backend
+    edge_veda_backend_acquire();
 
     // Configure model parameters
     llama_model_params model_params = llama_model_default_params();
@@ -310,7 +311,7 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     ctx->model = llama_model_load_from_file(ctx->model_path.c_str(), model_params);
     if (!ctx->model) {
         ctx->last_error = "Failed to load model from: " + ctx->model_path;
-        llama_backend_free();
+        edge_veda_backend_release();
         delete ctx;
         if (error) *error = EV_ERROR_MODEL_LOAD_FAILED;
         return nullptr;
@@ -341,7 +342,7 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     if (!ctx->llama_ctx) {
         ctx->last_error = "Failed to create llama context";
         llama_model_free(ctx->model);
-        llama_backend_free();
+        edge_veda_backend_release();
         delete ctx;
         if (error) *error = EV_ERROR_BACKEND_INIT_FAILED;
         return nullptr;
@@ -370,6 +371,10 @@ void ev_free(ev_context ctx) {
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
+    // Memory guard callback is global; clear stale callbacks on context free.
+    memory_guard_set_callback(nullptr, nullptr);
+    memory_guard_set_limit(0);
+
     if (ctx->sampler) {
         llama_sampler_free(ctx->sampler);
         ctx->sampler = nullptr;
@@ -382,7 +387,7 @@ void ev_free(ev_context ctx) {
         llama_model_free(ctx->model);
         ctx->model = nullptr;
     }
-    llama_backend_free();
+    edge_veda_backend_release();
 #endif
 
     delete ctx;

@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, InternetAddress, Platform, Process;
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import 'app_theme.dart';
+import 'device_status_info.dart';
 import 'image_screen.dart';
 import 'model_selection_modal.dart';
 import 'settings_screen.dart';
+import 'soak_test_service.dart';
 import 'stt_screen.dart';
 import 'tts_screen.dart';
 import 'vision_screen.dart';
@@ -131,7 +135,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   bool _isInitialized = false;
   bool _isLoading = false;
-  bool _isGenerating = false; // Track active generation for lifecycle cancellation
+  bool _isGenerating =
+      false; // Track active generation for lifecycle cancellation
   bool _isDownloading = false;
   bool _runningBenchmark = false;
   bool _toolsEnabled = false;
@@ -158,11 +163,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   int _indexingTotal = 0; // Total chunks to embed
   String? _embeddingModelPath; // Cached path to embedding model
   final List<ChatMessage> _ragMessages = [];
+  bool _preferOfflineModel = true;
+  bool _isInternetReachable = false;
+  bool _checkingInternet = false;
+  Timer? _networkMonitorTimer;
 
   // ChatSession state
   ChatSession? _session;
   SystemPromptPreset _selectedPreset = SystemPromptPreset.assistant;
   bool _showSummarizationIndicator = false;
+
+  static const String _strictRagPromptTemplate = '''
+You are an on-device document QA assistant.
+Answer ONLY from the provided context.
+If the context does not contain the answer, reply exactly:
+"I couldn't find that in the attached document."
+Keep answers concise and factual.
+
+Context:
+{context}
+
+Question: {query}
+Answer:
+''';
 
   // Demo tool definitions for function calling
   List<ToolDefinition> get _demoTools => [
@@ -219,12 +242,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   double? _memoryMb;
   final _stopwatch = Stopwatch();
 
+  String get _deviceSummary => DeviceStatusInfo.deviceDisplay;
+  String get _platformSummary => DeviceStatusInfo.platformLabel;
+  String get _backendSummary => DeviceStatusInfo.backendLabel;
+  String get _hardwareSummary =>
+      '${DeviceStatusInfo.chip} (${DeviceStatusInfo.backendLabel})';
+
   @override
   void initState() {
     super.initState();
     // Register lifecycle observer for iOS background handling (Pitfall 5 - Critical)
     WidgetsBinding.instance.addObserver(this);
     _setupMemoryPressureListener();
+    _refreshInternetStatus();
+    _networkMonitorTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _refreshInternetStatus(),
+    );
     _checkAndDownloadModel();
   }
 
@@ -234,36 +268,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (Platform.isAndroid) {
       _memorySubscription = _memoryPressureChannel
           .receiveBroadcastStream()
-          .listen((event) {
-        if (event is Map) {
-          final level = event['pressureLevel'] as String?;
-          debugPrint('EdgeVeda: Memory pressure event: $level');
+          .listen(
+            (event) {
+              if (event is Map) {
+                final level = event['pressureLevel'] as String?;
+                debugPrint('EdgeVeda: Memory pressure event: $level');
 
-          setState(() {
-            _memoryPressureLevel = level;
-          });
+                setState(() {
+                  _memoryPressureLevel = level;
+                });
 
-          // Show warning for critical memory pressure
-          if (level == 'critical' || level == 'running_critical') {
-            setState(() {
-              _statusMessage = 'Memory pressure: $level - consider restarting';
-            });
+                // Show warning for critical memory pressure
+                if (level == 'critical' || level == 'running_critical') {
+                  setState(() {
+                    _statusMessage =
+                        'Memory pressure: $level - consider restarting';
+                  });
 
-            // Show snackbar warning
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Memory pressure: $level'),
-                  backgroundColor: AppTheme.warning,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            }
-          }
-        }
-      }, onError: (error) {
-        debugPrint('EdgeVeda: Memory pressure stream error: $error');
-      });
+                  // Show snackbar warning
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Memory pressure: $level'),
+                        backgroundColor: AppTheme.warning,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            onError: (error) {
+              debugPrint('EdgeVeda: Memory pressure stream error: $error');
+            },
+          );
     }
   }
 
@@ -271,6 +309,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     // CRITICAL: Remove observer FIRST to prevent callbacks after disposal
     WidgetsBinding.instance.removeObserver(this);
+    _networkMonitorTimer?.cancel();
     _memorySubscription?.cancel();
     _ragEmbedder?.dispose();
     _edgeVeda.dispose();
@@ -313,6 +352,39 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _refreshInternetStatus() async {
+    if (_checkingInternet) return;
+    _checkingInternet = true;
+    try {
+      final result = await InternetAddress.lookup(
+        'example.com',
+      ).timeout(const Duration(seconds: 2));
+      final reachable = result.any((entry) => entry.rawAddress.isNotEmpty);
+      if (mounted) {
+        setState(() {
+          _isInternetReachable = reachable;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isInternetReachable = false;
+        });
+      }
+    } finally {
+      _checkingInternet = false;
+    }
+  }
+
+  void _toggleInferenceMode() {
+    setState(() {
+      _preferOfflineModel = !_preferOfflineModel;
+      _statusMessage = _preferOfflineModel
+          ? 'Offline model mode enabled'
+          : 'Auto mode enabled (uses local model, network-aware downloads)';
+    });
+  }
+
   Future<void> _checkAndDownloadModel() async {
     setState(() {
       _isDownloading = true;
@@ -320,10 +392,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
 
     try {
-      final model = ModelRegistry.llama32_1b;
+      const model = ModelRegistry.llama32_1b;
       final isDownloaded = await _modelManager.isModelDownloaded(model.id);
 
       if (!isDownloaded) {
+        await _refreshInternetStatus();
+        if (_preferOfflineModel) {
+          throw const FormatException(
+            'Offline mode is enabled and the base model is not downloaded.',
+          );
+        }
+        if (!_isInternetReachable) {
+          throw const FormatException(
+            'No internet connection. Connect once to download the base model.',
+          );
+        }
         setState(() {
           _statusMessage = 'Downloading model (${model.name})...';
         });
@@ -366,14 +449,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
 
     try {
-      await _edgeVeda.init(EdgeVedaConfig(
-        modelPath: _modelPath!,
-        useGpu: true,
-        numThreads: 4,
-        contextLength: 2048,
-        maxMemoryMb: 1536,
-        verbose: true,
-      ));
+      await _edgeVeda.init(
+        EdgeVedaConfig(
+          modelPath: _modelPath!,
+          useGpu: true,
+          numThreads: 4,
+          contextLength: 2048,
+          maxMemoryMb: 1536,
+          verbose: true,
+        ),
+      );
 
       // Create ChatSession after successful initialization
       // Always use Llama 3.2 Instruct at init time. Tools toggle handles Qwen3 model switch.
@@ -399,8 +484,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Split text into chunks for embedding, respecting paragraph boundaries.
   /// ~500 chars per chunk with 50-char overlap for context continuity.
-  static List<String> _chunkText(String text,
-      {int maxChars = 500, int overlap = 50}) {
+  static List<String> _chunkText(
+    String text, {
+    int maxChars = 500,
+    int overlap = 50,
+  }) {
     final chunks = <String>[];
     // Normalize whitespace
     text = text.replaceAll('\r\n', '\n').trim();
@@ -433,19 +521,466 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return chunks;
   }
 
+  static String _sanitizeDocumentText(String text) {
+    var cleaned = text.replaceAll('\u0000', ' ');
+    cleaned = cleaned.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    cleaned = cleaned.replaceAll(RegExp(r'[ \t]+'), ' ');
+    cleaned = cleaned.replaceAll(RegExp(r' *\n *'), '\n');
+    cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return cleaned.trim();
+  }
+
+  static bool _isPdfArtifactLine(String line) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) return false;
+    if (RegExp(
+      r'^(%PDF|xref|trailer|startxref|obj|endobj|stream|endstream|<<|>>)$',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
+      return true;
+    }
+    if (RegExp(r'^/\w+').hasMatch(trimmed)) {
+      return true;
+    }
+    final artifactTokens = RegExp(
+      r'\b(obj|endobj|xref|trailer|stream|endstream)\b|/(Type|Filter|Length|Font|Catalog|Page|XObject|CIDToGIDMap)\b',
+      caseSensitive: false,
+    ).allMatches(trimmed).length;
+    final letterCount = RegExp(r'[A-Za-z]').allMatches(trimmed).length;
+    return artifactTokens >= 2 && letterCount < 20;
+  }
+
+  static String _preCleanDocumentText(String text, {bool fromPdf = false}) {
+    var cleaned = _sanitizeDocumentText(text);
+    if (cleaned.isEmpty) return cleaned;
+
+    cleaned = cleaned
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('\u200B', '')
+        .replaceAll('\u200C', '')
+        .replaceAll('\u200D', '');
+
+    final lines = cleaned.split('\n');
+    final kept = <String>[];
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) {
+        kept.add('');
+        continue;
+      }
+      if (fromPdf && _isPdfArtifactLine(line)) {
+        continue;
+      }
+      final punctuationOnly =
+          RegExp(r'^[^A-Za-z0-9]+$').hasMatch(line) && line.length > 4;
+      if (punctuationOnly) continue;
+      kept.add(line);
+    }
+
+    cleaned = kept.join('\n');
+    cleaned = cleaned.replaceAll(RegExp(r'(\w)-\n(\w)'), r'$1$2');
+    cleaned = cleaned.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), ' ');
+    cleaned = cleaned.replaceAll(RegExp(r'\s{2,}'), ' ');
+    cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return cleaned.trim();
+  }
+
+  static String _postCleanDocumentText(String text) {
+    var cleaned = _sanitizeDocumentText(text);
+    if (cleaned.isEmpty) return cleaned;
+    cleaned = cleaned.replaceAll(RegExp(r'\s+([,.!?;:])'), r'$1');
+    cleaned = cleaned.replaceAll(
+      RegExp(r'([A-Za-z0-9])\s*([/|])\s*'),
+      r'$1 $2 ',
+    );
+    cleaned = cleaned.replaceAll(RegExp(r'\s{2,}'), ' ');
+    return cleaned.trim();
+  }
+
+  static bool _hasMinimumTextQuality(String text) {
+    if (text.isEmpty) return false;
+    final sample = text.substring(0, math.min(text.length, 12000));
+    final words = RegExp(r'[A-Za-z0-9]{2,}').allMatches(sample).length;
+    final letters = RegExp(r'[A-Za-z]').allMatches(sample).length;
+    final artifactTokens = RegExp(
+      r'\b(obj|endobj|xref|trailer|stream|endstream)\b|/(Type|Filter|Length|Font|Catalog|Page|XObject|CIDToGIDMap)\b',
+      caseSensitive: false,
+    ).allMatches(sample).length;
+    if (sample.length < 400) {
+      if (words < 8 || letters < 25) return false;
+    } else if (sample.length < 1200) {
+      if (words < 14 || letters < 50) return false;
+    } else {
+      if (words < 20 || letters < 80) return false;
+    }
+    final artifactLimit = words < 30 ? (words / 2).ceil() : (words ~/ 3);
+    if (artifactTokens > artifactLimit) return false;
+    return true;
+  }
+
+  static bool _isUsableRagChunk(String text) {
+    final cleaned = text.trim();
+    if (cleaned.isEmpty) return false;
+    if (cleaned.length < 40) return false;
+    if (_looksLikePdfObjectDump(cleaned)) return false;
+    final words = RegExp(r'[A-Za-z0-9]{2,}').allMatches(cleaned).length;
+    final letters = RegExp(r'[A-Za-z]').allMatches(cleaned).length;
+    return words >= 6 && letters >= 20;
+  }
+
+  static List<String> _postCleanChunks(List<String> chunks) {
+    final out = <String>[];
+    final seen = <String>{};
+    for (final raw in chunks) {
+      final cleaned = _postCleanDocumentText(raw);
+      if (!_isUsableRagChunk(cleaned)) continue;
+      final key = cleaned.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (!seen.add(key)) continue;
+      out.add(cleaned);
+    }
+    return out;
+  }
+
+  static String _preCleanUserQuery(String query) {
+    return query.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static bool _isLikelyFollowUpQuestion(String query) {
+    final cleaned = query.trim().toLowerCase();
+    if (cleaned.isEmpty) return false;
+
+    final wordCount = RegExp(r'\S+').allMatches(cleaned).length;
+    final containsReferencePronoun = RegExp(
+      r'\b(she|her|he|him|they|them|their|it|its|that|this|these|those|there)\b',
+    ).hasMatch(cleaned);
+    final startsLikeFollowUp = RegExp(
+      r'^(and|also|what about|how about|where|when|which|who|does she|does he|did she|did he|what else|tell me more)\b',
+    ).hasMatch(cleaned);
+
+    return containsReferencePronoun || startsLikeFollowUp || wordCount <= 5;
+  }
+
+  String? _previousRagUserQuestion() {
+    bool skippedCurrent = false;
+    for (int i = _ragMessages.length - 1; i >= 0; i--) {
+      final msg = _ragMessages[i];
+      if (msg.role != ChatRole.user) continue;
+      final cleaned = _preCleanUserQuery(msg.content);
+      if (cleaned.isEmpty) continue;
+      if (!skippedCurrent) {
+        skippedCurrent = true;
+        continue;
+      }
+      return cleaned;
+    }
+    return null;
+  }
+
+  String? _lastRagAssistantAnswer() {
+    for (int i = _ragMessages.length - 1; i >= 0; i--) {
+      final msg = _ragMessages[i];
+      if (msg.role != ChatRole.assistant) continue;
+      final cleaned = _postCleanModelResponse(msg.content);
+      if (cleaned.isNotEmpty) return cleaned;
+    }
+    return null;
+  }
+
+  String _buildRagRetrievalQuery(String query) {
+    final cleaned = _preCleanUserQuery(query);
+    final previousUserQuestion = _previousRagUserQuestion();
+    if (previousUserQuestion == null || !_isLikelyFollowUpQuestion(cleaned)) {
+      return cleaned;
+    }
+
+    final parts = <String>[
+      cleaned,
+      'Previous question: $previousUserQuestion',
+    ];
+
+    final previousAssistant = _lastRagAssistantAnswer();
+    if (previousAssistant != null && previousAssistant.length <= 220) {
+      parts.add('Previous answer: $previousAssistant');
+    }
+
+    return parts.join('\n');
+  }
+
+  static String _postCleanModelResponse(String response) {
+    var cleaned = response.replaceAll('\u0000', '').trim();
+    cleaned = cleaned.replaceAll(RegExp(r'\r\n?'), '\n');
+    cleaned = cleaned.replaceAll(RegExp(r'[ \t]+'), ' ');
+    cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    cleaned = cleaned.replaceAll(RegExp(r'\s+([,.!?;:])'), r'$1');
+    return cleaned.trim();
+  }
+
+  static bool _looksLikePdfObjectDump(String text) {
+    if (text.isEmpty) return true;
+    final sample = text.substring(0, math.min(text.length, 6000));
+    final pdfTokens = RegExp(
+      r'\b(obj|endobj|xref|trailer|stream|endstream)\b|/(Type|Filter|Length|Font|Catalog|Page|XObject|CIDToGIDMap)\b',
+      caseSensitive: false,
+      multiLine: true,
+    ).allMatches(sample).length;
+    final words = RegExp(r'[A-Za-z]{3,}').allMatches(sample).length;
+    return pdfTokens > 20 && pdfTokens > (words ~/ 3);
+  }
+
+  Future<String?> _trySystemPdfTextExtraction(String filePath) async {
+    if (!Platform.isMacOS) return null;
+
+    String normalizeExtracted(String raw) => _postCleanDocumentText(
+          _preCleanDocumentText(
+            raw.replaceAll(r'\n', '\n').replaceAll(r'\"', '"'),
+            fromPdf: false,
+          ),
+        );
+
+    try {
+      final probe = await Process.run('which', const ['pdftotext']);
+      if (probe.exitCode == 0 && probe.stdout.toString().trim().isNotEmpty) {
+        final pdftotext = await Process.run(
+          'pdftotext',
+          ['-layout', filePath, '-'],
+        );
+        if (pdftotext.exitCode == 0) {
+          final extracted = normalizeExtracted(pdftotext.stdout.toString());
+          if (extracted.isNotEmpty &&
+              !_looksLikePdfObjectDump(extracted) &&
+              _hasMinimumTextQuality(extracted)) {
+            return extracted;
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore and try next fallback.
+    }
+
+    try {
+      final mdls = await Process.run(
+        'mdls',
+        ['-raw', '-name', 'kMDItemTextContent', filePath],
+      );
+      if (mdls.exitCode == 0) {
+        var out = mdls.stdout.toString().trim();
+        if (out.startsWith('"') && out.endsWith('"') && out.length >= 2) {
+          out = out.substring(1, out.length - 1);
+        }
+        if (out.isNotEmpty && out != '(null)' && out != '""') {
+          final extracted = normalizeExtracted(out);
+          if (extracted.isNotEmpty &&
+              !_looksLikePdfObjectDump(extracted) &&
+              _hasMinimumTextQuality(extracted)) {
+            return extracted;
+          }
+        }
+      }
+    } catch (_) {
+      // No-op.
+    }
+
+    return null;
+  }
+
+  Future<String?> _trySystemDocumentTextExtraction(String filePath) async {
+    if (!Platform.isMacOS) return null;
+
+    String normalizeExtracted(String raw) => _postCleanDocumentText(
+          _preCleanDocumentText(
+            raw.replaceAll(r'\n', '\n').replaceAll(r'\"', '"'),
+            fromPdf: false,
+          ),
+        );
+
+    try {
+      final textutil = await Process.run(
+        'textutil',
+        ['-stdout', '-convert', 'txt', filePath],
+      );
+      if (textutil.exitCode == 0) {
+        final extracted = normalizeExtracted(textutil.stdout.toString());
+        if (extracted.isNotEmpty && _hasMinimumTextQuality(extracted)) {
+          return extracted;
+        }
+      }
+    } catch (_) {
+      // Ignore and try mdls fallback.
+    }
+
+    try {
+      final mdls = await Process.run(
+        'mdls',
+        ['-raw', '-name', 'kMDItemTextContent', filePath],
+      );
+      if (mdls.exitCode == 0) {
+        var out = mdls.stdout.toString().trim();
+        if (out.startsWith('"') && out.endsWith('"') && out.length >= 2) {
+          out = out.substring(1, out.length - 1);
+        }
+        if (out.isNotEmpty && out != '(null)' && out != '""') {
+          final extracted = normalizeExtracted(out);
+          if (extracted.isNotEmpty && _hasMinimumTextQuality(extracted)) {
+            return extracted;
+          }
+        }
+      }
+    } catch (_) {
+      // No-op.
+    }
+
+    return null;
+  }
+
+  Future<(String text, String source)> _extractDocumentText(
+    String filePath,
+  ) async {
+    final lowerPath = filePath.toLowerCase();
+
+    if (lowerPath.endsWith('.pdf')) {
+      final bytes = await File(filePath).readAsBytes();
+      final document = PdfDocument(inputBytes: bytes);
+      try {
+        final extractor = PdfTextExtractor(document);
+        final pageCount = document.pages.count;
+        final pageTexts = <String>[];
+
+        for (var i = 0; i < pageCount; i++) {
+          final pageText = _preCleanDocumentText(
+            extractor.extractText(startPageIndex: i, endPageIndex: i),
+            fromPdf: true,
+          );
+          if (pageText.isNotEmpty) {
+            pageTexts.add(pageText);
+          }
+        }
+
+        var extracted = pageTexts.join('\n\n');
+        if (extracted.isEmpty) {
+          extracted = _preCleanDocumentText(
+            extractor.extractText(),
+            fromPdf: true,
+          );
+        }
+        extracted = _postCleanDocumentText(extracted);
+        if (extracted.isEmpty ||
+            _looksLikePdfObjectDump(extracted) ||
+            !_hasMinimumTextQuality(extracted)) {
+          final fallback = await _trySystemPdfTextExtraction(filePath);
+          if (fallback != null) {
+            return (fallback, 'PDF (system)');
+          }
+        }
+        if (extracted.isEmpty) {
+          throw const FormatException(
+            'No extractable text found in PDF. This PDF may be image-only/scanned. Please upload a searchable PDF or TXT/MD file.',
+          );
+        }
+        if (_looksLikePdfObjectDump(extracted)) {
+          throw const FormatException(
+            'PDF extraction returned document internals instead of readable text. Please use a searchable PDF.',
+          );
+        }
+        if (!_hasMinimumTextQuality(extracted)) {
+          throw const FormatException(
+            'The PDF text appears too noisy or unreadable after extraction. Use a searchable PDF with selectable text.',
+          );
+        }
+        return (extracted, 'PDF');
+      } finally {
+        document.dispose();
+      }
+    }
+
+    try {
+      final text = _postCleanDocumentText(
+        _preCleanDocumentText(await File(filePath).readAsString()),
+      );
+      if (text.isEmpty) {
+        throw const FormatException('No readable text found in file.');
+      }
+      return (text, 'UTF-8');
+    } catch (_) {
+      final systemExtracted = await _trySystemDocumentTextExtraction(filePath);
+      if (systemExtracted != null) {
+        return (systemExtracted, 'System');
+      }
+
+      final bytes = await File(filePath).readAsBytes();
+      final sampleLength = math.min(bytes.length, 4096);
+      final sample = bytes.take(sampleLength);
+      final nonPrintable = sample
+          .where((b) => b < 0x09 || (b > 0x0D && b < 0x20))
+          .length;
+      final binaryRatio = sampleLength == 0 ? 0.0 : nonPrintable / sampleLength;
+      if (binaryRatio > 0.25) {
+        throw const FormatException(
+          'Unsupported binary file. Please use TXT, Markdown, JSON, CSV, PDF, DOCX, RTF, or ODT.',
+        );
+      }
+      final decoded = _postCleanDocumentText(
+        _preCleanDocumentText(latin1.decode(bytes)),
+      );
+      if (decoded.isEmpty) {
+        throw const FormatException('No readable text found in file.');
+      }
+      return (decoded, 'Latin-1');
+    }
+  }
+
+  static bool _isSupportedDocument(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.pdf') ||
+        lower.endsWith('.txt') ||
+        lower.endsWith('.md') ||
+        lower.endsWith('.markdown') ||
+        lower.endsWith('.csv') ||
+        lower.endsWith('.json') ||
+        lower.endsWith('.log') ||
+        lower.endsWith('.doc') ||
+        lower.endsWith('.docx') ||
+        lower.endsWith('.rtf') ||
+        lower.endsWith('.rtfd') ||
+        lower.endsWith('.odt') ||
+        lower.endsWith('.yaml') ||
+        lower.endsWith('.yml');
+  }
+
   /// Pick a text file, chunk it, embed each chunk, build RAG pipeline.
   Future<void> _pickAndIndexDocument() async {
     final pipelineSw = Stopwatch()..start();
 
     // Step 1: Pick file
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
+      type: FileType.custom,
+      allowedExtensions: const [
+        'pdf',
+        'txt',
+        'md',
+        'markdown',
+        'csv',
+        'json',
+        'log',
+        'doc',
+        'docx',
+        'rtf',
+        'rtfd',
+        'odt',
+        'yaml',
+        'yml',
+      ],
     );
     if (result == null || result.files.single.path == null) return;
 
     final filePath = result.files.single.path!;
     final fileName = result.files.single.name;
     final fileSize = result.files.single.size;
+    if (!_isSupportedDocument(fileName)) {
+      _showError(
+        'Unsupported file type. Use PDF/TXT/MD/CSV/JSON/DOCX/RTF/ODT. Use Vision tab for images.',
+      );
+      return;
+    }
 
     setState(() {
       _isIndexingDocument = true;
@@ -455,23 +990,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
 
     try {
-      // Step 2: Read file as text (try UTF-8, fall back to Latin-1)
+      // Step 2: Extract text from document (PDF/text files supported)
       final readSw = Stopwatch()..start();
-      String text;
-      String encoding = 'UTF-8';
-      try {
-        text = await File(filePath).readAsString();
-      } catch (_) {
-        try {
-          final bytes = await File(filePath).readAsBytes();
-          text = latin1.decode(bytes);
-          encoding = 'Latin-1';
-        } catch (e) {
-          _showError('Cannot read file — only text-based files are supported');
-          setState(() => _isIndexingDocument = false);
-          return;
-        }
-      }
+      final (text, encoding) = await _extractDocumentText(filePath);
       readSw.stop();
       if (text.trim().isEmpty) {
         _showError('Document is empty');
@@ -481,14 +1002,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       // Step 3: Chunk text
       final chunkSw = Stopwatch()..start();
-      final chunks = _chunkText(text);
+      final rawChunks = _chunkText(text);
+      final chunks = _postCleanChunks(rawChunks);
       chunkSw.stop();
       if (chunks.isEmpty) {
         _showError('Could not extract text chunks from document');
         setState(() => _isIndexingDocument = false);
         return;
       }
-      final avgChunkSize = text.length ~/ chunks.length;
+      if (rawChunks.length >= 6 && chunks.length <= 1) {
+        _showError(
+          'The extracted text is too noisy for reliable Q&A. Please use a searchable PDF or cleaner text file.',
+        );
+        setState(() => _isIndexingDocument = false);
+        return;
+      }
+      final avgChunkSize =
+          chunks.fold<int>(0, (s, c) => s + c.length) ~/
+          math.max(1, chunks.length);
 
       setState(() {
         _indexingTotal = chunks.length;
@@ -499,10 +1030,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final downloadSw = Stopwatch()..start();
       bool wasDownloaded = true;
       if (_embeddingModelPath == null) {
-        final embModel = ModelRegistry.allMiniLmL6V2;
+        const embModel = ModelRegistry.allMiniLmL6V2;
         final isDownloaded = await _modelManager.isModelDownloaded(embModel.id);
         wasDownloaded = isDownloaded;
         if (!isDownloaded) {
+          await _refreshInternetStatus();
+          if (_preferOfflineModel) {
+            throw const FormatException(
+              'Offline mode is enabled and the embedding model is not downloaded.',
+            );
+          }
+          if (!_isInternetReachable) {
+            throw const FormatException(
+              'No internet connection. Connect once to download the embedding model.',
+            );
+          }
           _embeddingModelPath = await _modelManager.downloadModel(embModel);
         } else {
           _embeddingModelPath = await _modelManager.getModelPath(embModel.id);
@@ -516,19 +1058,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final initSw = Stopwatch()..start();
       _ragEmbedder?.dispose();
       _ragEmbedder = EdgeVeda();
-      await _ragEmbedder!.init(EdgeVedaConfig(
-        modelPath: _embeddingModelPath!,
-        useGpu: true,
-        numThreads: 4,
-        contextLength: 512,
-        maxMemoryMb: 256,
-        verbose: false,
-      ));
+      await _ragEmbedder!.init(
+        EdgeVedaConfig(
+          modelPath: _embeddingModelPath!,
+          useGpu: true,
+          numThreads: 4,
+          contextLength: 512,
+          maxMemoryMb: 256,
+          verbose: false,
+        ),
+      );
       initSw.stop();
 
       // Step 6: Batch-embed all chunks (single model load)
-      setState(() =>
-          _statusMessage = 'Embedding ${chunks.length} chunks...');
+      setState(() => _statusMessage = 'Embedding ${chunks.length} chunks...');
 
       final embedSw = Stopwatch()..start();
       final embeddings = await _ragEmbedder!.embedBatch(chunks);
@@ -556,16 +1099,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         embedder: _ragEmbedder!,
         generator: _edgeVeda,
         index: _vectorIndex!,
+        config: const RagConfig(
+          topK: 4,
+          minScore: 0.15,
+          maxContextLength: 2400,
+          promptTemplate: _strictRagPromptTemplate,
+        ),
       );
 
       pipelineSw.stop();
 
       // ── INDEXING METRICS ──────────────────────────────────────────
       final perChunkMs = embedSw.elapsedMilliseconds / chunks.length;
-      final embedChunksPerSec = chunks.length / (embedSw.elapsedMilliseconds / 1000);
-      final embedKbPerSec = (text.length / 1024) / (embedSw.elapsedMilliseconds / 1000);
-      final totalTokens = embeddings.fold<int>(0, (sum, e) => sum + e.tokenCount);
-      final processingMs = readSw.elapsedMilliseconds +
+      final embedChunksPerSec =
+          chunks.length / (embedSw.elapsedMilliseconds / 1000);
+      final embedKbPerSec =
+          (text.length / 1024) / (embedSw.elapsedMilliseconds / 1000);
+      final totalTokens = embeddings.fold<int>(
+        0,
+        (sum, e) => sum + e.tokenCount,
+      );
+      final processingMs =
+          readSw.elapsedMilliseconds +
           chunkSw.elapsedMilliseconds +
           initSw.elapsedMilliseconds +
           embedSw.elapsedMilliseconds +
@@ -576,31 +1131,64 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       print('╠══════════════════════════════════════════════════════════════╣');
       print('║ Document                                                    ║');
       print('║   File:            $fileName');
-      print('║   Size:            ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)');
-      print('║   Chunks:          ${chunks.length} (avg ${avgChunkSize} chars/chunk)');
+      print(
+        '║   Size:            ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)',
+      );
+      print(
+        '║   Chunks:          ${chunks.length} (avg $avgChunkSize chars/chunk)',
+      );
+      if (rawChunks.length != chunks.length) {
+        print(
+          '║   Chunk Cleaning:  ${rawChunks.length - chunks.length} noisy chunks removed',
+        );
+      }
       print('║   Tokens:          $totalTokens');
       print('║                                                             ║');
       print('║ Throughput (size-independent)                               ║');
-      print('║   Embed Speed:     ${perChunkMs.toStringAsFixed(1).padLeft(6)} ms/chunk');
-      print('║   Embed Rate:      ${embedChunksPerSec.toStringAsFixed(0).padLeft(6)} chunks/sec');
-      print('║   Embed Rate:      ${embedKbPerSec.toStringAsFixed(1).padLeft(6)} KB/sec');
-      print('║   Vector Insert:   ${(indexSw.elapsedMilliseconds / chunks.length).toStringAsFixed(2).padLeft(6)} ms/vector');
+      print(
+        '║   Embed Speed:     ${perChunkMs.toStringAsFixed(1).padLeft(6)} ms/chunk',
+      );
+      print(
+        '║   Embed Rate:      ${embedChunksPerSec.toStringAsFixed(0).padLeft(6)} chunks/sec',
+      );
+      print(
+        '║   Embed Rate:      ${embedKbPerSec.toStringAsFixed(1).padLeft(6)} KB/sec',
+      );
+      print(
+        '║   Vector Insert:   ${(indexSw.elapsedMilliseconds / chunks.length).toStringAsFixed(2).padLeft(6)} ms/vector',
+      );
       print('║                                                             ║');
       print('║ Latency Breakdown                                           ║');
-      print('║   File Read:       ${readSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Chunking:        ${chunkSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print(
+        '║   File Read:       ${readSw.elapsedMilliseconds.toString().padLeft(6)} ms',
+      );
+      print(
+        '║   Chunking:        ${chunkSw.elapsedMilliseconds.toString().padLeft(6)} ms',
+      );
       if (!wasDownloaded) {
-        print('║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms  ← one-time cost');
+        print(
+          '║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms  ← one-time cost',
+        );
       }
-      print('║   Embedder Init:   ${initSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Index Build:     ${indexSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print(
+        '║   Embedder Init:   ${initSw.elapsedMilliseconds.toString().padLeft(6)} ms',
+      );
+      print(
+        '║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms',
+      );
+      print(
+        '║   Index Build:     ${indexSw.elapsedMilliseconds.toString().padLeft(6)} ms',
+      );
       print('║   ──────────────────────────────');
-      print('║   Processing:      ${processingMs.toString().padLeft(6)} ms  (excl. download)');
-      print('║   Wall Clock:      ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      print(
+        '║   Processing:      ${processingMs.toString().padLeft(6)} ms  (excl. download)',
+      );
+      print(
+        '║   Wall Clock:      ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms',
+      );
       print('║                                                             ║');
       print('║ Embedding Model: all-MiniLM-L6-v2 (F16, 384d, 46MB)        ║');
-      print('║ Hardware: Apple A18 Pro GPU (Metal), on-device              ║');
+      print('║ Hardware: $_hardwareSummary, on-device');
       print('╚══════════════════════════════════════════════════════════════╝');
       print('');
 
@@ -656,6 +1244,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Send a query via RAG pipeline (streaming) using the attached document context.
   Future<void> _sendWithRag(String prompt) async {
+    final cleanedPrompt = _preCleanUserQuery(prompt);
     final querySw = Stopwatch()..start();
 
     setState(() {
@@ -671,26 +1260,120 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
 
     // Add user message for display
-    _ragMessages.add(ChatMessage(
-      role: ChatRole.user,
-      content: prompt,
-      timestamp: DateTime.now(),
-    ));
+    _ragMessages.add(
+      ChatMessage(
+        role: ChatRole.user,
+        content: prompt,
+        timestamp: DateTime.now(),
+      ),
+    );
 
     final buffer = StringBuffer();
     final genSw = Stopwatch();
     bool receivedFirstToken = false;
+    String? ragPrompt;
+    int retrievedCount = 0;
+    int usedCount = 0;
+    double avgScore = 0.0;
 
     try {
       // Retrieve relevant chunks and stream response
       setState(() => _statusMessage = 'Retrieving relevant context...');
 
-      final stream = _ragPipeline!.queryStream(
-        prompt,
+      final retrievalQuery = _buildRagRetrievalQuery(cleanedPrompt);
+      final followUpMode = retrievalQuery != cleanedPrompt;
+
+      final retrieved = await _ragPipeline!.retrieve(retrievalQuery, k: 8);
+      retrievedCount = retrieved.length;
+      for (int i = 0; i < math.min(3, retrieved.length); i++) {
+        final chunkText =
+            (retrieved[i].metadata['text'] as String? ?? '').trim();
+        final preview = chunkText.length > 90
+            ? '${chunkText.substring(0, 90)}...'
+            : chunkText;
+        debugPrint(
+          'EdgeVeda: RAG hit[$i] score=${retrieved[i].score.toStringAsFixed(3)} text="$preview"',
+        );
+      }
+      final minScore = followUpMode ? 0.10 : 0.16;
+      var relevant = retrieved.where((r) {
+        final text = (r.metadata['text'] as String? ?? '').trim();
+        if (!_isUsableRagChunk(text)) return false;
+        return r.score >= minScore;
+      }).toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
+
+      if (relevant.isEmpty) {
+        final relaxed = retrieved.where((r) {
+          final text = (r.metadata['text'] as String? ?? '').trim();
+          if (!_isUsableRagChunk(text)) return false;
+          return r.score >= 0.05;
+        }).toList()
+          ..sort((a, b) => b.score.compareTo(a.score));
+
+        if (relaxed.isNotEmpty) {
+          final keep = math.min(3, relaxed.length);
+          relevant = relaxed.take(keep).toList();
+          setState(() => _statusMessage = 'Using best-effort context match...');
+        }
+      }
+      if (relevant.isEmpty) {
+        const fallback = "I couldn't find that in the attached document.";
+        _ragMessages.add(
+          ChatMessage(
+            role: ChatRole.assistant,
+            content: fallback,
+            timestamp: DateTime.now(),
+          ),
+        );
+        setState(() {
+          _statusMessage = 'No matching context in document';
+          _streamingText = '';
+        });
+        return;
+      }
+
+      final contextParts = <String>[];
+      int totalLength = 0;
+      double scoreTotal = 0.0;
+      for (int i = 0; i < relevant.length; i++) {
+        final text = (relevant[i].metadata['text'] as String? ?? '').trim();
+        if (text.isEmpty) continue;
+        if (totalLength + text.length > 1800) break;
+        contextParts.add('[${i + 1}] ${_postCleanDocumentText(text)}');
+        totalLength += text.length;
+        scoreTotal += relevant[i].score;
+      }
+      usedCount = contextParts.length;
+      avgScore = usedCount > 0 ? scoreTotal / usedCount : 0.0;
+      if (contextParts.isEmpty) {
+        const fallback = "I couldn't find that in the attached document.";
+        _ragMessages.add(
+          ChatMessage(
+            role: ChatRole.assistant,
+            content: fallback,
+            timestamp: DateTime.now(),
+          ),
+        );
+        setState(() {
+          _statusMessage = 'No usable context in document';
+          _streamingText = '';
+        });
+        return;
+      }
+
+      ragPrompt = _strictRagPromptTemplate
+          .replaceAll('{context}', contextParts.join('\n\n'))
+          .replaceAll('{query}', cleanedPrompt);
+
+      final stream = _edgeVeda.generateStream(
+        ragPrompt,
         options: const GenerateOptions(
-          maxTokens: 512,
-          temperature: 0.7,
+          maxTokens: 220,
+          temperature: 0.15,
           topP: 0.9,
+          topK: 40,
+          repeatPenalty: 1.05,
         ),
         cancelToken: _cancelToken,
       );
@@ -699,8 +1382,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       await for (final chunk in stream) {
         if (_cancelToken?.isCancelled == true) {
-          setState(() =>
-              _statusMessage = 'Cancelled ($_streamingTokenCount tokens)');
+          setState(
+            () => _statusMessage = 'Cancelled ($_streamingTokenCount tokens)',
+          );
           break;
         }
 
@@ -741,16 +1425,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
 
       // Finalize
-      final responseText = buffer.toString();
+      final responseText = _postCleanModelResponse(buffer.toString());
       setState(() => _streamingText = '');
 
       // Add assistant response to RAG messages
       if (responseText.isNotEmpty) {
-        _ragMessages.add(ChatMessage(
-          role: ChatRole.assistant,
-          content: responseText,
-          timestamp: DateTime.now(),
-        ));
+        _ragMessages.add(
+          ChatMessage(
+            role: ChatRole.assistant,
+            content: responseText,
+            timestamp: DateTime.now(),
+          ),
+        );
+      } else if (_cancelToken?.isCancelled != true) {
+        _ragMessages.add(
+          ChatMessage(
+            role: ChatRole.assistant,
+            content: "I couldn't find that in the attached document.",
+            timestamp: DateTime.now(),
+          ),
+        );
       }
 
       // NOTE: Deliberately skip getMemoryStats() here. It creates a full
@@ -768,34 +1462,144 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             : 0.0;
         final responseChars = buffer.length;
         print('');
-        print('╔══════════════════════════════════════════════════════════════╗');
-        print('║              RAG QUERY METRICS                              ║');
-        print('╠══════════════════════════════════════════════════════════════╣');
-        print('║ Query: "${prompt.length > 50 ? '${prompt.substring(0, 50)}...' : prompt}"');
-        print('║                                                             ║');
-        print('║ Throughput (size-independent)                               ║');
-        print('║   Generation:     ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s  (${msPerTok.toStringAsFixed(1)} ms/tok)');
+        print(
+          '╔══════════════════════════════════════════════════════════════╗',
+        );
+        print(
+          '║              RAG QUERY METRICS                              ║',
+        );
+        print(
+          '╠══════════════════════════════════════════════════════════════╣',
+        );
+        print(
+          '║ Query: "${prompt.length > 50 ? '${prompt.substring(0, 50)}...' : prompt}"',
+        );
+        print(
+          '║ Retrieved Chunks:  $retrievedCount (usable: $usedCount, avg score: ${avgScore.toStringAsFixed(3)})',
+        );
+        print(
+          '║                                                             ║',
+        );
+        print(
+          '║ Throughput (size-independent)                               ║',
+        );
+        print(
+          '║   Generation:     ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s  (${msPerTok.toStringAsFixed(1)} ms/tok)',
+        );
         print('║   TTFT (warm):    ${ttft.toString().padLeft(6)} ms');
         print('║   Vector Search:       <1 ms');
-        print('║                                                             ║');
-        print('║ This Query                                                  ║');
-        print('║   Retrieval:      ${ttft.toString().padLeft(6)} ms  (embed + search + build)');
-        print('║   Generation:     ${genMs.toString().padLeft(6)} ms  ($_streamingTokenCount tokens, $responseChars chars)');
+        print(
+          '║                                                             ║',
+        );
+        print(
+          '║ This Query                                                  ║',
+        );
+        print(
+          '║   Retrieval:      ${ttft.toString().padLeft(6)} ms  (embed + search + build)',
+        );
+        print(
+          '║   Generation:     ${genMs.toString().padLeft(6)} ms  ($_streamingTokenCount tokens, $responseChars chars)',
+        );
         print('║   ──────────────────────────────');
         print('║   End-to-End:     ${totalMs.toString().padLeft(6)} ms');
-        print('║                                                             ║');
+        print(
+          '║                                                             ║',
+        );
         print('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)      ║');
-        print('║ Hardware: Apple A18 Pro GPU (Metal)                         ║');
-        print('╚══════════════════════════════════════════════════════════════╝');
+        print('║ Hardware: $_hardwareSummary');
+        print(
+          '╚══════════════════════════════════════════════════════════════╝',
+        );
         print('');
+
+        SoakTestService.instance.recordExternalInference(
+          source: 'RAG',
+          latencyMs: totalMs,
+          generatedTokens: _streamingTokenCount,
+          workloadId: WorkloadId.rag,
+        );
       }
     } catch (e) {
-      querySw.stop();
+      final message = e.toString();
+      final isTimeout = message.contains('TimeoutException');
+      final isStreamStartFailure =
+          message.contains('Failed to start stream') ||
+          message.contains('Streaming failed') ||
+          message.contains('Future not completed');
+
+      if (isStreamStartFailure && _cancelToken?.isCancelled != true) {
+        try {
+          setState(() {
+            _statusMessage = 'Retrying query in fallback mode...';
+            _streamingText = '';
+          });
+
+          final fallback = await _edgeVeda
+              .generate(
+                ragPrompt ??
+                    _strictRagPromptTemplate
+                        .replaceAll('{context}', '')
+                        .replaceAll('{query}', cleanedPrompt),
+                options: const GenerateOptions(
+                  maxTokens: 220,
+                  temperature: 0.15,
+                  topP: 0.9,
+                  topK: 40,
+                  repeatPenalty: 1.05,
+                ),
+              )
+              .timeout(const Duration(seconds: 120));
+
+          if (querySw.isRunning) {
+            querySw.stop();
+          }
+
+          final cleanedFallback = _postCleanModelResponse(fallback.text);
+          final fallbackText = cleanedFallback.isNotEmpty
+              ? cleanedFallback
+              : "I couldn't find that in the attached document.";
+          final estimatedTokens = (fallbackText.length / 4).round();
+
+          _ragMessages.add(
+            ChatMessage(
+              role: ChatRole.assistant,
+              content: fallbackText,
+              timestamp: DateTime.now(),
+            ),
+          );
+
+          setState(() {
+            _streamingTokenCount = estimatedTokens;
+            _tokensPerSecond = querySw.elapsedMilliseconds > 0
+                ? estimatedTokens / (querySw.elapsedMilliseconds / 1000)
+                : 0;
+            _statusMessage = 'Complete (fallback mode)';
+          });
+
+          SoakTestService.instance.recordExternalInference(
+            source: 'RAG',
+            latencyMs: querySw.elapsedMilliseconds,
+            generatedTokens: estimatedTokens,
+            workloadId: WorkloadId.rag,
+          );
+          return;
+        } catch (fallbackError) {
+          debugPrint('EdgeVeda: RAG fallback error: $fallbackError');
+        }
+      }
+
+      if (querySw.isRunning) {
+        querySw.stop();
+      }
       setState(() {
-        _statusMessage = 'RAG query error';
+        _statusMessage = isTimeout ? 'RAG query timed out' : 'RAG query error';
         _streamingText = '';
       });
-      _showError('RAG query failed: ${e.toString()}');
+      _showError(
+        isTimeout
+            ? 'RAG query timed out. Try a shorter question or retry.'
+            : 'RAG query failed: $message',
+      );
       debugPrint('EdgeVeda: RAG query error: $e');
     } finally {
       _isGenerating = false;
@@ -871,7 +1675,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
       _scrollToBottom();
 
-      print('EdgeVeda: Tool calling complete - ${latencyMs}ms, reply: ${reply.content.length} chars');
+      SoakTestService.instance.recordExternalInference(
+        source: 'Tool call',
+        latencyMs: latencyMs,
+        generatedTokens: (reply.content.length / 4).round(),
+        workloadId: WorkloadId.toolCall,
+      );
+
+      print(
+        'EdgeVeda: Tool calling complete - ${latencyMs}ms, reply: ${reply.content.length} chars',
+      );
     } catch (e) {
       stopwatch.stop();
       setState(() {
@@ -907,7 +1720,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _streamingText = '';
       _timeToFirstTokenMs = null;
       _tokensPerSecond = null;
-      _statusMessage = 'Initializing streaming worker (first call loads model)...';
+      _statusMessage =
+          'Initializing streaming worker (first call loads model)...';
     });
 
     final buffer = StringBuffer();
@@ -927,7 +1741,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         cancelToken: _cancelToken,
       );
 
-      setState(() => _statusMessage = 'Loading model in worker isolate (30-60s first time)...');
+      setState(
+        () => _statusMessage =
+            'Loading model in worker isolate (30-60s first time)...',
+      );
 
       // Check if summarization happened
       if (_session!.isSummarizing) {
@@ -946,7 +1763,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         // Check if cancelled
         if (_cancelToken?.isCancelled == true) {
           setState(() {
-            _statusMessage = 'Cancelled (${_streamingTokenCount} tokens)';
+            _statusMessage = 'Cancelled ($_streamingTokenCount tokens)';
           });
           break;
         }
@@ -959,7 +1776,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               : 0;
 
           setState(() {
-            _statusMessage = 'Complete (${_streamingTokenCount} tokens, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s)';
+            _statusMessage =
+                'Complete ($_streamingTokenCount tokens, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s)';
           });
           // Don't break here - let the stream close naturally so
           // ChatSession.sendStream() can add the assistant message to history.
@@ -979,9 +1797,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _streamingTokenCount++;
 
         // Update UI on first token, then every 3 tokens or on newlines
-        if (_streamingTokenCount == 1 || _streamingTokenCount % 3 == 0 || chunk.token.contains('\n')) {
+        if (_streamingTokenCount == 1 ||
+            _streamingTokenCount % 3 == 0 ||
+            chunk.token.contains('\n')) {
           setState(() {
-            _statusMessage = 'Streaming... (${_streamingTokenCount} tokens)';
+            _statusMessage = 'Streaming... ($_streamingTokenCount tokens)';
             _streamingText = buffer.toString();
           });
           _scrollToBottom();
@@ -1012,8 +1832,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // Get memory stats after streaming
       final memStats = await _edgeVeda.getMemoryStats();
       _memoryMb = memStats.currentBytes / (1024 * 1024);
-      print('EdgeVeda: Streaming complete - ${_streamingTokenCount} tokens');
-      print('EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s');
+      SoakTestService.instance.recordExternalInference(
+        source: 'Chat',
+        latencyMs: stopwatch.elapsedMilliseconds,
+        generatedTokens: _streamingTokenCount,
+        workloadId: WorkloadId.text,
+      );
+      print('EdgeVeda: Streaming complete - $_streamingTokenCount tokens');
+      print(
+        'EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s',
+      );
     } catch (e) {
       stopwatch.stop();
       setState(() {
@@ -1071,6 +1899,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _resetChatFromToolbar() {
+    if (_isStreaming && _cancelToken != null) {
+      _cancelToken!.cancel();
+    }
+    setState(() {
+      _isLoading = false;
+      _isStreaming = false;
+      _isGenerating = false;
+      _cancelToken = null;
+      _showSummarizationIndicator = false;
+    });
+    _resetChat();
+  }
+
   /// Change the persona preset and create a new session
   void _changePreset(SystemPromptPreset preset) {
     if (preset == _selectedPreset && _session != null) return;
@@ -1116,10 +1958,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
         // Check if Qwen3 is downloaded
         if (_qwenModelPath == null) {
-          final isDownloaded = await _modelManager
-              .isModelDownloaded(ModelRegistry.qwen3_06b.id);
+          final isDownloaded = await _modelManager.isModelDownloaded(
+            ModelRegistry.qwen3_06b.id,
+          );
 
           if (!isDownloaded) {
+            await _refreshInternetStatus();
+            if (_preferOfflineModel) {
+              throw const FormatException(
+                'Offline mode is enabled and Qwen3 is not downloaded.',
+              );
+            }
+            if (!_isInternetReachable) {
+              throw const FormatException(
+                'No internet connection. Connect once to download Qwen3.',
+              );
+            }
             setState(() {
               _statusMessage = 'Downloading Qwen3 model (~397 MB)...';
             });
@@ -1142,8 +1996,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             }
           }
 
-          _qwenModelPath =
-              await _modelManager.getModelPath(ModelRegistry.qwen3_06b.id);
+          _qwenModelPath = await _modelManager.getModelPath(
+            ModelRegistry.qwen3_06b.id,
+          );
         }
 
         setState(() {
@@ -1152,14 +2007,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
         // Dispose current Llama model and re-init with Qwen3
         await _edgeVeda.dispose();
-        await _edgeVeda.init(EdgeVedaConfig(
-          modelPath: _qwenModelPath!,
-          useGpu: true,
-          numThreads: 4,
-          contextLength: 2048,
-          maxMemoryMb: 1536,
-          verbose: true,
-        ));
+        await _edgeVeda.init(
+          EdgeVedaConfig(
+            modelPath: _qwenModelPath!,
+            useGpu: true,
+            numThreads: 4,
+            contextLength: 2048,
+            maxMemoryMb: 1536,
+            verbose: true,
+          ),
+        );
 
         // Create new ChatSession with Qwen3 template and tools
         _session = ChatSession(
@@ -1182,14 +2039,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
         // Dispose current Qwen3 model and re-init with Llama
         await _edgeVeda.dispose();
-        await _edgeVeda.init(EdgeVedaConfig(
-          modelPath: _modelPath!,
-          useGpu: true,
-          numThreads: 4,
-          contextLength: 2048,
-          maxMemoryMb: 1536,
-          verbose: true,
-        ));
+        await _edgeVeda.init(
+          EdgeVedaConfig(
+            modelPath: _modelPath!,
+            useGpu: true,
+            numThreads: 4,
+            contextLength: 2048,
+            maxMemoryMb: 1536,
+            verbose: true,
+          ),
+        );
 
         // Create new ChatSession with Llama template, no tools
         _session = ChatSession(
@@ -1222,14 +2081,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         final restorePath = enablingTools ? _modelPath : _qwenModelPath;
         if (restorePath != null) {
           await _edgeVeda.dispose();
-          await _edgeVeda.init(EdgeVedaConfig(
-            modelPath: restorePath,
-            useGpu: true,
-            numThreads: 4,
-            contextLength: 2048,
-            maxMemoryMb: 1536,
-            verbose: true,
-          ));
+          await _edgeVeda.init(
+            EdgeVedaConfig(
+              modelPath: restorePath,
+              useGpu: true,
+              numThreads: 4,
+              contextLength: 2048,
+              maxMemoryMb: 1536,
+              verbose: true,
+            ),
+          );
           _session = ChatSession(
             edgeVeda: _edgeVeda,
             preset: _selectedPreset,
@@ -1257,8 +2118,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<ToolResult> _handleToolCall(ToolCall call) async {
     switch (call.name) {
       case 'get_time':
-        final location =
-            (call.arguments['location'] as String? ?? 'UTC').toLowerCase();
+        final location = (call.arguments['location'] as String? ?? 'UTC')
+            .toLowerCase();
         // Map location keywords to UTC offset hours
         const locationOffsets = <String, double>{
           // Americas
@@ -1305,8 +2166,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           }
         }
         final utcNow = DateTime.now().toUtc();
-        final local =
-            utcNow.add(Duration(minutes: (offset * 60).round()));
+        final local = utcNow.add(Duration(minutes: (offset * 60).round()));
         final hours = local.hour;
         final minutes = local.minute;
         final ampm = hours >= 12 ? 'PM' : 'AM';
@@ -1320,7 +2180,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             'date':
                 '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}',
             'location': matched,
-            'utc_offset': '${sign}${offset}',
+            'utc_offset': '$sign$offset',
           },
         );
       case 'calculate':
@@ -1346,9 +2206,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _showError('Initialize SDK first');
       return;
     }
+    if (_isLoading || _isStreaming || _isGenerating || _isSwitchingModel) {
+      _showError('Please wait for the current task to finish.');
+      return;
+    }
 
     setState(() {
       _runningBenchmark = true;
+      _isLoading = true;
       _statusMessage = 'Running benchmark (10 tests)...';
     });
 
@@ -1375,21 +2240,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             temperature: 0.7,
             topP: 0.9,
           ),
+          timeout: const Duration(seconds: 60),
         );
 
         _stopwatch.stop();
 
         // Calculate metrics
         final latencyMs = _stopwatch.elapsedMilliseconds;
-        final tokenCount = (response.text.length / 4).round(); // Estimate ~4 chars/token
+        final tokenCount = (response.text.length / 4)
+            .round(); // Estimate ~4 chars/token
         final tokensPerSec = tokenCount / (latencyMs / 1000);
 
         // TTFT approximation (can't measure precisely without streaming)
-        final ttftMs = (latencyMs * 0.2).round(); // Assume 20% is prompt processing
+        final ttftMs = (latencyMs * 0.2)
+            .round(); // Assume 20% is prompt processing
 
-        // Get memory
-        final memStats = await _edgeVeda.getMemoryStats();
-        final memoryMb = memStats.currentBytes / (1024 * 1024);
+        // Avoid benchmark failure when worker-memory stats are temporarily unavailable.
+        final memoryMb = _memoryMb ?? 0.0;
 
         tokenRates.add(tokensPerSec);
         ttfts.add(ttftMs);
@@ -1401,7 +2268,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
 
       // Calculate summary statistics
-      final avgTokensPerSec = tokenRates.reduce((a, b) => a + b) / tokenRates.length;
+      final avgTokensPerSec =
+          tokenRates.reduce((a, b) => a + b) / tokenRates.length;
       final avgTTFT = ttfts.reduce((a, b) => a + b) ~/ ttfts.length;
       final peakMemory = memoryMbs.reduce((a, b) => a > b ? a : b);
       final minTokensPerSec = tokenRates.reduce((a, b) => a < b ? a : b);
@@ -1411,7 +2279,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // Print results to console (visible in Xcode logs)
       print('');
       print('=== BENCHMARK RESULTS ===');
-      print('Device: iPhone (iOS)');
+      print('Device: $_deviceSummary');
       print('Model: Llama 3.2 1B Q4_K_M');
       print('Tests: 10 runs');
       print('');
@@ -1420,12 +2288,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       print('  Max: ${maxTokensPerSec.toStringAsFixed(1)} tok/s');
       print('TTFT: ${avgTTFT}ms (avg)');
       print('Latency: ${avgLatency}ms (avg)');
-      print('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB');
+      if (peakMemory > 0) {
+        print('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB');
+      } else {
+        print('Peak Memory: unavailable');
+      }
       print('=========================');
       print('');
 
       setState(() {
         _runningBenchmark = false;
+        _isLoading = false;
         _statusMessage = 'Benchmark complete - check console';
       });
 
@@ -1440,6 +2313,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     } catch (e) {
       setState(() {
         _runningBenchmark = false;
+        _isLoading = false;
         _statusMessage = 'Benchmark failed';
       });
       _showError('Benchmark error: $e');
@@ -1483,7 +2357,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
             Text(
-              'Peak Memory: ${peakMemory.toStringAsFixed(0)} MB',
+              peakMemory > 0
+                  ? 'Peak Memory: ${peakMemory.toStringAsFixed(0)} MB'
+                  : 'Peak Memory: unavailable',
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
             const SizedBox(height: 12),
@@ -1492,7 +2368,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ? 'Meets >15 tok/s target'
                   : 'Below 15 tok/s target',
               style: TextStyle(
-                color: avgTokensPerSec >= 15 ? AppTheme.success : AppTheme.warning,
+                color: avgTokensPerSec >= 15
+                    ? AppTheme.success
+                    : AppTheme.warning,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1510,10 +2388,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'OK',
-              style: TextStyle(color: AppTheme.accent),
-            ),
+            child: const Text('OK', style: TextStyle(color: AppTheme.accent)),
           ),
         ],
       ),
@@ -1534,10 +2409,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.danger,
-      ),
+      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
     );
   }
 
@@ -1565,9 +2437,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.border, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: AppTheme.border, width: 1)),
       ),
       child: Row(
         children: [
@@ -1687,9 +2557,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.border, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: AppTheme.border, width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1756,15 +2624,50 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildStatusPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return child;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: child,
+    );
+  }
+
   /// Build persona picker chips for fresh sessions (no messages yet)
   Widget _buildPersonaPicker() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.border, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: AppTheme.border, width: 1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1790,9 +2693,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   selectedColor: AppTheme.accent.withValues(alpha: 0.2),
                   backgroundColor: AppTheme.surfaceVariant,
                   labelStyle: TextStyle(
-                    color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                    color: isSelected
+                        ? AppTheme.accent
+                        : AppTheme.textSecondary,
                     fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                   side: BorderSide(
                     color: isSelected ? AppTheme.accent : AppTheme.border,
@@ -1869,9 +2776,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.border, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: AppTheme.border, width: 1)),
       ),
       child: Row(
         children: [
@@ -1905,8 +2810,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget _buildIndexingOverlay() {
     if (!_isIndexingDocument) return const SizedBox.shrink();
 
-    final progress =
-        _indexingTotal > 0 ? _indexingProgress / _indexingTotal : 0.0;
+    final progress = _indexingTotal > 0
+        ? _indexingProgress / _indexingTotal
+        : 0.0;
 
     return Container(
       color: Colors.black.withValues(alpha: 0.7),
@@ -1992,10 +2898,36 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           // New Chat button
           if (_isInitialized)
             IconButton(
-              icon: const Icon(Icons.add_comment_outlined, color: AppTheme.textSecondary),
+              icon: const Icon(
+                Icons.add_comment_outlined,
+                color: AppTheme.textSecondary,
+              ),
               tooltip: 'New Chat',
-              onPressed: (!_isStreaming && !_isLoading) ? _resetChat : null,
+              onPressed: _isSwitchingModel ? null : _resetChatFromToolbar,
             ),
+          if (_isInitialized)
+            IconButton(
+              icon: Icon(
+                _preferOfflineModel ? Icons.cloud_off : Icons.cloud_sync,
+                color: _preferOfflineModel ? AppTheme.accent : AppTheme.warning,
+              ),
+              tooltip: _preferOfflineModel ? 'Offline model mode' : 'Auto mode',
+              onPressed: (_isSwitchingModel || _isLoading || _isStreaming)
+                  ? null
+                  : _toggleInferenceMode,
+            ),
+          IconButton(
+            icon: Icon(
+              _isInternetReachable ? Icons.wifi : Icons.wifi_off,
+              color: _isInternetReachable
+                  ? AppTheme.success
+                  : AppTheme.textTertiary,
+            ),
+            tooltip: _isInternetReachable
+                ? 'Internet reachable'
+                : 'Internet unreachable',
+            onPressed: _refreshInternetStatus,
+          ),
           // Tools toggle
           if (_isInitialized)
             IconButton(
@@ -2004,12 +2936,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 color: _toolsEnabled ? AppTheme.accent : AppTheme.textSecondary,
               ),
               tooltip: _toolsEnabled ? 'Disable Tools' : 'Enable Tools',
-              onPressed: (!_isStreaming && !_isLoading && !_isSwitchingModel)
-                  ? _toggleTools
-                  : null,
+              onPressed: _isSwitchingModel ? null : _toggleTools,
             ),
           IconButton(
-            icon: const Icon(Icons.layers_outlined, color: AppTheme.textSecondary),
+            icon: const Icon(
+              Icons.layers_outlined,
+              color: AppTheme.textSecondary,
+            ),
             tooltip: 'Models',
             onPressed: () => ModelSelectionModal.show(context, _modelManager),
           ),
@@ -2017,17 +2950,36 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             IconButton(
               icon: const Icon(Icons.assessment, color: AppTheme.textSecondary),
               tooltip: 'Run Benchmark',
-              onPressed: _runBenchmark,
+              onPressed: (_isStreaming || _isLoading || _isSwitchingModel)
+                  ? null
+                  : _runBenchmark,
             ),
           if (_isInitialized)
             IconButton(
-              icon: const Icon(Icons.info_outline, color: AppTheme.textSecondary),
+              icon: const Icon(
+                Icons.info_outline,
+                color: AppTheme.textSecondary,
+              ),
               onPressed: () async {
-                final memStats = await _edgeVeda.getMemoryStats();
+                MemoryStats memStats;
+                try {
+                  memStats = await _edgeVeda.getMemoryStats().timeout(
+                    const Duration(seconds: 15),
+                  );
+                } catch (_) {
+                  memStats = const MemoryStats(
+                    currentBytes: 0,
+                    peakBytes: 0,
+                    limitBytes: 0,
+                    modelBytes: 0,
+                    contextBytes: 0,
+                  );
+                }
                 final memoryMb = memStats.currentBytes / (1024 * 1024);
-                final usagePercent = (memStats.usagePercent * 100).toStringAsFixed(1);
+                final usagePercent = (memStats.usagePercent * 100)
+                    .toStringAsFixed(1);
 
-                if (!mounted) return;
+                if (!context.mounted) return;
 
                 showDialog(
                   context: context,
@@ -2043,11 +2995,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       children: [
                         // Platform info
                         Text(
-                          'Platform: ${Platform.isAndroid ? "Android" : Platform.isIOS ? "iOS" : "Other"}',
+                          'Platform: $_platformSummary',
                           style: const TextStyle(color: AppTheme.textPrimary),
                         ),
                         Text(
-                          'Backend: ${Platform.isAndroid ? "CPU" : "Metal GPU"}',
+                          'Backend: $_backendSummary',
                           style: const TextStyle(color: AppTheme.textPrimary),
                         ),
                         const Divider(color: AppTheme.border),
@@ -2103,211 +3055,258 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             children: [
               // Status bar
               Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(
-                bottom: BorderSide(color: AppTheme.border, width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                if (_isDownloading || _isLoading)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.accent,
-                    ),
-                  ),
-                if (_isDownloading || _isLoading) const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _statusMessage,
-                    style: TextStyle(
-                      color: _isInitialized ? AppTheme.success : AppTheme.warning,
-                      fontSize: 12,
-                    ),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface,
+                  border: Border(
+                    bottom: BorderSide(color: AppTheme.border, width: 1),
                   ),
                 ),
-                if (!_isInitialized && !_isLoading && !_isDownloading && _modelPath != null)
-                  ElevatedButton(
-                    onPressed: _initializeEdgeVeda,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accent,
-                      foregroundColor: AppTheme.background,
+                child: Row(
+                  children: [
+                    if (_isDownloading || _isLoading)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.accent,
+                        ),
+                      ),
+                    if (_isDownloading || _isLoading) const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _statusMessage,
+                        style: TextStyle(
+                          color: _isInitialized
+                              ? AppTheme.success
+                              : AppTheme.warning,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
-                    child: const Text('Initialize'),
-                  ),
-              ],
-            ),
-          ),
-
-          // Download progress
-          if (_isDownloading)
-            LinearProgressIndicator(
-              value: _downloadProgress,
-              color: AppTheme.accent,
-              backgroundColor: AppTheme.surfaceVariant,
-            ),
-
-          // Metrics bar (only visible after initialization)
-          if (_isInitialized) _buildMetricsBar(),
-
-          // Persona picker (shown on fresh session with no messages)
-          if (_isInitialized && !_hasMessages)
-            _buildPersonaPicker(),
-
-          // Context indicator (shown when conversation has messages)
-          if (_isInitialized && _hasMessages)
-            _buildContextIndicator(),
-
-          // Document indicator chip (shown when document is attached)
-          if (_isInitialized) _buildDocumentChip(),
-
-          // Messages list
-          Expanded(
-            child: messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _attachedDocName != null
-                              ? Icons.description_outlined
-                              : Icons.chat_bubble_outline,
-                          size: 64,
-                          color: AppTheme.border,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _attachedDocName != null
-                              ? 'Ask a question about your document'
-                              : 'Start a conversation',
-                          style: const TextStyle(
-                            color: AppTheme.textTertiary,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _attachedDocName != null
-                              ? 'Answers are generated from the attached file.'
-                              : 'Ask anything. It runs on your device.',
-                          style: const TextStyle(
-                            color: AppTheme.textTertiary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    _buildStatusPill(
+                      icon: _isInternetReachable ? Icons.wifi : Icons.wifi_off,
+                      label: _isInternetReachable ? 'Net On' : 'Net Off',
+                      color: _isInternetReachable
+                          ? AppTheme.success
+                          : AppTheme.warning,
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      return MessageBubble(message: messages[index]);
-                    },
-                  ),
-          ),
-
-          // Input area
-          Container(
-            decoration: BoxDecoration(
-              color: AppTheme.background,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  blurRadius: 8,
-                  offset: const Offset(0, -4),
+                    const SizedBox(width: 6),
+                    _buildStatusPill(
+                      icon: _preferOfflineModel
+                          ? Icons.memory
+                          : Icons.cloud_sync,
+                      label: _preferOfflineModel ? 'Local' : 'Auto',
+                      color: _preferOfflineModel
+                          ? AppTheme.accent
+                          : AppTheme.warning,
+                      onTap: (_isSwitchingModel || _isLoading || _isStreaming)
+                          ? null
+                          : _toggleInferenceMode,
+                    ),
+                    if (!_isInitialized &&
+                        !_isLoading &&
+                        !_isDownloading &&
+                        _modelPath != null)
+                      const SizedBox(width: 8),
+                    if (!_isInitialized &&
+                        !_isLoading &&
+                        !_isDownloading &&
+                        _modelPath != null)
+                      ElevatedButton(
+                        onPressed: _initializeEdgeVeda,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.accent,
+                          foregroundColor: AppTheme.background,
+                        ),
+                        child: const Text('Initialize'),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  // Attach document button
-                  if (_isInitialized &&
-                      !_isStreaming &&
-                      !_isIndexingDocument)
-                    IconButton(
-                      icon: Icon(
-                        Icons.attach_file,
-                        color: _attachedDocName != null
-                            ? AppTheme.accent
-                            : AppTheme.textSecondary,
-                      ),
-                      tooltip: 'Attach document',
-                      onPressed: _pickAndIndexDocument,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 40, minHeight: 40),
-                    ),
-                  Expanded(
-                    child: TextField(
-                      controller: _promptController,
-                      style: const TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        hintText: _attachedDocName != null
-                            ? 'Ask about the document...'
-                            : 'Message...',
-                        hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                        filled: true,
-                        fillColor: AppTheme.surfaceVariant,
-                        border: OutlineInputBorder(
-                          borderSide: const BorderSide(color: AppTheme.border),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: AppTheme.border),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: AppTheme.accent),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                      ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                      enabled: _isInitialized && !_isLoading && !_isStreaming,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Single send/stop button
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Material(
-                      color: _isStreaming ? AppTheme.danger : AppTheme.accent,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: _isStreaming
-                            ? _cancelGeneration
-                            : (_isInitialized && !_isLoading
-                                ? _sendMessage
-                                : null),
-                        child: Icon(
-                          _isStreaming ? Icons.stop : Icons.arrow_upward,
-                          color: _isStreaming ? AppTheme.textPrimary : AppTheme.background,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
-            ),
-          ),
+
+              // Download progress
+              if (_isDownloading)
+                LinearProgressIndicator(
+                  value: _downloadProgress,
+                  color: AppTheme.accent,
+                  backgroundColor: AppTheme.surfaceVariant,
+                ),
+
+              // Metrics bar (only visible after initialization)
+              if (_isInitialized) _buildMetricsBar(),
+
+              // Persona picker (shown on fresh session with no messages)
+              if (_isInitialized && !_hasMessages) _buildPersonaPicker(),
+
+              // Context indicator (shown when conversation has messages)
+              if (_isInitialized && _hasMessages) _buildContextIndicator(),
+
+              // Document indicator chip (shown when document is attached)
+              if (_isInitialized) _buildDocumentChip(),
+
+              // Messages list
+              Expanded(
+                child: messages.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _attachedDocName != null
+                                  ? Icons.description_outlined
+                                  : Icons.chat_bubble_outline,
+                              size: 64,
+                              color: AppTheme.border,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _attachedDocName != null
+                                  ? 'Ask a question about your document'
+                                  : 'Start a conversation',
+                              style: const TextStyle(
+                                color: AppTheme.textTertiary,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _attachedDocName != null
+                                  ? 'Answers are generated from the attached file.'
+                                  : 'Ask anything. It runs on your device.',
+                              style: const TextStyle(
+                                color: AppTheme.textTertiary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          return MessageBubble(message: messages[index]);
+                        },
+                      ),
+              ),
+
+              // Input area
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: SafeArea(
+                  child: Row(
+                    children: [
+                      // Attach document button
+                      if (_isInitialized &&
+                          !_isStreaming &&
+                          !_isIndexingDocument)
+                        IconButton(
+                          icon: Icon(
+                            Icons.attach_file,
+                            color: _attachedDocName != null
+                                ? AppTheme.accent
+                                : AppTheme.textSecondary,
+                          ),
+                          tooltip: 'Attach document',
+                          onPressed: _pickAndIndexDocument,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      Expanded(
+                        child: TextField(
+                          controller: _promptController,
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: _attachedDocName != null
+                                ? 'Ask about the document...'
+                                : 'Message...',
+                            hintStyle: const TextStyle(
+                              color: AppTheme.textTertiary,
+                            ),
+                            filled: true,
+                            fillColor: AppTheme.surfaceVariant,
+                            border: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: AppTheme.border,
+                              ),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: AppTheme.border,
+                              ),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: AppTheme.accent,
+                              ),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                          ),
+                          maxLines: null,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _sendMessage(),
+                          enabled:
+                              _isInitialized && !_isLoading && !_isStreaming,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Single send/stop button
+                      SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Material(
+                          color: _isStreaming
+                              ? AppTheme.danger
+                              : AppTheme.accent,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _isStreaming
+                                ? _cancelGeneration
+                                : (_isInitialized && !_isLoading
+                                      ? _sendMessage
+                                      : null),
+                            child: Icon(
+                              _isStreaming ? Icons.stop : Icons.arrow_upward,
+                              color: _isStreaming
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.background,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           // Indexing overlay
@@ -2375,8 +3374,9 @@ class MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[

@@ -1,22 +1,27 @@
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
+import 'package:file_picker/file_picker.dart';
+
+// camera package only supports iOS/Android at runtime.
+// The Dart code compiles on all platforms; usage is guarded by _cameraSupported.
+import 'package:camera/camera.dart';
 
 import 'app_theme.dart';
+import 'soak_test_service.dart';
 
-/// Vision tab with continuous camera scanning and description overlay
+/// Whether the camera package is supported on this platform.
+bool get _cameraSupported => Platform.isIOS || Platform.isAndroid;
+
+/// Vision tab with continuous camera scanning and description overlay.
 ///
-/// Uses a persistent VisionWorker isolate (model loaded once) and FrameQueue
-/// with drop-newest backpressure for production-grade vision inference.
+/// On iOS/Android: Uses a persistent VisionWorker isolate and FrameQueue
+/// with drop-newest backpressure for production-grade continuous vision.
 ///
-/// Implements a Google Lens-style continuous scanning UX:
-/// - Camera feeds frames through FrameQueue (backpressure handles throttling)
-/// - Description overlay at bottom of camera view (AR-style)
-/// - Subtle pulsing indicator during inference
-/// - Vision model downloads on first open, then initializes camera
+/// On macOS: Camera is not supported. Uses file-picker-based image input
+/// for single-shot vision inference instead.
 class VisionScreen extends StatefulWidget {
   /// Whether this tab is currently visible to the user.
   /// When false, the camera stream is paused to save GPU/battery.
@@ -42,8 +47,12 @@ class _VisionScreenState extends State<VisionScreen>
   double _downloadProgress = 0.0;
   String _statusMessage = 'Preparing vision...';
 
-  // Camera
+  // Camera (iOS/Android only)
   CameraController? _cameraController;
+
+  // File-based input (macOS fallback)
+  bool _isProcessingFile = false;
+  Uint8List? _selectedImageBytes;
 
   // Model paths
   String? _modelPath;
@@ -106,11 +115,12 @@ class _VisionScreenState extends State<VisionScreen>
 
       if (!mounted) return;
 
-      // Step 2: Initialize camera
-      setState(() => _statusMessage = 'Initializing camera...');
-      await _initializeCamera();
-
-      if (!mounted) return;
+      // Step 2: Initialize camera (iOS/Android only)
+      if (_cameraSupported) {
+        setState(() => _statusMessage = 'Initializing camera...');
+        await _initializeCamera();
+        if (!mounted) return;
+      }
 
       // Step 3: Spawn persistent vision worker and load model once
       setState(() => _statusMessage = 'Loading vision model...');
@@ -127,15 +137,19 @@ class _VisionScreenState extends State<VisionScreen>
 
       setState(() {
         _isVisionReady = true;
-        _statusMessage = 'Vision ready';
+        _statusMessage = _cameraSupported
+            ? 'Vision ready'
+            : 'Vision ready — pick an image to describe';
       });
 
-      // Step 4: Start continuous scanning
-      _startCameraStream();
+      // Step 4: Start continuous scanning (camera platforms only)
+      if (_cameraSupported) {
+        _startCameraStream();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _statusMessage = 'Error: $e';
+          _statusMessage = _userFacingErrorMessage(e);
           _isDownloading = false;
         });
       }
@@ -143,10 +157,103 @@ class _VisionScreenState extends State<VisionScreen>
     }
   }
 
+  /// macOS: Pick an image file and run single-shot vision inference.
+  Future<void> _pickAndDescribeImage() async {
+    if (_isProcessingFile || !_isVisionReady) return;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final filePath = result.files.single.path;
+    if (filePath == null) return;
+
+    setState(() {
+      _isProcessingFile = true;
+      _description = null;
+      _statusMessage = 'Analyzing image...';
+    });
+
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      // Decode image to get dimensions for the worker
+      final image = await decodeImageFromList(bytes);
+      final width = image.width;
+      final height = image.height;
+
+      // Convert to RGB888 for the vision worker
+      final byteData = await image.toByteData();
+      if (byteData == null) throw Exception('Failed to read image data');
+
+      // byteData is RGBA, convert to RGB
+      final rgba = byteData.buffer.asUint8List();
+      final rgb = Uint8List(width * height * 3);
+      for (var i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+        rgb[j] = rgba[i];
+        rgb[j + 1] = rgba[i + 1];
+        rgb[j + 2] = rgba[i + 2];
+      }
+
+      final sw = Stopwatch()..start();
+      final desc = await _visionWorker.describeFrame(
+        rgb,
+        width,
+        height,
+        prompt: 'Describe what you see in this image in one sentence.',
+        maxTokens: 100,
+      );
+      sw.stop();
+      SoakTestService.instance.recordExternalInference(
+        source: 'Vision file',
+        latencyMs: sw.elapsedMilliseconds,
+        generatedTokens: desc.generatedTokens,
+        workloadId: WorkloadId.vision,
+      );
+
+      if (mounted) {
+        setState(() {
+          _selectedImageBytes = bytes;
+          _description = desc.description;
+          _isProcessingFile = false;
+          _statusMessage = 'Vision ready — pick another image';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessingFile = false;
+          _statusMessage = _userFacingErrorMessage(e);
+        });
+      }
+      debugPrint('File vision error: $e');
+    }
+  }
+
+  String _userFacingErrorMessage(Object error) {
+    final message = error.toString();
+    final isNetworkLookupFailure = message.contains('Failed host lookup') ||
+        message.contains('SocketException') ||
+        message.contains('Unable to reach model host');
+
+    if (isNetworkLookupFailure) {
+      return 'Cannot reach model host. Check internet/DNS and try again.';
+    }
+
+    if (error is DownloadException ||
+        message.contains('Failed to download model')) {
+      return 'Model download failed. Please retry.';
+    }
+
+    return 'Vision error. Please try again.';
+  }
+
   /// Download SmolVLM2 model + mmproj if not already cached
   Future<void> _ensureModelsDownloaded() async {
-    final model = ModelRegistry.smolvlm2_500m;
-    final mmproj = ModelRegistry.smolvlm2_500m_mmproj;
+    const model = ModelRegistry.smolvlm2_500m;
+    const mmproj = ModelRegistry.smolvlm2_500m_mmproj;
 
     final modelDownloaded = await _modelManager.isModelDownloaded(model.id);
     final mmprojDownloaded = await _modelManager.isModelDownloaded(mmproj.id);
@@ -161,8 +268,7 @@ class _VisionScreenState extends State<VisionScreen>
         if (mounted) {
           setState(() {
             _downloadProgress = progress.progress;
-            _statusMessage =
-                'Downloading: ${progress.progressPercent}%';
+            _statusMessage = 'Downloading: ${progress.progressPercent}%';
           });
         }
       });
@@ -208,9 +314,8 @@ class _VisionScreenState extends State<VisionScreen>
       camera,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: Platform.isIOS
-          ? ImageFormatGroup.bgra8888
-          : ImageFormatGroup.yuv420,
+      imageFormatGroup:
+          Platform.isIOS ? ImageFormatGroup.bgra8888 : ImageFormatGroup.yuv420,
     );
 
     await _cameraController!.initialize();
@@ -280,12 +385,20 @@ class _VisionScreenState extends State<VisionScreen>
     }
 
     try {
+      final sw = Stopwatch()..start();
       final result = await _visionWorker.describeFrame(
         frame.rgb,
         frame.width,
         frame.height,
         prompt: 'Describe what you see in this image in one sentence.',
         maxTokens: 100,
+      );
+      sw.stop();
+      SoakTestService.instance.recordExternalInference(
+        source: 'Vision camera',
+        latencyMs: sw.elapsedMilliseconds,
+        generatedTokens: result.generatedTokens,
+        workloadId: WorkloadId.vision,
       );
       if (mounted) {
         setState(() => _description = result.description);
@@ -356,6 +469,12 @@ class _VisionScreenState extends State<VisionScreen>
 
   @override
   Widget build(BuildContext context) {
+    // macOS: file-picker-based UI (no camera)
+    if (!_cameraSupported) {
+      return _buildDesktopVisionUI();
+    }
+
+    // iOS/Android: camera-based continuous scanning UI
     return Scaffold(
       body: Stack(
         children: [
@@ -408,6 +527,124 @@ class _VisionScreenState extends State<VisionScreen>
                     ],
                   ),
                 ),
+              ),
+            ),
+
+          // Download/loading overlay
+          if (_isDownloading || !_isVisionReady) _buildLoadingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  /// Desktop (macOS) vision UI: file picker + image display + description
+  Widget _buildDesktopVisionUI() {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      body: Stack(
+        children: [
+          if (_isVisionReady)
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 760),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Selected image preview
+                            if (_selectedImageBytes != null)
+                              Container(
+                                constraints: BoxConstraints(
+                                  maxHeight: constraints.maxHeight * 0.5,
+                                  maxWidth: 760,
+                                ),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.memory(_selectedImageBytes!,
+                                      fit: BoxFit.contain),
+                                ),
+                              ),
+
+                            // Description
+                            if (_description != null &&
+                                _description!.isNotEmpty)
+                              Container(
+                                constraints: BoxConstraints(
+                                  maxHeight: constraints.maxHeight * 0.28,
+                                ),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_isProcessingFile) const _PulsingDot(),
+                                    if (_isProcessingFile)
+                                      const SizedBox(width: 12),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: Text(
+                                          _description!,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // Pick image button
+                            ElevatedButton.icon(
+                              onPressed: _isProcessingFile
+                                  ? null
+                                  : _pickAndDescribeImage,
+                              icon: const Icon(Icons.image),
+                              label: Text(_selectedImageBytes != null
+                                  ? 'Pick Another Image'
+                                  : 'Pick an Image'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accent,
+                                foregroundColor: AppTheme.background,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+
+                            if (_isProcessingFile)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 16),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                      color: AppTheme.accent),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
