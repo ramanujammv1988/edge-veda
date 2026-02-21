@@ -196,6 +196,14 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 
 ### Decisions
 
+Quick task 10 (refactor VoicePipeline stop-mic) decisions:
+- Stop-mic pattern replaces barge-in: mic pauses during transcribing/thinking/speaking, resumes with 800ms cooldown
+- Fixed VAD threshold 0.03 replaces adaptive calibration (removes 2s startup delay)
+- Minimum 0.8s speech buffer (8 frames) prevents short noise from triggering processing
+- sendNow() push-to-talk method for immediate audio flush regardless of VAD
+- Audio level emitted every frame during listening via StateChanged for orb visualization
+- _onTtsEvent simplified to no-op; _processUserSpeech finally block handles mic resume after await _tts.speak()
+
 Phase 24 Plan 2 decisions:
 - LLM generation uses ChatSession.sendStream() with CancelToken for interruptible streaming
 - Post-TTS cooldown uses Timer-based _isCoolingDown flag + Future.delayed for state transition
@@ -520,6 +528,7 @@ v1.1:
 | 7 | Strengthen enterprise-safe JSON/tool behavior (strict schema, recovery, telemetry) | 2026-02-20 | e822449, dcebd14 | [6-strengthen-enterprise-safe-tool-json-beh](./quick/6-strengthen-enterprise-safe-tool-json-beh/) |
 | 8 | ImageWorker Scheduler integration (QoS gating, latency tracking, memory eviction) | 2026-02-20 | 05518a8, 6a97bea | [7-image-generation-scheduler-integration-a](./quick/7-image-generation-scheduler-integration-a/) |
 | 9 | Add TTS via iOS AVSpeechSynthesizer + demo screen | 2026-02-20 | a29d60b, adea67e | [8-add-tts-via-ios-avspeechsynthesizer-plat](./quick/8-add-tts-via-ios-avspeechsynthesizer-plat/) |
+| 10 | Refactor VoicePipeline to stop-mic pattern (no calibration, no barge-in, sendNow, audio-reactive orb) | 2026-02-20 | 6713076, 7a47571 | [9-refactor-voicepipeline-adopt-stop-mic-pa](./quick/9-refactor-voicepipeline-adopt-stop-mic-pa/) |
 
 ### Blockers/Concerns
 
@@ -536,7 +545,7 @@ v1.1:
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 24-02-PLAN.md — VoicePipeline conversation loop with LLM streaming, TTS, interruption, lifecycle
+Stopped at: Completed quick-9 — Refactor VoicePipeline to stop-mic pattern
 Resume file: .planning/phases/24-voice-pipeline-unified-stt-to-llm-to-tts-orchestration-with-real-time-voice-conversations/24-03-PLAN.md
 
 ---
