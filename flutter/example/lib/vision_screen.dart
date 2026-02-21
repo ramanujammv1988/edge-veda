@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:camera/camera.dart';
 
 import 'app_theme.dart';
+import 'soak_test_service.dart';
 
 /// Whether the camera package is supported on this platform.
 bool get _cameraSupported => Platform.isIOS || Platform.isAndroid;
@@ -148,7 +149,7 @@ class _VisionScreenState extends State<VisionScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _statusMessage = 'Error: $e';
+          _statusMessage = _userFacingErrorMessage(e);
           _isDownloading = false;
         });
       }
@@ -196,12 +197,20 @@ class _VisionScreenState extends State<VisionScreen>
         rgb[j + 2] = rgba[i + 2];
       }
 
+      final sw = Stopwatch()..start();
       final desc = await _visionWorker.describeFrame(
         rgb,
         width,
         height,
         prompt: 'Describe what you see in this image in one sentence.',
         maxTokens: 100,
+      );
+      sw.stop();
+      SoakTestService.instance.recordExternalInference(
+        source: 'Vision file',
+        latencyMs: sw.elapsedMilliseconds,
+        generatedTokens: desc.generatedTokens,
+        workloadId: WorkloadId.vision,
       );
 
       if (mounted) {
@@ -216,17 +225,35 @@ class _VisionScreenState extends State<VisionScreen>
       if (mounted) {
         setState(() {
           _isProcessingFile = false;
-          _statusMessage = 'Error: $e';
+          _statusMessage = _userFacingErrorMessage(e);
         });
       }
       debugPrint('File vision error: $e');
     }
   }
 
+  String _userFacingErrorMessage(Object error) {
+    final message = error.toString();
+    final isNetworkLookupFailure = message.contains('Failed host lookup') ||
+        message.contains('SocketException') ||
+        message.contains('Unable to reach model host');
+
+    if (isNetworkLookupFailure) {
+      return 'Cannot reach model host. Check internet/DNS and try again.';
+    }
+
+    if (error is DownloadException ||
+        message.contains('Failed to download model')) {
+      return 'Model download failed. Please retry.';
+    }
+
+    return 'Vision error. Please try again.';
+  }
+
   /// Download SmolVLM2 model + mmproj if not already cached
   Future<void> _ensureModelsDownloaded() async {
-    final model = ModelRegistry.smolvlm2_500m;
-    final mmproj = ModelRegistry.smolvlm2_500m_mmproj;
+    const model = ModelRegistry.smolvlm2_500m;
+    const mmproj = ModelRegistry.smolvlm2_500m_mmproj;
 
     final modelDownloaded = await _modelManager.isModelDownloaded(model.id);
     final mmprojDownloaded = await _modelManager.isModelDownloaded(mmproj.id);
@@ -241,8 +268,7 @@ class _VisionScreenState extends State<VisionScreen>
         if (mounted) {
           setState(() {
             _downloadProgress = progress.progress;
-            _statusMessage =
-                'Downloading: ${progress.progressPercent}%';
+            _statusMessage = 'Downloading: ${progress.progressPercent}%';
           });
         }
       });
@@ -288,9 +314,8 @@ class _VisionScreenState extends State<VisionScreen>
       camera,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: Platform.isIOS
-          ? ImageFormatGroup.bgra8888
-          : ImageFormatGroup.yuv420,
+      imageFormatGroup:
+          Platform.isIOS ? ImageFormatGroup.bgra8888 : ImageFormatGroup.yuv420,
     );
 
     await _cameraController!.initialize();
@@ -360,12 +385,20 @@ class _VisionScreenState extends State<VisionScreen>
     }
 
     try {
+      final sw = Stopwatch()..start();
       final result = await _visionWorker.describeFrame(
         frame.rgb,
         frame.width,
         frame.height,
         prompt: 'Describe what you see in this image in one sentence.',
         maxTokens: 100,
+      );
+      sw.stop();
+      SoakTestService.instance.recordExternalInference(
+        source: 'Vision camera',
+        latencyMs: sw.elapsedMilliseconds,
+        generatedTokens: result.generatedTokens,
+        workloadId: WorkloadId.vision,
       );
       if (mounted) {
         setState(() => _description = result.description);
@@ -511,78 +544,107 @@ class _VisionScreenState extends State<VisionScreen>
       body: Stack(
         children: [
           if (_isVisionReady)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Selected image preview
-                  if (_selectedImageBytes != null)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 400, maxWidth: 600),
-                      margin: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.border),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.memory(_selectedImageBytes!, fit: BoxFit.contain),
-                      ),
-                    ),
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 760),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Selected image preview
+                            if (_selectedImageBytes != null)
+                              Container(
+                                constraints: BoxConstraints(
+                                  maxHeight: constraints.maxHeight * 0.5,
+                                  maxWidth: 760,
+                                ),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.memory(_selectedImageBytes!,
+                                      fit: BoxFit.contain),
+                                ),
+                              ),
 
-                  // Description
-                  if (_description != null && _description!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.border),
-                      ),
-                      child: Row(
-                        children: [
-                          if (_isProcessingFile) const _PulsingDot(),
-                          if (_isProcessingFile) const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _description!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                height: 1.4,
+                            // Description
+                            if (_description != null &&
+                                _description!.isNotEmpty)
+                              Container(
+                                constraints: BoxConstraints(
+                                  maxHeight: constraints.maxHeight * 0.28,
+                                ),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_isProcessingFile) const _PulsingDot(),
+                                    if (_isProcessingFile)
+                                      const SizedBox(width: 12),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: Text(
+                                          _description!,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // Pick image button
+                            ElevatedButton.icon(
+                              onPressed: _isProcessingFile
+                                  ? null
+                                  : _pickAndDescribeImage,
+                              icon: const Icon(Icons.image),
+                              label: Text(_selectedImageBytes != null
+                                  ? 'Pick Another Image'
+                                  : 'Pick an Image'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accent,
+                                foregroundColor: AppTheme.background,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+
+                            if (_isProcessingFile)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 16),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                      color: AppTheme.accent),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-
-                  const SizedBox(height: 24),
-
-                  // Pick image button
-                  ElevatedButton.icon(
-                    onPressed: _isProcessingFile ? null : _pickAndDescribeImage,
-                    icon: const Icon(Icons.image),
-                    label: Text(_selectedImageBytes != null
-                        ? 'Pick Another Image'
-                        : 'Pick an Image'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accent,
-                      foregroundColor: AppTheme.background,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-
-                  if (_isProcessingFile)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 16),
-                      child: CircularProgressIndicator(color: AppTheme.accent),
-                    ),
-                ],
+                  );
+                },
               ),
             ),
 

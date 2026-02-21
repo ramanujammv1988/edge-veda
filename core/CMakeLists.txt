@@ -34,9 +34,8 @@ option(EDGE_VEDA_BUILD_TESTS "Build tests" OFF)
 
 # Enable LTO for release builds (reduces binary size ~10-20%)
 # CMAKE_INTERPROCEDURAL_OPTIMIZATION uses -flto=thin on Android (Clang)
-# Note: LTO disabled for iOS to allow XCFramework creation
-# LTO produces LLVM bitcode object files that can't be archived directly
-if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT IOS)
+# Note: keep LTO disabled for Apple XCFramework static archives.
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND ANDROID)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show File, Platform;
-import 'dart:typed_data' show Uint8List;
 
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
@@ -273,8 +272,8 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
   // ── Model Download ─────────────────────────────────────────────────────
 
   Future<void> _ensureModelsDownloaded() async {
-    final model = ModelRegistry.smolvlm2_500m;
-    final mmproj = ModelRegistry.smolvlm2_500m_mmproj;
+    const model = ModelRegistry.smolvlm2_500m;
+    const mmproj = ModelRegistry.smolvlm2_500m_mmproj;
 
     final modelDownloaded = await _modelManager.isModelDownloaded(model.id);
     final mmprojDownloaded = await _modelManager.isModelDownloaded(mmproj.id);

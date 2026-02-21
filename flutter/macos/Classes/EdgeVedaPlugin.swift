@@ -317,27 +317,22 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
 
     /// Returns available memory in bytes.
     private func handleGetAvailableMemory(_ result: FlutterResult) {
-        if #available(macOS 12.0, *) {
-            result(Int64(os_proc_available_memory()))
+        var vmStats = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<natural_t>.size)
+
+        let kerr = withUnsafeMutablePointer(to: &vmStats) { vmStatsPtr in
+            vmStatsPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rawPtr in
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, rawPtr, &count)
+            }
+        }
+
+        if kerr == KERN_SUCCESS {
+            let pageSize = Int64(vm_kernel_page_size)
+            let free = Int64(vmStats.free_count) * pageSize
+            let inactive = Int64(vmStats.inactive_count) * pageSize
+            result(free + inactive)
         } else {
-            // Fallback: use host_statistics64
-            var vmStats = vm_statistics64()
-            var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<natural_t>.size)
-
-            let kerr = withUnsafeMutablePointer(to: &vmStats) { vmStatsPtr in
-                vmStatsPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rawPtr in
-                    host_statistics64(mach_host_self(), HOST_VM_INFO64, rawPtr, &count)
-                }
-            }
-
-            if kerr == KERN_SUCCESS {
-                let pageSize = Int64(vm_kernel_page_size)
-                let free = Int64(vmStats.free_count) * pageSize
-                let inactive = Int64(vmStats.inactive_count) * pageSize
-                result(free + inactive)
-            } else {
-                result(Int64(0))
-            }
+            result(Int64(0))
         }
     }
 

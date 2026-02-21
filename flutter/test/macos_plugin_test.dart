@@ -106,7 +106,7 @@ void main() {
       final result = await telemetryChannel.invokeMethod<Map>('requestDetectivePermissions');
       expect(result, isNotNull);
       expect(result!['photos'], 'granted');
-      expect(result!['calendar'], 'granted');
+      expect(result['calendar'], 'granted');
     });
 
     test('shareFile sends path argument', () async {

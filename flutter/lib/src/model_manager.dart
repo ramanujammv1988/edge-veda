@@ -126,27 +126,52 @@ class ModelManager {
     bool verifyChecksum,
     CancelToken? cancelToken,
   ) async {
-    int attempt = 0;
-    Duration retryDelay = _initialRetryDelay;
+    final candidateUrls = _buildDownloadUrlCandidates(model.downloadUrl);
+    SocketException? lastSocketError;
+    DownloadException? lastDownloadError;
 
-    while (true) {
-      attempt++;
-      try {
-        return await _performDownload(model, modelPath, verifyChecksum, cancelToken);
-      } on SocketException catch (e) {
-        // Transient network error - retry with exponential backoff
-        if (attempt >= _maxRetries) {
-          throw DownloadException(
-            'Failed to download model after $_maxRetries attempts',
-            details: 'Network error: ${e.message}',
-            originalError: e,
+    for (final downloadUrl in candidateUrls) {
+      int attempt = 0;
+      Duration retryDelay = _initialRetryDelay;
+
+      while (true) {
+        attempt++;
+        try {
+          return await _performDownload(
+            model,
+            modelPath,
+            verifyChecksum,
+            cancelToken,
+            downloadUrl: downloadUrl,
           );
+        } on SocketException catch (e) {
+          lastSocketError = e;
+          // Transient network error - retry with exponential backoff.
+          // If retries for this host are exhausted, try next host.
+          if (attempt >= _maxRetries) {
+            break;
+          }
+          await Future.delayed(retryDelay);
+          retryDelay *= 2;
+        } on DownloadException catch (e) {
+          // HTTP/status/validation error for this host - move to next candidate.
+          lastDownloadError = e;
+          break;
         }
-        // Wait before retry (exponential backoff)
-        await Future.delayed(retryDelay);
-        retryDelay *= 2;
       }
     }
+
+    if (lastDownloadError != null) {
+      throw lastDownloadError;
+    }
+
+    throw DownloadException(
+      'Failed to download model',
+      details:
+          'Unable to reach model host(s). Tried: ${candidateUrls.join(', ')}. '
+          'Last network error: ${lastSocketError?.message ?? 'unknown'}',
+      originalError: lastSocketError,
+    );
   }
 
   /// Perform the actual download to temp file with atomic rename
@@ -154,8 +179,9 @@ class ModelManager {
     ModelInfo model,
     String modelPath,
     bool verifyChecksum,
-    CancelToken? cancelToken,
-  ) async {
+    CancelToken? cancelToken, {
+    required String downloadUrl,
+  }) async {
     // Create temporary file for downloading (atomic pattern - Pitfall 12)
     final tempPath = '$modelPath.tmp';
     final tempFile = File(tempPath);
@@ -175,7 +201,7 @@ class ModelManager {
       }
 
       // Start download with progress tracking
-      final request = http.Request('GET', Uri.parse(model.downloadUrl));
+      final request = http.Request('GET', Uri.parse(downloadUrl));
       final response = await client.send(request);
 
       if (response.statusCode != 200) {
@@ -283,6 +309,21 @@ class ModelManager {
     }
   }
 
+  /// Build ordered download URL candidates.
+  ///
+  /// For Hugging Face URLs, we try an alternate mirror host as fallback for
+  /// environments where `huggingface.co` DNS/routing is blocked.
+  List<String> _buildDownloadUrlCandidates(String primaryUrl) {
+    final candidates = <String>[primaryUrl];
+    final uri = Uri.parse(primaryUrl);
+
+    if (uri.host == 'huggingface.co') {
+      candidates.add(uri.replace(host: 'hf-mirror.com').toString());
+    }
+
+    return candidates.toSet().toList();
+  }
+
   /// Verify file checksum (internal helper)
   Future<bool> _verifyChecksum(String filePath, String expectedChecksum) async {
     try {
@@ -301,7 +342,8 @@ class ModelManager {
   /// Verify model file checksum (SHA-256)
   ///
   /// Returns true if the file exists and its SHA-256 hash matches the expected checksum.
-  Future<bool> verifyModelChecksum(String filePath, String expectedChecksum) async {
+  Future<bool> verifyModelChecksum(
+      String filePath, String expectedChecksum) async {
     return _verifyChecksum(filePath, expectedChecksum);
   }
 
@@ -379,7 +421,8 @@ class ModelManager {
   /// Save model metadata to disk
   Future<void> _saveModelMetadata(ModelInfo model) async {
     final modelsDir = await getModelsDirectory();
-    final metadataFile = File(path.join(modelsDir.path, '${model.id}_$_metadataFileName'));
+    final metadataFile =
+        File(path.join(modelsDir.path, '${model.id}_$_metadataFileName'));
 
     final metadata = {
       'model': model.toJson(),
@@ -392,7 +435,8 @@ class ModelManager {
   /// Delete model metadata
   Future<void> _deleteModelMetadata(String modelId) async {
     final modelsDir = await getModelsDirectory();
-    final metadataFile = File(path.join(modelsDir.path, '${modelId}_$_metadataFileName'));
+    final metadataFile =
+        File(path.join(modelsDir.path, '${modelId}_$_metadataFileName'));
 
     if (await metadataFile.exists()) {
       await metadataFile.delete();
@@ -402,7 +446,8 @@ class ModelManager {
   /// Get model metadata if available
   Future<ModelInfo?> getModelMetadata(String modelId) async {
     final modelsDir = await getModelsDirectory();
-    final metadataFile = File(path.join(modelsDir.path, '${modelId}_$_metadataFileName'));
+    final metadataFile =
+        File(path.join(modelsDir.path, '${modelId}_$_metadataFileName'));
 
     if (!await metadataFile.exists()) {
       return null;
@@ -425,8 +470,7 @@ class ModelManager {
 
 /// Pre-configured model registry with popular models
 class ModelRegistry {
-  static const String huggingFaceBaseUrl =
-      'https://huggingface.co/models';
+  static const String huggingFaceBaseUrl = 'https://huggingface.co/models';
 
   /// Llama 3.2 1B Instruct (Q4_K_M quantization) - Primary model
   static const ModelInfo llama32_1b = ModelInfo(
