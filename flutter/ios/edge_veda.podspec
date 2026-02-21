@@ -124,6 +124,15 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_free_embeddings', '-Wl,-exported_symbol,_ev_free_embeddings',
       # Streaming confidence
       '-Wl,-u,_ev_stream_get_token_info', '-Wl,-exported_symbol,_ev_stream_get_token_info',
+      # Image generation API
+      '-Wl,-u,_ev_image_config_default', '-Wl,-exported_symbol,_ev_image_config_default',
+      '-Wl,-u,_ev_image_gen_params_default', '-Wl,-exported_symbol,_ev_image_gen_params_default',
+      '-Wl,-u,_ev_image_init', '-Wl,-exported_symbol,_ev_image_init',
+      '-Wl,-u,_ev_image_free', '-Wl,-exported_symbol,_ev_image_free',
+      '-Wl,-u,_ev_image_is_valid', '-Wl,-exported_symbol,_ev_image_is_valid',
+      '-Wl,-u,_ev_image_set_progress_callback', '-Wl,-exported_symbol,_ev_image_set_progress_callback',
+      '-Wl,-u,_ev_image_generate', '-Wl,-exported_symbol,_ev_image_generate',
+      '-Wl,-u,_ev_image_free_result', '-Wl,-exported_symbol,_ev_image_free_result',
     ].join(' '),
     'OTHER_LDFLAGS[sdk=iphonesimulator*]' => [
       '$(inherited)',
@@ -176,6 +185,15 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_free_embeddings', '-Wl,-exported_symbol,_ev_free_embeddings',
       # Streaming confidence
       '-Wl,-u,_ev_stream_get_token_info', '-Wl,-exported_symbol,_ev_stream_get_token_info',
+      # Image generation API
+      '-Wl,-u,_ev_image_config_default', '-Wl,-exported_symbol,_ev_image_config_default',
+      '-Wl,-u,_ev_image_gen_params_default', '-Wl,-exported_symbol,_ev_image_gen_params_default',
+      '-Wl,-u,_ev_image_init', '-Wl,-exported_symbol,_ev_image_init',
+      '-Wl,-u,_ev_image_free', '-Wl,-exported_symbol,_ev_image_free',
+      '-Wl,-u,_ev_image_is_valid', '-Wl,-exported_symbol,_ev_image_is_valid',
+      '-Wl,-u,_ev_image_set_progress_callback', '-Wl,-exported_symbol,_ev_image_set_progress_callback',
+      '-Wl,-u,_ev_image_generate', '-Wl,-exported_symbol,_ev_image_generate',
+      '-Wl,-u,_ev_image_free_result', '-Wl,-exported_symbol,_ev_image_free_result',
     ].join(' ')
   }
 

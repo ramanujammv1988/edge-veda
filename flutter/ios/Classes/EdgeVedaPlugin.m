@@ -205,9 +205,152 @@
 
 @end
 
+#pragma mark - TtsStreamHandler
+
+/// Stream handler for TTS events (word boundaries, start/finish/cancel).
+/// Also serves as AVSpeechSynthesizerDelegate to receive speech callbacks.
+@interface EVTtsHandler : NSObject<FlutterStreamHandler, AVSpeechSynthesizerDelegate>
+@property (nonatomic, strong) AVSpeechSynthesizer *synthesizer;
+- (void)speakText:(NSString *)text voiceId:(NSString *)voiceId rate:(NSNumber *)rate pitch:(NSNumber *)pitch volume:(NSNumber *)volume;
+- (BOOL)stop;
+- (BOOL)pause;
+- (BOOL)resume;
+- (NSArray<NSDictionary *> *)availableVoices;
+@end
+
+@implementation EVTtsHandler {
+    FlutterEventSink _eventSink;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _synthesizer = [[AVSpeechSynthesizer alloc] init];
+        _synthesizer.delegate = self;
+    }
+    return self;
+}
+
+- (FlutterError *)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)events {
+    _eventSink = events;
+    return nil;
+}
+
+- (FlutterError *)onCancelWithArguments:(id)arguments {
+    _eventSink = nil;
+    return nil;
+}
+
+#pragma mark - TTS Actions
+
+- (void)speakText:(NSString *)text voiceId:(NSString *)voiceId rate:(NSNumber *)rate pitch:(NSNumber *)pitch volume:(NSNumber *)volume {
+    AVSpeechUtterance *utterance = [[AVSpeechUtterance alloc] initWithString:text];
+
+    if (voiceId && ![voiceId isEqual:[NSNull null]]) {
+        AVSpeechSynthesisVoice *voice = [AVSpeechSynthesisVoice voiceWithIdentifier:voiceId];
+        if (voice) {
+            utterance.voice = voice;
+        }
+    }
+
+    utterance.rate = rate ? [rate floatValue] : AVSpeechUtteranceDefaultSpeechRate;
+    utterance.pitchMultiplier = pitch ? [pitch floatValue] : 1.0f;
+    utterance.volume = volume ? [volume floatValue] : 1.0f;
+
+    [_synthesizer speakUtterance:utterance];
+}
+
+- (BOOL)stop {
+    return [_synthesizer stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+}
+
+- (BOOL)pause {
+    return [_synthesizer pauseSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+}
+
+- (BOOL)resume {
+    return [_synthesizer continueSpeaking];
+}
+
+- (NSArray<NSDictionary *> *)availableVoices {
+    NSArray<AVSpeechSynthesisVoice *> *allVoices = [AVSpeechSynthesisVoice speechVoices];
+
+    // Filter to enhanced+ quality voices (skip old robotic ones)
+    NSMutableArray<NSDictionary *> *enhanced = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *all = [NSMutableArray array];
+
+    for (AVSpeechSynthesisVoice *voice in allVoices) {
+        NSDictionary *dict = @{
+            @"id": voice.identifier,
+            @"name": voice.name,
+            @"language": voice.language,
+            @"quality": @((int)voice.quality),
+        };
+
+        [all addObject:dict];
+
+        if ((int)voice.quality >= AVSpeechSynthesisVoiceQualityEnhanced) {
+            [enhanced addObject:dict];
+        }
+    }
+
+    // Return enhanced voices if any exist, otherwise fall back to all
+    return enhanced.count > 0 ? enhanced : all;
+}
+
+#pragma mark - AVSpeechSynthesizerDelegate
+
+- (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer willSpeakRangeOfSpeechString:(NSRange)characterRange utterance:(AVSpeechUtterance *)utterance {
+    if (!_eventSink) return;
+
+    NSString *word = [utterance.speechString substringWithRange:characterRange];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_eventSink) {
+            self->_eventSink(@{
+                @"type": @"wordBoundary",
+                @"start": @(characterRange.location),
+                @"length": @(characterRange.length),
+                @"text": word ?: @"",
+            });
+        }
+    });
+}
+
+- (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer didStartSpeechUtterance:(AVSpeechUtterance *)utterance {
+    if (!_eventSink) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_eventSink) {
+            self->_eventSink(@{@"type": @"start"});
+        }
+    });
+}
+
+- (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer didFinishSpeechUtterance:(AVSpeechUtterance *)utterance {
+    if (!_eventSink) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_eventSink) {
+            self->_eventSink(@{@"type": @"finish"});
+        }
+    });
+}
+
+- (void)speechSynthesizer:(AVSpeechSynthesizer *)synthesizer didCancelSpeechUtterance:(AVSpeechUtterance *)utterance {
+    if (!_eventSink) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_eventSink) {
+            self->_eventSink(@{@"type": @"cancel"});
+        }
+    });
+}
+
+@end
+
 #pragma mark - EdgeVedaPlugin
 
-@implementation EdgeVedaPlugin
+@implementation EdgeVedaPlugin {
+    EVTtsHandler *_ttsHandler;
+}
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {
     // MethodChannel for on-demand telemetry polling
@@ -229,6 +372,14 @@
         eventChannelWithName:@"com.edgeveda.edge_veda/audio_capture"
              binaryMessenger:[registrar messenger]];
     [audioChannel setStreamHandler:[[EVAudioCaptureHandler alloc] init]];
+
+    // EventChannel for TTS events (word boundaries, start/finish/cancel)
+    EVTtsHandler *ttsHandler = [[EVTtsHandler alloc] init];
+    instance->_ttsHandler = ttsHandler;
+    FlutterEventChannel *ttsChannel = [FlutterEventChannel
+        eventChannelWithName:@"com.edgeveda.edge_veda/tts_events"
+             binaryMessenger:[registrar messenger]];
+    [ttsChannel setStreamHandler:ttsHandler];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
@@ -258,6 +409,25 @@
         [self handleGetCalendarInsights:call result:result];
     } else if ([@"getFreeDiskSpace" isEqualToString:call.method]) {
         [self handleGetFreeDiskSpace:result];
+    } else if ([@"tts_speak" isEqualToString:call.method]) {
+        NSDictionary *args = call.arguments;
+        [_ttsHandler speakText:args[@"text"]
+                       voiceId:args[@"voiceId"]
+                          rate:args[@"rate"]
+                         pitch:args[@"pitch"]
+                        volume:args[@"volume"]];
+        result(@(YES));
+    } else if ([@"tts_stop" isEqualToString:call.method]) {
+        [_ttsHandler stop];
+        result(@(YES));
+    } else if ([@"tts_pause" isEqualToString:call.method]) {
+        [_ttsHandler pause];
+        result(@(YES));
+    } else if ([@"tts_resume" isEqualToString:call.method]) {
+        [_ttsHandler resume];
+        result(@(YES));
+    } else if ([@"tts_voices" isEqualToString:call.method]) {
+        result([_ttsHandler availableVoices]);
     } else {
         result(FlutterMethodNotImplemented);
     }

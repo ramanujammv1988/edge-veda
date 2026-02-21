@@ -58,6 +58,9 @@ enum WorkloadId {
 
   /// RAG pipeline inference (embedding + generation).
   rag,
+
+  /// Image generation (ImageWorker via Stable Diffusion).
+  image,
 }
 
 /// Adaptive budget profile expressing intent as multipliers on measured device baseline.

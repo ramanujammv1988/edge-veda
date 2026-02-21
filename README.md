@@ -1,12 +1,13 @@
 # Edge-Veda
 
-**A managed on-device AI runtime for Flutter — text, vision, speech, and RAG running sustainably on real phones under real constraints. Private by default.**
+**A managed on-device AI runtime for Flutter — text, vision, speech-to-text, text-to-speech, image generation, and RAG running sustainably on real phones under real constraints. Private by default.**
 
 `~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/rv8qZMGC)
 
 ---
 
@@ -87,12 +88,21 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - WhisperWorker isolate for non-blocking transcription
 - ~670ms per chunk on iPhone with Metal GPU (whisper-tiny.en, 77MB)
 
+### Text-to-Speech
+- **On-device TTS** via iOS AVSpeechSynthesizer — zero additional binary size
+- Neural/enhanced voice selection with language filtering
+- Speak, stop, pause, resume with rate/pitch/volume control
+- Real-time **word boundary events** for text highlighting during speech
+- Completes the voice pipeline: **STT → LLM → TTS**
+
 ### Structured Output & Function Calling
 - **GBNF grammar-constrained generation** for structured JSON output
 - **Tool/function calling** with ToolDefinition, ToolRegistry, and schema validation
 - Multi-round tool chains with configurable max rounds
 - `sendWithTools()` for automatic tool call/result cycling
-- `sendStructured()` for grammar-constrained generation
+- `sendStructured()` for grammar-constrained generation with strict/standard validation modes
+- **JSON recovery** — auto-repairs truncated/malformed model output (unclosed brackets, trailing garbage)
+- **Validation telemetry** — `onValidationEvent` callback for enterprise observability
 
 ### Embeddings & RAG
 - **Text embeddings** via ev_embed() with L2 normalization
@@ -101,10 +111,24 @@ Edge-Veda is designed for **behavior over time**, not benchmark bursts.
 - **VectorIndex** — pure Dart HNSW with cosine similarity and JSON persistence
 - **RagPipeline** — end-to-end embed, search, inject, generate
 
+### Image Generation
+- **On-device text-to-image** via stable-diffusion.cpp (Metal GPU accelerated)
+- Persistent `ImageWorker` isolate — model loads once, generates multiple images
+- **Scheduler-integrated** — respects thermal/battery QoS policies, auto-evicts under memory pressure
+- Progress callbacks with per-step updates during diffusion
+- **60-second idle auto-disposal** — frees ~2.3 GB when not in use
+- Configurable samplers (Euler A, DPM++), schedulers (Discrete, Karras, AYS), and CFG scale
+
+<p align="center">
+  <img src="docs/images/image_gen_demo.gif" width="300" alt="On-device image generation demo">
+</p>
+<p align="center"><em>"cat on a swing" → "dog riding a bicycle" — generated entirely on-device in ~30s each</em></p>
+
 ### Runtime Supervision
 - **Compute budget contracts** — declare p95 latency, battery drain, thermal, and memory ceilings
 - **Adaptive budget profiles** — auto-calibrate to measured device performance
-- **Central scheduler** arbitrates concurrent workloads with priority-based degradation
+- **Central scheduler** arbitrates concurrent workloads (text, vision, STT, image, RAG) with priority-based degradation
+- **Cross-worker memory eviction** — auto-disposes idle workers under memory pressure
 - **Thermal, memory, and battery-aware runtime policy** with hysteresis
 - Backpressure-controlled frame processing (drop-newest, not queue-forever)
 - Structured **performance tracing** (JSONL) with offline analysis tooling
@@ -141,6 +165,7 @@ Flutter App (Dart)
     +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
     +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
     +-- WhisperWorker -------- Persistent isolate, keeps whisper model loaded
+    +-- ImageWorker ---------- Persistent isolate, keeps SD model loaded
     |
     +-- Scheduler ------------ Central budget enforcer, priority-based degradation
     +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
@@ -158,9 +183,11 @@ Flutter App (Dart)
     +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
     +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
     +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)
+    +-- image_engine.cpp ----- Image generation (wraps stable-diffusion.cpp)
     +-- memory_guard.cpp ----- Cross-platform RSS monitoring, pressure callbacks
     +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
     +-- whisper.cpp v1.8.3 --- Metal GPU, shared ggml backend (unmodified)
+    +-- stable-diffusion.cpp - Metal GPU, shared ggml backend (unmodified)
 ```
 
 **Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. Workers maintain persistent contexts so models load once and stay in memory across the entire session.
@@ -174,7 +201,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^2.1.0
+  edge_veda: ^2.3.0
 ```
 
 ### Text Generation
@@ -276,6 +303,25 @@ final audioSub = WhisperSession.microphone().listen((samples) {
 await session.flush();
 await session.stop();
 print(session.transcript);
+```
+
+### Text-to-Speech
+
+```dart
+final tts = TtsService();
+
+// List available neural voices
+final voices = await tts.availableVoices();
+final voice = voices.firstWhere((v) => v.language.startsWith('en'));
+
+// Speak with word-by-word highlighting
+tts.events.listen((event) {
+  if (event.type == TtsEventType.wordBoundary) {
+    print('Speaking: ${event.word}');
+  }
+});
+
+await tts.speak('Hello from on-device AI', voiceId: voice.id, rate: 0.5);
 ```
 
 ### Embeddings & RAG
@@ -435,6 +481,15 @@ All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with
 | p50 / p95 / p99 latency | 1,412 / 2,283 / 2,597 ms |
 | Crashes / model reloads | 0 / 0 |
 
+### Image Generation
+
+| Metric | Value |
+|--------|-------|
+| Model load | 5.1s (+2.3 GB) |
+| 512x512, 4 steps (Euler A) | ~14s per image |
+| Memory (steady state) | ~2.3 GB |
+| Idle auto-disposal | 60s (frees 2.3 GB) |
+
 ### Speech-to-Text
 
 | Metric | Value |
@@ -485,6 +540,7 @@ Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 | SmolVLM2 500M | 607 MB | — | vision | Camera/image analysis |
 | Whisper Tiny | 77 MB | — | stt | Fast transcription |
 | Whisper Base | 148 MB | — | stt | Quality transcription |
+| SD v2.1 Turbo | 2.3 GB | — | image generation | Text-to-image (512x512) |
 | MiniLM L6 v2 | 46 MB | — | embedding | RAG, similarity search |
 
 > **Template matters.** Using the wrong `ChatTemplateFormat` produces garbage output. Match the model to its template from the table above.
@@ -553,7 +609,7 @@ cd flutter/example
 flutter run
 ```
 
-The demo app includes Chat (multi-turn with tool calling), Vision (continuous camera scanning), STT (live microphone transcription), and Settings (model management, device info).
+The demo app includes Chat (multi-turn with tool calling), Vision (continuous camera scanning), Image (text-to-image generation with gallery), STT (live microphone transcription), and Settings (model management, device info).
 
 ---
 
@@ -620,6 +676,13 @@ Contributions are welcome. Here's how to get started:
 - C++: match existing style in `core/src/`
 - All FFI calls must run in isolates (never on main thread)
 - New C API functions must be added to the podspec symbol whitelist
+
+---
+
+## Support
+
+- **Discord:** [Join our community](https://discord.gg/rv8qZMGC)
+- **GitHub Issues:** [Report bugs or request features](https://github.com/ramanujammv1988/edge-veda/issues)
 
 ---
 
