@@ -36,7 +36,6 @@ class _SttScreenState extends State<SttScreen>
   bool _isRecording = false;
   bool _isInitializing = false;
   bool _isProcessingChunk = false;
-  int _chunksProcessed = 0;
   String _transcript = '';
   final List<WhisperSegment> _segments = [];
 
@@ -140,12 +139,12 @@ class _SttScreenState extends State<SttScreen>
     final modelManager = ModelManager();
     final modelPath =
         await modelManager.getModelPath(ModelRegistry.whisperTinyEn.id);
-    print('EdgeVeda STT: Model path: $modelPath');
+    debugPrint('EdgeVeda STT: Model path: $modelPath');
 
     _session = WhisperSession(modelPath: modelPath);
-    print('EdgeVeda STT: Starting whisper session...');
+    debugPrint('EdgeVeda STT: Starting whisper session...');
     await _session!.start();
-    print('EdgeVeda STT: Session started successfully');
+    debugPrint('EdgeVeda STT: Session started successfully');
 
     // Listen for segments (lives for the session lifetime)
     _segmentSubscription?.cancel();
@@ -164,7 +163,6 @@ class _SttScreenState extends State<SttScreen>
       if (mounted) {
         setState(() {
           _isProcessingChunk = processing;
-          if (!processing) _chunksProcessed++;
         });
       }
     });
@@ -260,7 +258,7 @@ class _SttScreenState extends State<SttScreen>
     _audioSubscription?.cancel();
     _audioSubscription = null;
 
-    print('EdgeVeda STT: Stopped mic capture, session stays alive');
+    debugPrint('EdgeVeda STT: Stopped mic capture, session stays alive');
   }
 
   void _clearTranscript() {

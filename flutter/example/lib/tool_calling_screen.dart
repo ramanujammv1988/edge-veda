@@ -105,7 +105,7 @@ class _ToolCallingScreenState extends State<ToolCallingScreen> {
                   ),
                   value: _showRequiredOnly,
                   onChanged: (v) => setState(() => _showRequiredOnly = v),
-                  activeColor: AppTheme.accent,
+                  activeTrackColor: AppTheme.accent,
                 ),
                 const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
                 // Tool list

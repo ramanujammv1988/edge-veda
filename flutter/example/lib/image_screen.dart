@@ -806,7 +806,7 @@ class _ImageScreenState extends State<ImageScreen> {
                 child: Switch.adaptive(
                   value: _useRawOutput,
                   onChanged: (v) => setState(() => _useRawOutput = v),
-                  activeColor: AppTheme.accent,
+                  activeTrackColor: AppTheme.accent,
                 ),
               ),
             ],
