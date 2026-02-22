@@ -42,18 +42,26 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^2.4.0
+  edge_veda: ^2.3.1
 ```
 
 ### iOS Setup
 
-No special Podfile configuration needed. The SDK ships as a dynamic XCFramework
-that works with both `use_frameworks!` and `use_modular_headers!`.
-
-Minimum deployment target: iOS 13.0
+The native C engine (llama.cpp + whisper.cpp + stable-diffusion.cpp, ~31 MB) ships as a
+pre-built XCFramework that is **automatically downloaded** from GitHub Releases when
+`pod install` runs. No manual download or build step is needed.
 
 ```ruby
+# Podfile — minimum deployment target
 platform :ios, '13.0'
+```
+
+The XCFramework works with both `use_frameworks!` and `use_modular_headers!`.
+
+If you need to build from source (custom engine flags, development, etc.):
+
+```bash
+./scripts/build-ios.sh --clean --release
 ```
 
 ---
