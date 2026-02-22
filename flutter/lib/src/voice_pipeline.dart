@@ -314,7 +314,7 @@ class VoicePipeline {
       _setState(VoicePipelineState.listening);
     } catch (e) {
       _setState(VoicePipelineState.error);
-      _eventController.add(PipelineError('Failed to start pipeline: $e',
+      _emit(PipelineError('Failed to start pipeline: $e',
           fatal: true));
       // Clean up any partially initialized resources
       await _cleanup();
@@ -373,7 +373,7 @@ class VoicePipeline {
   /// Listening: detect speech onset and end-of-speech silence.
   void _handleListening(double rms, Float32List frame) {
     // Emit audio level every frame for UI visualization
-    _eventController.add(StateChanged(VoicePipelineState.listening, audioLevel: rms));
+    _emit(StateChanged(VoicePipelineState.listening, audioLevel: rms));
 
     if (rms > _threshold) {
       // Speech detected
@@ -418,7 +418,7 @@ class VoicePipeline {
         _setState(VoicePipelineState.transcribing);
         // Fire-and-forget with error handling
         _processUserSpeech().catchError((Object e) {
-          _eventController.add(PipelineError('Speech processing error: $e'));
+          _emit(PipelineError('Speech processing error: $e'));
           if (_state == VoicePipelineState.transcribing ||
               _state == VoicePipelineState.thinking) {
             _frameBuffer.clear();
@@ -443,10 +443,21 @@ class VoicePipeline {
     _whisperSession?.feedAudio(frame);
   }
 
+  /// Safely emit an event, guarding against closed controller.
+  ///
+  /// During dispose(), the event controller may close while async operations
+  /// (_processUserSpeech's finally block) are still completing. Adding to a
+  /// closed StreamController throws StateError. This guard prevents that.
+  void _emit(VoicePipelineEvent event) {
+    if (!_eventController.isClosed) {
+      _eventController.add(event);
+    }
+  }
+
   /// Update state and emit StateChanged event.
   void _setState(VoicePipelineState newState, {double audioLevel = 0.0}) {
     _state = newState;
-    _eventController.add(StateChanged(newState, audioLevel: audioLevel));
+    _emit(StateChanged(newState, audioLevel: audioLevel));
   }
 
   /// Handle TTS events for state transitions.
@@ -472,8 +483,9 @@ class VoicePipeline {
     _speechFrameCount = 0;
     _setState(VoicePipelineState.transcribing);
     await _processUserSpeech().catchError((Object e) {
-      _eventController.add(PipelineError('Speech processing error: $e'));
-      if (_state != VoicePipelineState.idle) {
+      _emit(PipelineError('Speech processing error: $e'));
+      if (_state != VoicePipelineState.idle &&
+          _state != VoicePipelineState.error) {
         _frameBuffer.clear();
         _whisperSession?.resetTranscript();
         _micListening = true;
@@ -500,21 +512,18 @@ class VoicePipeline {
     // NOTE: Do NOT set _micListening here -- callers (_handleListening,
     // sendNow) already set it to false before calling this method.
 
+    bool ttsPlayed = false;
+
     try {
       // Step 1: Flush WhisperSession to get final transcription
       await _whisperSession?.flush();
       final text = _whisperSession?.transcript.trim() ?? '';
       _whisperSession?.resetTranscript();
 
-      if (text.isEmpty) {
-        _setState(VoicePipelineState.listening);
-        _speechDetected = false;
-        _silentFrameCount = 0;
-        return;
-      }
+      if (text.isEmpty) return;
 
       // Step 2: Emit user transcript event
-      _eventController.add(TranscriptUpdated(text, null));
+      _emit(TranscriptUpdated(text, null));
 
       // Step 3: Transition to thinking state
       _setState(VoicePipelineState.thinking);
@@ -527,11 +536,8 @@ class VoicePipeline {
             scheduler.getKnobsForWorkload(WorkloadId.voicePipeline);
         if (knobs.maxFps == 0) {
           // QoS paused -- don't generate, just listen
-          _eventController.add(
+          _emit(
               PipelineError('Voice pipeline paused by scheduler'));
-          _setState(VoicePipelineState.listening);
-          _speechDetected = false;
-          _silentFrameCount = 0;
           return;
         }
         // At reduced QoS, use scheduler's maxTokens limit if lower
@@ -558,7 +564,7 @@ class VoicePipeline {
           // Clean special tokens from the partial text to prevent
           // Llama 3 / ChatML tags from appearing in the UI.
           final partialClean = cleanResponseText(responseBuffer.toString());
-          _eventController.add(TranscriptUpdated(
+          _emit(TranscriptUpdated(
             text,
             partialClean,
             isPartial: true,
@@ -570,11 +576,7 @@ class VoicePipeline {
         wasCancelled = _llmCancelToken?.isCancelled ?? false;
         if (!wasCancelled) {
           // Real error, not cancellation
-          _eventController
-              .add(PipelineError('LLM generation failed: $e'));
-          _setState(VoicePipelineState.listening);
-          _speechDetected = false;
-          _silentFrameCount = 0;
+          _emit(PipelineError('LLM generation failed: $e'));
           return;
         }
       }
@@ -598,15 +600,10 @@ class VoicePipeline {
       // before displaying in UI or sending to TTS. Tags like <|eot_id|>
       // confuse AVSpeechSynthesizer and look bad in the transcript.
       final responseText = cleanResponseText(responseBuffer.toString());
-      if (responseText.isEmpty) {
-        _setState(VoicePipelineState.listening);
-        _speechDetected = false;
-        _silentFrameCount = 0;
-        return;
-      }
+      if (responseText.isEmpty) return;
 
       // Step 5: Emit final transcript
-      _eventController.add(TranscriptUpdated(text, responseText));
+      _emit(TranscriptUpdated(text, responseText));
 
       // Step 6: Record conversation turn
       _turns.add((user: text, assistant: responseText));
@@ -618,22 +615,19 @@ class VoicePipeline {
         voiceId: config.voiceId,
         rate: config.ttsRate,
       );
+      ttsPlayed = true;
     } catch (e) {
-      _eventController.add(PipelineError('Voice pipeline error: $e'));
-      if (_state != VoicePipelineState.idle) {
-        _setState(VoicePipelineState.listening);
-        _speechDetected = false;
-        _silentFrameCount = 0;
-      }
+      _emit(PipelineError('Voice pipeline error: $e'));
     } finally {
       _isProcessingTurn = false;
-      // Resume mic processing after cooldown.
-      // The cooldown prevents residual TTS reverb/echo from triggering
-      // false speech detection. We clear _frameBuffer and reset
-      // WhisperSession before re-enabling mic processing to ensure no
-      // stale audio contaminates the next turn.
+      // Resume mic processing. Apply cooldown only when TTS actually
+      // played -- the 800ms prevents residual reverb/echo from triggering
+      // false speech detection. Early returns (empty transcript, QoS
+      // paused, LLM error) skip the cooldown for instant mic re-enable.
       if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
-        await Future<void>.delayed(config.ttsCooldown);
+        if (ttsPlayed) {
+          await Future<void>.delayed(config.ttsCooldown);
+        }
         // Clear all audio state to ensure a clean slate for the next turn
         _frameBuffer.clear();
         _whisperSession?.resetTranscript();
@@ -641,11 +635,14 @@ class VoicePipeline {
         _silentFrameCount = 0;
         _speechFrameCount = 0;
         _totalSilentFrameCount = 0;
-        // Re-enable mic processing -- only frames arriving AFTER this
-        // point will be processed. No buffered backlog exists because
-        // we use a flag gate instead of StreamSubscription.pause().
-        _micListening = true;
+        // Re-check state: stop() or pause() may have been called during the
+        // cooldown delay above, changing state to idle. Only re-enable mic
+        // processing if the pipeline is still active.
         if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
+          // Re-enable mic processing -- only frames arriving AFTER this
+          // point will be processed. No buffered backlog exists because
+          // we use a flag gate instead of StreamSubscription.pause().
+          _micListening = true;
           _setState(VoicePipelineState.listening);
         }
       }
@@ -697,6 +694,11 @@ class VoicePipeline {
   ///
   /// Sets PlayAndRecord category with Default mode and echo cancellation.
   /// Used by both [start] and [resume] to ensure correct audio configuration.
+  ///
+  // TODO: Native side should observe AVAudioSessionInterruptionNotification
+  // and AVAudioSessionRouteChangeNotification, forwarding events to Dart so
+  // the pipeline can gracefully handle phone calls, Siri, Bluetooth
+  // disconnect, and headphone plug/unplug during active voice sessions.
   Future<void> _configureAudioSession() async {
     await _methodChannel.invokeMethod<bool>('configureVoicePipelineAudio');
   }
