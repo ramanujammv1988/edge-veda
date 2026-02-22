@@ -42,32 +42,18 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^2.1.0
+  edge_veda: ^2.4.0
 ```
 
 ### iOS Setup
 
-Update your `ios/Podfile` with two required changes:
+No special Podfile configuration needed. The SDK ships as a dynamic XCFramework
+that works with both `use_frameworks!` and `use_modular_headers!`.
+
+Minimum deployment target: iOS 13.0
 
 ```ruby
-# ios/Podfile — add this at the top
-platform :ios, '16.0'
-
-target 'Runner' do
-  # REQUIRED: use_modular_headers! instead of use_frameworks!
-  # Edge-Veda uses FFI via DynamicLibrary.process() which requires
-  # native symbols linked into the main app binary.
-  use_modular_headers!
-
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-  # ...
-end
-```
-
-**Important:** The default Flutter Podfile uses `use_frameworks!` which isolates native symbols inside framework bundles, making them invisible to Dart FFI. You **must** change this to `use_modular_headers!` for Edge-Veda to work. After changing, run a clean rebuild:
-
-```bash
-cd ios && rm -rf Pods Podfile.lock && cd .. && flutter clean && flutter pub get && cd ios && pod install
+platform :ios, '13.0'
 ```
 
 ---
@@ -316,9 +302,9 @@ Flutter App (Dart)
     +-- FrameQueue ----------- Drop-newest backpressure for camera frames
     +-- PerfTrace ------------ JSONL flight recorder for offline analysis
     |
-    +-- FFI Bindings --------- 43 C functions via DynamicLibrary.process()
+    +-- FFI Bindings --------- 43 C functions via DynamicLibrary.open() (dynamic framework)
          |
-    XCFramework (libedge_veda_full.a, ~8MB)
+    XCFramework (EdgeVedaCore.framework, ~31MB)
     +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
     +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
     +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)

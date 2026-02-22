@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-02-22
+
+### Changed
+- **Dynamic XCFramework:** Switched from static library with manual linker flags to dynamic framework via `vendored_frameworks`. Eliminates `use_modular_headers!` Podfile requirement, 88-line exported_symbol whitelist, and Xcode 26 debug stub workaround.
+- **FFI loading:** Changed from `DynamicLibrary.process()` (static linking) to `DynamicLibrary.open('EdgeVedaCore.framework/EdgeVedaCore')` (dynamic framework)
+- **ffi constraint:** Widened from `>=2.0.0 <2.1.0` to `^2.0.0` (objective_c simulator crash was caused by static linking approach, no longer applicable)
+
+### Removed
+- `use_modular_headers!` Podfile requirement (dynamic framework works with both `use_frameworks!` and `use_modular_headers!`)
+- 88-line `-Wl,-exported_symbol` whitelist from podspec
+- `-force_load` static library linker flags from podspec
+- Xcode 26 debug blank executor `_main` / `___debug_main_executable_dylib_entry_point` workaround
+
 ## [2.1.0] - 2026-02-15
 
 ### Added
