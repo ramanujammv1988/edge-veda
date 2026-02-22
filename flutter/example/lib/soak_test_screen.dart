@@ -105,12 +105,13 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       // Step 2: Spawn VisionWorker and init vision
       setState(() => _statusMessage = 'Loading vision model...');
       await _visionWorker.spawn();
+      final useGpu = Platform.isIOS;
       await _visionWorker.initVision(
         modelPath: _modelPath!,
         mmprojPath: _mmprojPath!,
-        numThreads: 4,
-        contextSize: 4096,
-        useGpu: true,
+        numThreads: useGpu ? 4 : 8,
+        contextSize: useGpu ? 4096 : 1024,
+        useGpu: useGpu,
       );
       if (!mounted) return;
 
@@ -260,7 +261,9 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
 
   Future<void> _ensureModelsDownloaded() async {
     final model = ModelRegistry.smolvlm2_500m;
-    final mmproj = ModelRegistry.smolvlm2_500m_mmproj;
+    final mmproj = Platform.isIOS
+        ? ModelRegistry.smolvlm2_500m_mmproj
+        : ModelRegistry.smolvlm2_500m_mmproj_q8;
 
     final modelDownloaded = await _modelManager.isModelDownloaded(model.id);
     final mmprojDownloaded = await _modelManager.isModelDownloaded(mmproj.id);
@@ -300,7 +303,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
 
     _cameraController = CameraController(
       camera,
-      ResolutionPreset.medium,
+      Platform.isIOS ? ResolutionPreset.medium : ResolutionPreset.low,
       enableAudio: false,
       imageFormatGroup: Platform.isIOS
           ? ImageFormatGroup.bgra8888

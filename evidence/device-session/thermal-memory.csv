@@ -1,6 +1,0 @@
-timestamp_min,thermal_state,rss_mb
-# PENDING — requires 4 data points at 0, 10, 20, 30 minutes
-# 0,,,
-# 10,,,
-# 20,,,
-# 30,,,

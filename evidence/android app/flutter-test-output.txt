@@ -1,0 +1,25 @@
+00:00 +0: loading C:/Users/prave/Desktop/EdgeVeda/flutter/test/edge_veda_test.dart
+00:00 +0: EdgeVedaConfig creates config with required parameters
+00:00 +1: EdgeVedaConfig creates config with custom parameters
+00:00 +2: EdgeVedaConfig toJson returns correct map
+00:00 +3: GenerateOptions creates default options
+00:00 +4: GenerateOptions creates custom options
+00:00 +5: GenerateOptions copyWith creates modified copy
+00:00 +6: GenerateResponse calculates total tokens correctly
+00:00 +7: GenerateResponse calculates tokens per second
+00:00 +8: GenerateResponse returns null tokens per second when latency is null
+00:00 +9: TokenChunk creates token chunk
+00:00 +10: TokenChunk creates final token chunk
+00:00 +11: DownloadProgress calculates progress percentage
+00:00 +12: DownloadProgress handles zero total bytes
+00:00 +13: ModelInfo creates from JSON
+00:00 +14: ModelInfo toJson returns correct map
+00:00 +15: EdgeVedaException InitializationException has correct type
+00:00 +16: EdgeVedaException exception toString includes details
+00:00 +17: ModelRegistry contains predefined models
+00:00 +18: ModelRegistry getAllModels returns all models
+00:00 +19: ModelRegistry getModelById finds model
+00:00 +20: ModelRegistry getModelById returns null for unknown id
+00:00 +21: EdgeVeda isInitialized is false before init
+00:00 +22: EdgeVeda config is null before init
+00:00 +23: All tests passed!

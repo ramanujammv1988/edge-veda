@@ -1,5 +1,0 @@
-# PENDING — requires physical device session (30+ min for Core tier)
-# Android: adb logcat -v time > session-log.txt
-# iOS: idevicesyslog or Xcode > Devices > View Device Logs
-# Must span >= 30 minutes of real timestamps
-# Must contain ggml_vulkan_init (Android) or ggml_metal_init (iOS)
