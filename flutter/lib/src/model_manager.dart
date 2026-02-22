@@ -544,6 +544,20 @@ class ModelRegistry {
     family: 'smolvlm',
   );
 
+  /// SmolVLM2 500M mmproj Q8_0 — smaller/faster for CPU-only devices
+  static const ModelInfo smolvlm2_500m_mmproj_q8 = ModelInfo(
+    id: 'smolvlm2-500m-mmproj-q8',
+    name: 'SmolVLM2 500M Multimodal Projector (Q8)',
+    sizeBytes: 114294784, // ~109 MB
+    description: 'Quantized multimodal projector — faster on CPU',
+    downloadUrl:
+        'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q8_0',
+    capabilities: ['vision-projector'],
+    family: 'smolvlm',
+  );
+
   // === Whisper Speech-to-Text Models ===
 
   /// Whisper Tiny English - Fast, low memory (~77MB)
@@ -614,7 +628,7 @@ class ModelRegistry {
     sizeBytes: 2320 * 1024 * 1024, // ~2.3 GB
     description: 'Fast 1-4 step 512x512 image generation via Stable Diffusion',
     downloadUrl:
-        'https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo-Q8_0.gguf',
+        'https://huggingface.co/gpustack/stable-diffusion-v2-1-turbo-GGUF/resolve/main/stable-diffusion-v2-1-turbo-Q8_0.gguf',
     format: 'GGUF',
     quantization: 'Q8_0',
     capabilities: ['imageGeneration'],

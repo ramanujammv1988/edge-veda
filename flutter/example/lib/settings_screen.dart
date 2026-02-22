@@ -872,13 +872,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildAboutRow(
                 icon: Icons.auto_awesome,
                 title: 'Veda',
-                value: '1.1.0',
+                value: '2.1.2',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.code,
                 title: 'Veda SDK',
-                value: '1.1.0',
+                value: '2.1.2',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
@@ -887,7 +887,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: Platform.isIOS
                     ? 'Metal GPU'
                     : Platform.isAndroid
-                        ? '${_androidGpuBackend ?? 'CPU'} GPU'
+                        ? (_androidGpuBackend == 'Vulkan' ? 'Vulkan GPU' : 'CPU')
                         : 'CPU',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),

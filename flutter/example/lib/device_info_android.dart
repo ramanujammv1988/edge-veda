@@ -8,7 +8,8 @@ import 'package:flutter/services.dart';
 class DeviceInfoAndroid {
   DeviceInfoAndroid._();
 
-  static const _channel = MethodChannel('com.edgeveda.edge_veda/device_info');
+  // All device info methods are on the telemetry channel (Kotlin plugin unified them)
+  static const _channel = MethodChannel('com.edgeveda.edge_veda/telemetry');
   static const _telemetryChannel = MethodChannel('com.edgeveda.edge_veda/telemetry');
 
   /// Get the device model name (e.g. "Pixel 8 Pro").

@@ -161,8 +161,9 @@ class WhisperWorker {
     ));
 
     try {
-      // Whisper transcription typically takes 1-5 seconds per chunk
-      return await completer.future.timeout(const Duration(seconds: 30));
+      // Whisper transcription takes 1-5s on GPU, but can take 30-60s+ on
+      // CPU-only backends (e.g. when Vulkan 1.2 is not available).
+      return await completer.future.timeout(const Duration(seconds: 120));
     } finally {
       await subscription.cancel();
     }

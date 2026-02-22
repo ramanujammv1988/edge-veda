@@ -281,18 +281,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ///
   /// iOS kills apps that run CPU-intensive tasks in the background.
   /// This implements Pitfall 5 (Critical) from research: background handling.
+  /// On Android, inference can continue in the background safely, so we
+  /// only cancel on iOS to avoid the OS terminating the app.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      // App is being backgrounded - cancel any active generation
-      if (_isGenerating || _isStreaming) {
+      // Only cancel on iOS — Android handles background CPU work fine,
+      // and cancelling causes race conditions with _isStreaming state.
+      if (Platform.isIOS && (_isGenerating || _isStreaming)) {
         _cancelToken?.cancel();
         _isGenerating = false;
         setState(() {
           _isLoading = false;
           _isStreaming = false;
         });
-        // Show user-friendly message about cancellation
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -305,7 +307,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         print('EdgeVeda: Generation cancelled due to app backgrounding');
       }
     } else if (state == AppLifecycleState.resumed) {
-      // App is foregrounded again - no action needed, user can start new generation
       print('EdgeVeda: App resumed');
     }
   }
@@ -865,9 +866,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       stopwatch.stop();
       final latencyMs = stopwatch.elapsedMilliseconds;
 
-      // Get memory stats
-      final memStats = await _edgeVeda.getMemoryStats();
-      _memoryMb = memStats.currentBytes / (1024 * 1024);
+      // Get memory stats (may timeout if worker is busy)
+      try {
+        final memStats = await _edgeVeda.getMemoryStats();
+        _memoryMb = memStats.currentBytes / (1024 * 1024);
+      } catch (_) {
+        // Worker may still be busy; skip memory update
+      }
 
       setState(() {
         _statusMessage = 'Complete (${latencyMs}ms)';
@@ -1027,9 +1032,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         PerformanceTrackers.latency.add(stopwatch.elapsedMilliseconds.toDouble());
       }
 
-      // Get memory stats after streaming
-      final memStats = await _edgeVeda.getMemoryStats();
-      _memoryMb = memStats.currentBytes / (1024 * 1024);
+      // Get memory stats after streaming (may timeout if worker is still busy)
+      try {
+        final memStats = await _edgeVeda.getMemoryStats();
+        _memoryMb = memStats.currentBytes / (1024 * 1024);
+      } catch (_) {
+        // Worker may still be busy; skip memory update
+      }
       print('EdgeVeda: Streaming complete - ${_streamingTokenCount} tokens');
       print('EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s');
     } catch (e) {
@@ -2049,9 +2058,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             IconButton(
               icon: const Icon(Icons.info_outline, color: AppTheme.textSecondary),
               onPressed: () async {
-                final memStats = await _edgeVeda.getMemoryStats();
-                final memoryMb = memStats.currentBytes / (1024 * 1024);
-                final usagePercent = (memStats.usagePercent * 100).toStringAsFixed(1);
+                MemoryStats? memStats;
+                double memoryMb = 0;
+                String usagePercent = '0.0';
+                try {
+                  memStats = await _edgeVeda.getMemoryStats();
+                  memoryMb = memStats.currentBytes / (1024 * 1024);
+                  usagePercent = (memStats.usagePercent * 100).toStringAsFixed(1);
+                } catch (_) {
+                  // Worker busy during inference; show what we have
+                }
 
                 if (!mounted) return;
 
@@ -2085,7 +2101,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           'Usage: $usagePercent%',
                           style: const TextStyle(color: AppTheme.textPrimary),
                         ),
-                        if (memStats.isHighPressure)
+                        if (memStats != null && memStats.isHighPressure)
                           const Text(
                             'High memory pressure',
                             style: TextStyle(color: AppTheme.warning),

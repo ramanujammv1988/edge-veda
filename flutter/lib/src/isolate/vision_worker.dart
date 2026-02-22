@@ -173,8 +173,9 @@ class VisionWorker {
     ));
 
     try {
-      // Vision inference can take 2-5 seconds per frame
-      return await completer.future.timeout(const Duration(seconds: 30));
+      // Vision inference takes 2-5s on GPU but can take 5-10 minutes on
+      // CPU-only backends (e.g. when Vulkan 1.2 is not available on Android).
+      return await completer.future.timeout(const Duration(seconds: 600));
     } finally {
       await subscription.cancel();
     }

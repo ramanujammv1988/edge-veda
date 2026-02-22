@@ -172,7 +172,7 @@ class StreamingWorker {
     ));
 
     try {
-      await completer.future.timeout(const Duration(seconds: 30));
+      await completer.future.timeout(const Duration(seconds: 120));
     } finally {
       await subscription.cancel();
     }
@@ -181,6 +181,9 @@ class StreamingWorker {
   /// Request next token from stream
   ///
   /// Returns TokenResponse with token text, or isFinal=true when done.
+  /// The first token may take longer due to prompt evaluation (especially
+  /// on CPU-only backends where Vulkan 1.2 isn't available), so the timeout
+  /// is generous to accommodate multi-turn conversations with long prompts.
   Future<TokenResponse> nextToken() async {
     _ensureActive();
 
@@ -199,7 +202,7 @@ class StreamingWorker {
     _commandPort!.send(NextTokenCommand());
 
     try {
-      return await completer.future.timeout(const Duration(seconds: 30));
+      return await completer.future.timeout(const Duration(seconds: 600));
     } finally {
       await subscription.cancel();
     }
@@ -228,7 +231,7 @@ class StreamingWorker {
     _commandPort!.send(GetMemoryStatsCommand());
 
     try {
-      return await completer.future.timeout(const Duration(seconds: 5));
+      return await completer.future.timeout(const Duration(seconds: 15));
     } finally {
       await subscription.cancel();
     }

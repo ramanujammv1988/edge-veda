@@ -63,6 +63,29 @@ elseif(ANDROID)
 
     # Vulkan requirement for Android
     if(EDGE_VEDA_ENABLE_VULKAN)
+        # Help CMake find glslc from NDK shader-tools (needed for SPIR-V compilation)
+        if(NOT Vulkan_GLSLC_EXECUTABLE AND DEFINED ANDROID_NDK)
+            find_program(Vulkan_GLSLC_EXECUTABLE
+                NAMES glslc
+                PATHS "${ANDROID_NDK}/shader-tools"
+                PATH_SUFFIXES windows-x86_64 linux-x86_64 darwin-x86_64
+                NO_CMAKE_FIND_ROOT_PATH
+            )
+            if(Vulkan_GLSLC_EXECUTABLE)
+                message(STATUS "Found glslc from NDK: ${Vulkan_GLSLC_EXECUTABLE}")
+            endif()
+        endif()
+
+        # Vulkan-Hpp C++ headers (not included in NDK sysroot, vendored separately)
+        set(VULKAN_HPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan-hpp")
+        if(EXISTS "${VULKAN_HPP_DIR}/vulkan/vulkan.hpp")
+            # Add Vulkan-Hpp to global include path so ggml-vulkan.cpp can find vulkan.hpp
+            include_directories(SYSTEM "${VULKAN_HPP_DIR}")
+            message(STATUS "Found Vulkan-Hpp headers: ${VULKAN_HPP_DIR}")
+        else()
+            message(FATAL_ERROR "Vulkan-Hpp headers not found. Run: git clone --depth 1 --branch v1.3.275 https://github.com/KhronosGroup/Vulkan-Hpp.git core/third_party/vulkan-hpp")
+        endif()
+
         find_package(Vulkan REQUIRED)
     endif()
 elseif(MACOS)

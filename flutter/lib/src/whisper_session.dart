@@ -79,8 +79,17 @@ class WhisperSession {
   final StreamController<WhisperSegment> _segmentController =
       StreamController<WhisperSegment>.broadcast();
 
+  final StreamController<bool> _processingController =
+      StreamController<bool>.broadcast();
+
   /// Whether the session is active and ready for audio input.
   bool get isActive => _isActive;
+
+  /// Whether a chunk is currently being transcribed.
+  bool get isProcessing => _isProcessing;
+
+  /// Stream that emits true when chunk processing starts, false when done.
+  Stream<bool> get onProcessing => _processingController.stream;
 
   /// Stream of transcription segments as they are produced.
   Stream<WhisperSegment> get onSegment => _segmentController.stream;
@@ -216,6 +225,7 @@ class WhisperSession {
     }
 
     _isProcessing = true;
+    _processingController.add(true);
 
     // Take up to chunkSizeSamples from buffer
     final chunkLen = _audioBuffer.length < _chunkSizeSamples
@@ -227,12 +237,17 @@ class WhisperSession {
     _audioBuffer.removeRange(0, chunkLen);
 
     try {
+      print('EdgeVeda STT: Transcribing chunk of $chunkLen samples '
+          '(${(chunkLen / _sampleRate).toStringAsFixed(1)}s audio)...');
       final stopwatch = Stopwatch()..start();
       final response = await _worker!.transcribeChunk(
         chunk,
         language: language,
       );
       stopwatch.stop();
+
+      print('EdgeVeda STT: Chunk transcribed in ${stopwatch.elapsedMilliseconds}ms, '
+          '${response.segments.length} segments');
 
       // Report latency to Scheduler for p95 tracking
       scheduler?.reportLatency(
@@ -242,10 +257,11 @@ class WhisperSession {
         _segments.add(segment);
         _segmentController.add(segment);
       }
-    } catch (_) {
-      // Swallow -- audio capture should continue even if one chunk fails
+    } catch (e) {
+      print('EdgeVeda STT: Chunk transcription failed: $e');
     } finally {
       _isProcessing = false;
+      _processingController.add(false);
 
       // If audio accumulated while we were processing, kick off next chunk.
       if (_isActive && _audioBuffer.length >= _chunkSizeSamples) {
@@ -286,5 +302,6 @@ class WhisperSession {
   Future<void> dispose() async {
     await stop();
     _segmentController.close();
+    _processingController.close();
   }
 }

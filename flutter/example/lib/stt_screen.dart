@@ -35,6 +35,8 @@ class _SttScreenState extends State<SttScreen>
   // Recording state
   bool _isRecording = false;
   bool _isInitializing = false;
+  bool _isProcessingChunk = false;
+  int _chunksProcessed = 0;
   String _transcript = '';
   final List<WhisperSegment> _segments = [];
 
@@ -47,6 +49,7 @@ class _SttScreenState extends State<SttScreen>
   WhisperSession? _session;
   StreamSubscription<Float32List>? _audioSubscription;
   StreamSubscription<WhisperSegment>? _segmentSubscription;
+  StreamSubscription<bool>? _processingSubscription;
   StreamSubscription<DownloadProgress>? _downloadSubscription;
 
   // Pulsing animation for recording indicator
@@ -67,6 +70,7 @@ class _SttScreenState extends State<SttScreen>
     _durationTimer?.cancel();
     _pulseController.dispose();
     _downloadSubscription?.cancel();
+    _processingSubscription?.cancel();
     _stopRecording();
     _session?.dispose();
     super.dispose();
@@ -127,6 +131,45 @@ class _SttScreenState extends State<SttScreen>
     }
   }
 
+  /// Initialize the whisper session once (reused across start/stop cycles).
+  /// This avoids spawning multiple native worker isolates that pile up
+  /// when the user rapidly starts/stops recording.
+  Future<void> _ensureSession() async {
+    if (_session != null && _session!.isActive) return;
+
+    final modelManager = ModelManager();
+    final modelPath =
+        await modelManager.getModelPath(ModelRegistry.whisperTinyEn.id);
+    print('EdgeVeda STT: Model path: $modelPath');
+
+    _session = WhisperSession(modelPath: modelPath);
+    print('EdgeVeda STT: Starting whisper session...');
+    await _session!.start();
+    print('EdgeVeda STT: Session started successfully');
+
+    // Listen for segments (lives for the session lifetime)
+    _segmentSubscription?.cancel();
+    _segmentSubscription = _session!.onSegment.listen((segment) {
+      if (mounted) {
+        setState(() {
+          _segments.add(segment);
+          _transcript = _session!.transcript;
+        });
+      }
+    });
+
+    // Listen for processing state changes
+    _processingSubscription?.cancel();
+    _processingSubscription = _session!.onProcessing.listen((processing) {
+      if (mounted) {
+        setState(() {
+          _isProcessingChunk = processing;
+          if (!processing) _chunksProcessed++;
+        });
+      }
+    });
+  }
+
   Future<void> _startRecording() async {
     // Request microphone permission
     final granted = await WhisperSession.requestMicrophonePermission();
@@ -147,29 +190,10 @@ class _SttScreenState extends State<SttScreen>
     });
 
     try {
-      // Get model path
-      final modelManager = ModelManager();
-      final modelPath =
-          await modelManager.getModelPath(ModelRegistry.whisperTinyEn.id);
+      // Reuse existing session or create one
+      await _ensureSession();
 
-      // Start whisper session
-      _session = WhisperSession(modelPath: modelPath);
-      await _session!.start();
-
-      // Listen for segments
-      _segmentSubscription = _session!.onSegment.listen((segment) {
-        if (mounted) {
-          setState(() {
-            _segments.add(segment);
-            _transcript = _session!.transcript;
-          });
-        }
-      });
-
-      // Start microphone audio capture.
-      // When native onListen returns a FlutterError (e.g., simulator has no
-      // valid audio input), receiveBroadcastStream sends it as the first
-      // error event on the stream. The onError handler shows a SnackBar.
+      // Start microphone audio capture
       _audioSubscription = WhisperSession.microphone().listen(
         (samples) {
           _session?.feedAudio(samples);
@@ -221,23 +245,22 @@ class _SttScreenState extends State<SttScreen>
   }
 
   Future<void> _stopRecording() async {
-    _durationTimer?.cancel();
-    _durationTimer = null;
-
-    _audioSubscription?.cancel();
-    _audioSubscription = null;
-
-    await _session?.flush();
-    await _session?.stop();
-
-    _segmentSubscription?.cancel();
-    _segmentSubscription = null;
-
+    // Update UI immediately so the user sees the recording stopped
     if (mounted) {
       setState(() {
         _isRecording = false;
       });
     }
+
+    _durationTimer?.cancel();
+    _durationTimer = null;
+
+    // Stop microphone only — keep the session alive so in-flight
+    // transcription can finish and we don't pile up native threads.
+    _audioSubscription?.cancel();
+    _audioSubscription = null;
+
+    print('EdgeVeda STT: Stopped mic capture, session stays alive');
   }
 
   void _clearTranscript() {
@@ -364,9 +387,9 @@ class _SttScreenState extends State<SttScreen>
       children: [
         // Transcript area
         Expanded(
-          child: _segments.isEmpty && !_isRecording
+          child: _segments.isEmpty && !_isRecording && !_isProcessingChunk
               ? _buildEmptyTranscript()
-              : _segments.isEmpty && _isRecording
+              : _segments.isEmpty && !_isProcessingChunk && _isRecording
                   ? _buildListeningIndicator()
                   : _buildSegmentList(),
         ),
@@ -396,7 +419,7 @@ class _SttScreenState extends State<SttScreen>
           ),
           const SizedBox(height: 16),
           const Text(
-            'Listening...',
+            'Listening & Processing...',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 16,
@@ -404,10 +427,21 @@ class _SttScreenState extends State<SttScreen>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Transcription will appear shortly',
+            'CPU transcription takes ~60s per 3s of audio.\nKeep recording — results will appear.',
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: AppTheme.textTertiary,
               fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppTheme.accent,
             ),
           ),
         ],
@@ -449,10 +483,51 @@ class _SttScreenState extends State<SttScreen>
 
   /// Scrollable list of transcription segments with timestamps
   Widget _buildSegmentList() {
+    // Add 1 extra item for the processing indicator row
+    final hasProcessingRow = _isProcessingChunk;
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _segments.length,
+      itemCount: _segments.length + (hasProcessingRow ? 1 : 0),
       itemBuilder: (context, index) {
+        // Processing indicator row at the bottom
+        if (index == _segments.length && hasProcessingRow) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppTheme.accent.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Processing 3s chunk... (~60s on CPU)',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         final segment = _segments[index];
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
