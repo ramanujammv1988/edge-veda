@@ -1,0 +1,109 @@
+Analyzing flutter...                                            
+
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor or activeTrackColor instead. This feature was deprecated after v3.31.0-2.0.pre - example\lib\image_screen.dart:809:19 - deprecated_member_use
+   info - Don't invoke 'print' in production code - example\lib\main.dart:307:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:310:7 - avoid_print
+   info - Use 'const' for final variables initialized to a constant value - example\lib\main.dart:321:7 - prefer_const_declarations
+   info - Use 'const' for final variables initialized to a constant value - example\lib\main.dart:506:9 - prefer_const_declarations
+   info - Don't invoke 'print' in production code - example\lib\main.dart:577:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:578:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:579:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:580:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:581:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:582:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:583:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:584:7 - avoid_print
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:584:57 - unnecessary_brace_in_string_interps
+   info - Don't invoke 'print' in production code - example\lib\main.dart:585:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:586:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:587:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:588:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:589:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:590:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:591:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:592:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:593:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:594:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:595:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:597:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:599:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:600:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:601:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:602:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:603:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:604:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:605:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:606:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:607:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:608:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:609:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:774:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:775:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:776:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:777:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:778:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:779:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:780:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:781:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:782:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:783:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:784:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:785:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:786:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:787:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:788:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:789:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:790:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:791:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:792:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:793:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:794:9 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:882:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:889:7 - avoid_print
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:959:42 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:972:41 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:1002:45 - unnecessary_brace_in_string_interps
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1042:7 - avoid_print
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:1042:45 - unnecessary_brace_in_string_interps
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1043:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1051:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1067:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1245:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1274:9 - avoid_print
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:1350:28 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - example\lib\main.dart:1350:35 - unnecessary_brace_in_string_interps
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1439:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1440:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1441:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1442:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1443:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1444:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1445:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1446:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1447:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1448:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1449:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1450:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1451:7 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\main.dart:1452:7 - avoid_print
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - example\lib\main.dart:2075:19 - use_build_context_synchronously
+   info - Use 'const' with the constructor to improve performance - example\lib\performance_screen.dart:240:15 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - example\lib\performance_screen.dart:242:24 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - example\lib\performance_screen.dart:243:29 - prefer_const_literals_to_create_immutables
+warning - The declaration 'hasNeuralEngine' isn't referenced - example\lib\settings_screen.dart:1304:19 - unused_element
+   info - Use 'const' for final variables initialized to a constant value - example\lib\soak_test_screen.dart:262:5 - prefer_const_declarations
+   info - Use 'const' for final variables initialized to a constant value - example\lib\soak_test_screen.dart:263:5 - prefer_const_declarations
+warning - The value of the field '_chunksProcessed' isn't used - example\lib\stt_screen.dart:39:7 - unused_field
+   info - Don't invoke 'print' in production code - example\lib\stt_screen.dart:143:5 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\stt_screen.dart:146:5 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\stt_screen.dart:148:5 - avoid_print
+   info - Don't invoke 'print' in production code - example\lib\stt_screen.dart:263:5 - avoid_print
+   info - Use 'const' with the constructor to improve performance - example\lib\stt_screen.dart:506:22 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - example\lib\stt_screen.dart:507:27 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - example\lib\stt_screen.dart:517:19 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - example\lib\stt_screen.dart:519:28 - prefer_const_constructors
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - example\lib\tool_calling_screen.dart:108:19 - deprecated_member_use
+   info - Use 'const' for final variables initialized to a constant value - example\lib\vision_screen.dart:164:5 - prefer_const_declarations
+   info - The constant name 'smolvlm2_500m_mmproj_q8' isn't a lowerCamelCase identifier - lib\src\model_manager.dart:548:26 - constant_identifier_names
+
+105 issues found. (ran in 23.8s)

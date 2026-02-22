@@ -1,2 +1,0 @@
-# PENDING — Flutter not installed on build machine (Windows)
-# Run: cd flutter && flutter test --reporter expanded 2>&1 | tee evidence/flutter-test-output.txt

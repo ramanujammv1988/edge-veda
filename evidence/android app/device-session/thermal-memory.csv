@@ -1,0 +1,18 @@
+timestamp_min,thermal_state,rss_mb,activity,notes
+0,nominal,120,app_launch,App installed and launched
+5,nominal,180,welcome_screen,Navigated through welcome screen
+10,nominal,850,model_download,Llama 3.2 1B downloading (~770MB)
+20,nominal,900,model_loaded,Text model loaded into memory
+25,warm,950,text_inference,First text generation (TTFT ~60s)
+35,warm,950,text_inference,Multi-turn chat (3+ messages)
+45,warm,1100,stt_model_load,Whisper Tiny EN loaded (~77MB)
+55,warm,1150,stt_inference,Audio transcription (~55-70s per chunk)
+65,warm,1600,vision_model_load,SmolVLM2 500M + mmproj loaded (~526MB)
+75,warm,1700,vision_inference,Camera frame analysis (~281s on CPU)
+85,warm,1700,vision_complete,Frame described successfully
+95,warm,2200,sd_model_download,SD v2.1 Turbo downloading (~2.3GB)
+120,warm,2900,sd_model_loaded,SD model loaded into memory
+130,hot,2600,sd_generation,Image generation started (256x256 1 step CPU)
+151,hot,2600,sd_generation,Still generating (~21 min total 414-440% CPU)
+152,hot,2600,sd_complete,Image generated successfully in 1280.5s (cat with hat)
+155,warm,1200,sd_idle,Generation complete - image displayed
