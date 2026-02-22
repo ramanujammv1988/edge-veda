@@ -22,6 +22,7 @@ FLUTTER_DIR="$PROJECT_ROOT/flutter"
 # Files to check
 PUBSPEC="$FLUTTER_DIR/pubspec.yaml"
 PODSPEC="$FLUTTER_DIR/ios/edge_veda.podspec"
+CORE_PODSPEC="$PROJECT_ROOT/EdgeVedaCore.podspec"
 CHANGELOG="$FLUTTER_DIR/CHANGELOG.md"
 
 # Print colored status
@@ -160,6 +161,23 @@ main() {
         print_status "ok" "podspec: $podspec_version"
     else
         print_status "fail" "podspec: $podspec_version (expected $expected_version)"
+        errors=$((errors + 1))
+    fi
+
+    # EdgeVedaCore.podspec
+    local core_podspec_version
+    if [ -f "$CORE_PODSPEC" ]; then
+        core_podspec_version=$(grep "s.version" "$CORE_PODSPEC" | head -1 | sed "s/.*'\([^']*\)'.*/\1/")
+    else
+        core_podspec_version="NOT_FOUND"
+    fi
+    if [ "$core_podspec_version" = "NOT_FOUND" ]; then
+        print_status "fail" "EdgeVedaCore.podspec: File not found"
+        errors=$((errors + 1))
+    elif [ "$core_podspec_version" = "$expected_version" ]; then
+        print_status "ok" "EdgeVedaCore.podspec: $core_podspec_version"
+    else
+        print_status "fail" "EdgeVedaCore.podspec: $core_podspec_version (expected $expected_version)"
         errors=$((errors + 1))
     fi
 
@@ -340,30 +358,11 @@ main() {
     if [ $errors -eq 0 ]; then
         echo -e "${GREEN}Ready to release v$expected_version${NC}"
         echo ""
-        echo "Release workflow:"
-        echo ""
-        echo "  Step 1: Build XCFramework (if not already built)"
-        echo "    ./scripts/build-ios.sh --clean --release"
-        echo ""
-        echo "  Step 2: Package XCFramework for GitHub Releases"
-        echo "    cd flutter/ios/Frameworks"
-        echo "    zip -r ../../../build/EdgeVedaCore.xcframework.zip EdgeVedaCore.xcframework"
-        echo ""
-        echo "  Step 3: Create git tag and push"
-        echo "    git tag v$expected_version"
-        echo "    git push origin v$expected_version"
-        echo ""
-        echo "  Step 4: Create GitHub Release with XCFramework attached"
-        echo "    gh release create v$expected_version \\"
-        echo "      build/EdgeVedaCore.xcframework.zip \\"
-        echo "      --title \"v$expected_version\" \\"
-        echo "      --notes \"See CHANGELOG.md for details\""
-        echo ""
-        echo "  Step 5: Publish to pub.dev"
-        echo "    cd flutter && dart pub publish"
-        echo ""
-        echo "  The podspec prepare_command will auto-download the XCFramework"
-        echo "  from the GitHub Release when users run 'pod install'."
+        echo "Release steps:"
+        echo "  1. Build XCFramework:  ./scripts/build-ios.sh --clean --release"
+        echo "  2. Tag and push:       git tag v$expected_version && git push origin v$expected_version"
+        echo "  3. Publish pod:        ./scripts/publish-pod.sh $expected_version"
+        echo "  4. Publish to pub.dev: cd flutter && dart pub publish"
         exit 0
     else
         echo -e "${RED}Release blocked: $errors error(s), $warnings warning(s)${NC}"
