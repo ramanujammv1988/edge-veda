@@ -78,8 +78,9 @@ class _ImageScreenState extends State<ImageScreen> {
   int _steps = 4;
   double _cfgScale = 1.0;
   int _seed = -1;
-  int _width = 512;
-  int _height = 512;
+  // Default 256x256 on Android (CPU-only) for faster generation
+  int _width = 256;
+  int _height = 256;
   ImageSampler _sampler = ImageSampler.eulerA;
 
   // Subscriptions

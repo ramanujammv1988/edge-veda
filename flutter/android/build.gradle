@@ -59,11 +59,13 @@ android {
             cmake {
                 cppFlags "-std=c++17 -frtti -fexceptions"
                 arguments "-DANDROID_STL=c++_shared",
-                          "-DANDROID_PLATFORM=android-24",
+                          "-DANDROID_PLATFORM=android-30",
                           "-DEDGE_VEDA_ENABLE_VULKAN=ON",
                           "-DEDGE_VEDA_ENABLE_CPU=ON",
+                          "-DGGML_VULKAN=ON",
                           "-DGGML_OPENMP=OFF",
-                          "-DGGML_LLAMAFILE=OFF"
+                          "-DGGML_LLAMAFILE=OFF",
+                          "-DGGML_VULKAN_SHADERS_GEN_TOOLCHAIN=${project.projectDir}/../../core/cmake/host-msvc-toolchain.cmake"
             }
         }
     }

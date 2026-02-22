@@ -216,9 +216,11 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
             "getGpuBackend" -> {
                 val ctx = applicationContext
                 if (ctx != null) {
-                    val hasVulkan = ctx.packageManager
-                        .hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_LEVEL)
-                    result.success(if (hasVulkan) "Vulkan" else "CPU")
+                    // ggml-vulkan requires Vulkan 1.2+; check actual API version
+                    val vulkan12 = (1 shl 22) or (2 shl 12) // VK_MAKE_API_VERSION(0,1,2,0)
+                    val hasVulkan12 = ctx.packageManager
+                        .hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, vulkan12)
+                    result.success(if (hasVulkan12) "Vulkan" else "CPU")
                 } else {
                     result.success("CPU")
                 }
@@ -843,10 +845,8 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
         @Volatile private var isRecording = false
         private var captureThread: Thread? = null
 
-        companion object {
-            const val SAMPLE_RATE = 16000
-            const val CHUNK_SAMPLES = 4800  // ~300ms at 16kHz
-        }
+        private val SAMPLE_RATE = 16000
+        private val CHUNK_SAMPLES = 4800  // ~300ms at 16kHz
 
         override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
             eventSink = events
