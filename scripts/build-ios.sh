@@ -502,10 +502,32 @@ if [ -d "$OUTPUT_DIR/EdgeVedaCore.xcframework" ]; then
         exit 1
     fi
 
+    # Create zip for GitHub Releases distribution
+    echo ""
+    echo "=== Creating release zip ==="
+    RELEASE_ZIP="$BUILD_DIR/EdgeVedaCore.xcframework.zip"
+    rm -f "$RELEASE_ZIP"
+
+    # Create zip from the Frameworks directory to preserve the expected structure
+    (cd "$OUTPUT_DIR" && zip -r -q "$RELEASE_ZIP" EdgeVedaCore.xcframework)
+
+    if [ -f "$RELEASE_ZIP" ]; then
+        ZIP_SIZE=$(du -h "$RELEASE_ZIP" | cut -f1)
+        echo "Release zip created: $RELEASE_ZIP ($ZIP_SIZE)"
+    else
+        echo "WARNING: Failed to create release zip"
+    fi
+
     echo ""
     echo "=== SUCCESS ==="
     echo "XCFramework ready for Flutter integration at:"
     echo "  $OUTPUT_DIR/EdgeVedaCore.xcframework"
+    echo ""
+    echo "Release zip (for GitHub Releases upload):"
+    echo "  $RELEASE_ZIP"
+    echo ""
+    echo "To upload to GitHub Releases:"
+    echo "  gh release create v<VERSION> $RELEASE_ZIP --title \"v<VERSION>\""
 else
     echo "ERROR: XCFramework creation failed"
     exit 1
