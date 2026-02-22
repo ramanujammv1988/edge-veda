@@ -5,6 +5,16 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-02-22
+
+### Fixed
+- **TTS hang prevention:** `TtsService.speak()` now includes a 30-second safety timeout — if iOS never fires the finish/cancel delegate (phone call, Bluetooth disconnect, memory pressure), the voice pipeline recovers instead of freezing forever
+- **TTS resource cleanup:** Subscription and timer properly cleaned up via `try/finally` on all exit paths, preventing leaks on unexpected exceptions
+- **Voice pipeline dispose crash:** All event emissions now guarded against closed `StreamController`, preventing `StateError` crash when `dispose()` races with async turn processing
+- **Mic re-enable after stop():** `_micListening` flag now correctly stays `false` if `stop()` or `pause()` is called during the post-TTS cooldown delay
+- **sendNow() error state:** Push-to-talk error handler no longer incorrectly recovers from `error` state back to `listening`
+- **Cooldown skip on early returns:** Empty transcript, QoS paused, and LLM error paths no longer wait 800ms before resuming the microphone
+
 ## [2.3.0] - 2026-02-20
 
 ### Added
