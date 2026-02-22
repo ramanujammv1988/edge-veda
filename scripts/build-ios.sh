@@ -331,8 +331,8 @@ echo "Linking device dynamic framework..."
 clang -dynamiclib -arch arm64 \
     -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
     -miphoneos-version-min=13.0 \
-    -framework Metal -framework MetalPerformanceShaders -framework Accelerate \
-    -lc++ \
+    -framework Foundation -framework Metal -framework MetalPerformanceShaders -framework Accelerate \
+    -lobjc -lc++ \
     -Wl,-force_load,"$MERGED_DIR/device/libedge_veda_full.a" \
     -install_name @rpath/EdgeVedaCore.framework/EdgeVedaCore \
     -o "$DEVICE_FW_DIR/EdgeVedaCore"
@@ -371,8 +371,8 @@ echo "Linking simulator dynamic framework..."
 clang -dynamiclib -arch arm64 \
     -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) \
     -mios-simulator-version-min=13.0 \
-    -framework Accelerate \
-    -lc++ \
+    -framework Foundation -framework Metal -framework MetalPerformanceShaders -framework Accelerate \
+    -lobjc -lc++ \
     -Wl,-force_load,"$MERGED_DIR/simulator/libedge_veda_full.a" \
     -install_name @rpath/EdgeVedaCore.framework/EdgeVedaCore \
     -o "$SIM_FW_DIR/EdgeVedaCore"
@@ -446,10 +446,19 @@ if [ -d "$OUTPUT_DIR/EdgeVedaCore.xcframework" ]; then
         echo ""
         echo "--- $bin ---"
 
-        LLAMA_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "llama_init\|llama_load_model\|llama_decode\|llama_free" || echo "0")
-        echo "  llama.cpp symbols: $LLAMA_SYMBOLS"
-        if [ "$LLAMA_SYMBOLS" -lt 10 ]; then
-            echo "  ERROR: Insufficient llama.cpp symbols (found $LLAMA_SYMBOLS, need >= 10)"
+        # Check our C API symbols (ev_*) — these are what Dart FFI binds to
+        EV_CORE_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c " T _ev_" || echo "0")
+        echo "  ev_* core symbols: $EV_CORE_SYMBOLS"
+        if [ "$EV_CORE_SYMBOLS" -lt 20 ]; then
+            echo "  ERROR: Insufficient ev_* symbols (found $EV_CORE_SYMBOLS, need >= 20)"
+            VERIFICATION_FAILED=true
+        fi
+
+        # Check llama.cpp symbols (C++ mangled in dynamic lib)
+        LLAMA_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "llama_" || echo "0")
+        echo "  llama.cpp symbols (all): $LLAMA_SYMBOLS"
+        if [ "$LLAMA_SYMBOLS" -lt 100 ]; then
+            echo "  ERROR: Insufficient llama.cpp symbols (found $LLAMA_SYMBOLS, need >= 100)"
             VERIFICATION_FAILED=true
         fi
 

@@ -504,6 +504,8 @@ Phase 9 Plan 3 decisions:
 - ev_vision_get_last_timings now exported in podspec and eagerly bound (supersedes lazy workaround from 09-03)
 
 (Prior decisions preserved in phase SUMMARY.md files)
+- [Phase quick-10]: Dynamic framework links Metal/MPS/Accelerate/libc++ internally; podspec uses vendored_frameworks (52 lines vs 205)
+- [Phase quick-10]: ffi constraint widened to ^2.0.0: DynamicLibrary.open() avoids the objective_c simulator crash from DynamicLibrary.process()
 
 ### Pending Todos
 
@@ -529,6 +531,7 @@ v1.1:
 | 8 | ImageWorker Scheduler integration (QoS gating, latency tracking, memory eviction) | 2026-02-20 | 05518a8, 6a97bea | [7-image-generation-scheduler-integration-a](./quick/7-image-generation-scheduler-integration-a/) |
 | 9 | Add TTS via iOS AVSpeechSynthesizer + demo screen | 2026-02-20 | a29d60b, adea67e | [8-add-tts-via-ios-avspeechsynthesizer-plat](./quick/8-add-tts-via-ios-avspeechsynthesizer-plat/) |
 | 10 | Refactor VoicePipeline to stop-mic pattern (no calibration, no barge-in, sendNow, audio-reactive orb) | 2026-02-20 | 6713076, 7a47571 | [9-refactor-voicepipeline-adopt-stop-mic-pa](./quick/9-refactor-voicepipeline-adopt-stop-mic-pa/) |
+| 11 | Dynamic XCFramework + vendored_frameworks + ffi ^2.0.0 (eliminate use_modular_headers! requirement) | 2026-02-22 | 8793398, e4f030c, 4c6fc68 | [10-dynamic-xcframework-ffi-constraint-fix](./quick/10-dynamic-xcframework-ffi-constraint-fix/) |
 
 ### Blockers/Concerns
 
@@ -540,12 +543,12 @@ v1.1:
 - Xcode Command Line Tools only (users build XCFramework locally)
 - Android NDK not yet verified in dev environment
 - llama.cpp now at b7952 (upgraded from b4658)
-- ffi constrained to <2.1.0 (objective_c native assets crash on simulator)
+- ffi widened to ^2.0.0 (DynamicLibrary.open avoids objective_c process() crash)
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Completed quick-9 — Refactor VoicePipeline to stop-mic pattern
+Last session: 2026-02-22
+Stopped at: Completed quick-10 — Dynamic XCFramework + FFI Constraint Fix
 Resume file: .planning/phases/24-voice-pipeline-unified-stt-to-llm-to-tts-orchestration-with-real-time-voice-conversations/24-03-PLAN.md
 
 ---
