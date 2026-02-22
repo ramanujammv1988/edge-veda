@@ -8,7 +8,7 @@ Pod::Spec.new do |s|
     consumed by the edge_veda Flutter plugin — not intended for direct use.
   DESC
   s.homepage         = 'https://github.com/ramanujammv1988/edge-veda'
-  s.license          = { :type => 'Apache-2.0', :file => 'LICENSE' }
+  s.license          = { :type => 'Apache-2.0' }
   s.author           = { 'Edge Veda' => 'contact@edgeveda.com' }
 
   # The XCFramework is hosted as a GitHub Release asset.

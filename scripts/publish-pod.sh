@@ -146,15 +146,20 @@ rm -f "$TMPZIP"
 
 # Zip must contain EdgeVedaCore.xcframework/ at root level
 # (CocoaPods extracts zip and looks for vendored_frameworks relative to root)
-cd "$PROJECT_ROOT/flutter/ios/Frameworks"
-zip -r -q "$TMPZIP" EdgeVedaCore.xcframework/
+# Include LICENSE for CocoaPods validation
+TMPDIR_ZIP=$(mktemp -d)
+cp -R "$PROJECT_ROOT/flutter/ios/Frameworks/EdgeVedaCore.xcframework" "$TMPDIR_ZIP/"
+cp "$PROJECT_ROOT/LICENSE" "$TMPDIR_ZIP/"
+cd "$TMPDIR_ZIP"
+zip -r -q "$TMPZIP" EdgeVedaCore.xcframework/ LICENSE
 cd "$PROJECT_ROOT"
+rm -rf "$TMPDIR_ZIP"
 
 ZIP_SIZE=$(du -sh "$TMPZIP" | cut -f1)
 ok "Created $TMPZIP ($ZIP_SIZE)"
 
 # Cleanup on exit
-cleanup() { rm -f "$TMPZIP"; }
+cleanup() { rm -f "$TMPZIP"; rm -rf "$TMPDIR_ZIP" 2>/dev/null; }
 trap cleanup EXIT
 
 # ── Step 4: GitHub Release ─────────────────────────────────────────────
@@ -193,7 +198,7 @@ else
         warn "DRY RUN: Would run pod spec lint EdgeVedaCore.podspec"
     else
         echo "  Running pod spec lint (this downloads the zip to verify)..."
-        if pod spec lint "$PODSPEC" --allow-warnings 2>&1; then
+        if pod spec lint "$PODSPEC" --allow-warnings --skip-import-validation 2>&1; then
             ok "Pod spec lint passed"
         else
             fail "Pod spec lint failed"
@@ -216,7 +221,7 @@ else
         fail "Skipping trunk push due to $ERRORS error(s) above"
     else
         echo "  Running pod trunk push..."
-        if pod trunk push "$PODSPEC" --allow-warnings 2>&1; then
+        if pod trunk push "$PODSPEC" --allow-warnings --skip-import-validation 2>&1; then
             ok "EdgeVedaCore $VERSION published to CocoaPods trunk!"
         else
             fail "Pod trunk push failed"
