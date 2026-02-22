@@ -2,7 +2,7 @@ name: edge_veda
 description: >-
   On-device AI runtime for Flutter. Text, vision, speech-to-text, text-to-speech,
   image generation, embeddings, RAG, and function calling. Metal GPU. Zero cloud.
-version: 2.3.0
+version: 2.4.0
 homepage: https://github.com/ramanujammv1988/edge-veda
 repository: https://github.com/ramanujammv1988/edge-veda
 issue_tracker: https://github.com/ramanujammv1988/edge-veda/issues
@@ -23,7 +23,7 @@ dependencies:
   flutter:
     sdk: flutter
   crypto: ^3.0.3
-  ffi: ">=2.0.0 <2.1.0"
+  ffi: "^2.0.0"
   http: ^1.2.0
   image: ^4.0.0
   json_schema: ^5.0.0
