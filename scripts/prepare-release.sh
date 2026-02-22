@@ -281,16 +281,89 @@ main() {
     echo "================================================"
     echo ""
 
+    # Check XCFramework exists
+    echo "Checking XCFramework..."
+    echo ""
+
+    local xcfw_dir="$FLUTTER_DIR/ios/Frameworks/EdgeVedaCore.xcframework"
+    local xcfw_zip="$PROJECT_ROOT/build/EdgeVedaCore.xcframework.zip"
+
+    if [ -d "$xcfw_dir" ]; then
+        # Count binary slices
+        local slice_count
+        slice_count=$(find "$xcfw_dir" -name "EdgeVedaCore" -not -name "*.xcframework" -not -name "*.plist" | wc -l | tr -d ' ')
+        print_status "ok" "XCFramework present ($slice_count slices)"
+
+        # Check if zip already created
+        if [ -f "$xcfw_zip" ]; then
+            local zip_size
+            zip_size=$(du -h "$xcfw_zip" | cut -f1)
+            print_status "ok" "XCFramework zip ready ($zip_size): $xcfw_zip"
+        else
+            print_status "warn" "XCFramework zip not yet created (will be created during release)"
+            warnings=$((warnings + 1))
+        fi
+    else
+        print_status "warn" "XCFramework not found — build before releasing"
+        echo "  Build: ./scripts/build-ios.sh --clean --release"
+        warnings=$((warnings + 1))
+    fi
+
+    echo ""
+
+    # Check gh CLI for release upload
+    echo "Checking release tools..."
+    echo ""
+
+    if command -v gh &> /dev/null; then
+        print_status "ok" "GitHub CLI (gh) available"
+        # Check auth
+        if gh auth status &>/dev/null; then
+            print_status "ok" "GitHub CLI authenticated"
+        else
+            print_status "warn" "GitHub CLI not authenticated — run: gh auth login"
+            warnings=$((warnings + 1))
+        fi
+    else
+        print_status "warn" "GitHub CLI (gh) not installed — needed for release upload"
+        echo "  Install: brew install gh"
+        warnings=$((warnings + 1))
+    fi
+
+    echo ""
+    echo "================================================"
+    echo "Summary"
+    echo "================================================"
+    echo ""
+
     # Final summary
     if [ $errors -eq 0 ]; then
         echo -e "${GREEN}Ready to release v$expected_version${NC}"
         echo ""
-        echo "Next steps:"
-        echo "  1. Create git tag: git tag v$expected_version"
-        echo "  2. Push tag: git push origin v$expected_version"
-        echo "  3. Build XCFramework: ./scripts/build-ios.sh --clean --release"
-        echo "  4. Upload XCFramework to GitHub Releases"
-        echo "  5. Publish to pub.dev: cd flutter && dart pub publish"
+        echo "Release workflow:"
+        echo ""
+        echo "  Step 1: Build XCFramework (if not already built)"
+        echo "    ./scripts/build-ios.sh --clean --release"
+        echo ""
+        echo "  Step 2: Package XCFramework for GitHub Releases"
+        echo "    cd flutter/ios/Frameworks"
+        echo "    zip -r ../../../build/EdgeVedaCore.xcframework.zip EdgeVedaCore.xcframework"
+        echo ""
+        echo "  Step 3: Create git tag and push"
+        echo "    git tag v$expected_version"
+        echo "    git push origin v$expected_version"
+        echo ""
+        echo "  Step 4: Create GitHub Release with XCFramework attached"
+        echo "    gh release create v$expected_version \\"
+        echo "      build/EdgeVedaCore.xcframework.zip \\"
+        echo "      --title \"v$expected_version\" \\"
+        echo "      --notes \"See CHANGELOG.md for details\""
+        echo ""
+        echo "  Step 5: Publish to pub.dev"
+        echo "    cd flutter && dart pub publish"
+        echo ""
+        echo "  The podspec prepare_command will auto-download the XCFramework"
+        echo "  from the GitHub Release when users run 'pod install'."
         exit 0
     else
         echo -e "${RED}Release blocked: $errors error(s), $warnings warning(s)${NC}"
