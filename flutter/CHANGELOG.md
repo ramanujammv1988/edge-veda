@@ -5,6 +5,18 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-02-22
+
+### Added
+- **Seamless XCFramework distribution:** Native C engines (llama.cpp, whisper.cpp, stable-diffusion.cpp) now auto-fetched via CocoaPods trunk — zero manual steps for consumers. Just `flutter pub add edge_veda` and `flutter build ios`.
+- **EdgeVedaCore pod:** Separate CocoaPods pod for binary XCFramework distribution via GitHub Releases
+- **publish-pod.sh:** Release automation script for CocoaPods trunk publishing
+- **119 unit tests:** TextCleaner, JsonRecovery, SchemaValidator, RuntimePolicy, Budget, LatencyTracker, MemoryEstimator
+
+### Changed
+- XCFramework delivery: from manual `curl` download to automatic CocoaPods dependency resolution
+- `edge_veda.podspec` now declares `s.dependency 'EdgeVedaCore', '~> 2.3'` instead of bundling the binary
+
 ## [2.3.1] - 2026-02-22
 
 ### Fixed

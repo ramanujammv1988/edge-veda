@@ -42,7 +42,7 @@ A **supervised on-device AI runtime** that:
 
 ```yaml
 dependencies:
-  edge_veda: ^2.3.1
+  edge_veda: ^2.4.1
 ```
 
 ### iOS Setup
