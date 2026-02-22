@@ -42,6 +42,7 @@ import 'package:flutter/services.dart';
 import 'budget.dart';
 import 'chat_session.dart';
 import 'scheduler.dart';
+import 'text_cleaner.dart';
 import 'tts_service.dart';
 import 'types.dart' show CancelToken, GenerateOptions;
 import 'whisper_session.dart';
@@ -767,35 +768,11 @@ class VoicePipeline {
   // Text cleaning
   // =========================================================================
 
-  /// Pattern matching Llama 3, ChatML, and Gemma special tokens that
-  /// may leak into generated text. These tokens are meaningful to
-  /// llama.cpp's tokenizer but should never appear in user-facing text.
-  static final _specialTokenPattern = RegExp(
-    // Match full Llama 3 header blocks: <|start_header_id|>role<|end_header_id|>
-    // This catches leaked next-turn headers like "assistant", "user", "system"
-    // that would otherwise be left as orphaned text after stripping tags.
-    r'<\|start_header_id\|>[^<]*<\|end_header_id\|>'
-    // Individual special tokens (Llama 3, ChatML, Gemma)
-    r'|<\|(?:begin_of_text|end_of_text|start_header_id|end_header_id|eot_id|'
-    r'im_start|im_end|finetune_right_pad|reserved_special_token_\d+)\|>'
-    // ChatML role headers: <|im_start|>role\n or <|im_end|>
-    r'|<\|im_start\|>\w*\n?'
-    // Gemma turn markers
-    r'|<(?:start_of_turn|end_of_turn)>\s*\w*\n?',
-    caseSensitive: false,
-  );
-
   /// Strip special tokens and template artifacts from LLM response text.
   ///
-  /// Llama 3.x, ChatML, and Gemma models may emit special tokens as
-  /// literal text (e.g., `<|eot_id|>`, `<|im_end|>`). These must be
-  /// removed before displaying or speaking the response. Also strips
-  /// complete header blocks like `<|start_header_id|>assistant<|end_header_id|>`
-  /// that would otherwise leave the role name ("assistant") as orphaned text.
-  static String cleanResponseText(String text) {
-    return text
-        .replaceAll(_specialTokenPattern, '')
-        .replaceAll(RegExp(r'\n{3,}'), '\n\n') // Collapse excessive newlines
-        .trim();
-  }
+  /// Delegates to [TextCleaner.cleanResponseText] for the actual work.
+  /// Kept here for backward compatibility with callers using
+  /// `VoicePipeline.cleanResponseText(text)`.
+  static String cleanResponseText(String text) =>
+      TextCleaner.cleanResponseText(text);
 }
