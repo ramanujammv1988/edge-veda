@@ -5,7 +5,8 @@ set -e
 # Usage: ./scripts/build-ios.sh [--clean] [--release]
 #
 # This script builds static libraries for iOS device (arm64) and simulator (arm64),
-# then packages them into an XCFramework for Flutter plugin integration.
+# links them into dynamic frameworks, then packages them into an XCFramework for
+# Flutter plugin integration via vendored_frameworks.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -298,38 +299,120 @@ else
     echo "WARNING: bitcode_strip not found, xcframework creation may fail"
 fi
 
-# Verify library sizes are under 15MB
+# Verify library sizes are under 40MB
 echo ""
-echo "=== Verifying binary sizes ==="
+echo "=== Verifying static library sizes ==="
 DEVICE_SIZE_KB=$(du -k "$MERGED_DIR/device/libedge_veda_full.a" | cut -f1)
 SIM_SIZE_KB=$(du -k "$MERGED_DIR/simulator/libedge_veda_full.a" | cut -f1)
 MAX_SIZE_KB=40960  # 40MB (llama.cpp + whisper.cpp + stable-diffusion.cpp)
 
 if [ "$DEVICE_SIZE_KB" -gt "$MAX_SIZE_KB" ]; then
-    echo "WARNING: Device library (${DEVICE_SIZE_KB}KB) exceeds 15MB limit"
+    echo "WARNING: Device library (${DEVICE_SIZE_KB}KB) exceeds 40MB limit"
     echo "Consider enabling LTO or stripping symbols: strip -S libedge_veda_full.a"
 fi
 
 if [ "$SIM_SIZE_KB" -gt "$MAX_SIZE_KB" ]; then
-    echo "WARNING: Simulator library (${SIM_SIZE_KB}KB) exceeds 15MB limit"
+    echo "WARNING: Simulator library (${SIM_SIZE_KB}KB) exceeds 40MB limit"
 fi
 
 echo "Device: ${DEVICE_SIZE_KB}KB (limit: ${MAX_SIZE_KB}KB)"
 echo "Simulator: ${SIM_SIZE_KB}KB (limit: ${MAX_SIZE_KB}KB)"
 
-# Create XCFramework
+# Create dynamic frameworks from merged static libraries
+echo ""
+echo "=== Creating dynamic frameworks ==="
+
+# DEVICE dynamic framework
+DEVICE_FW_DIR="$MERGED_DIR/device/EdgeVedaCore.framework"
+mkdir -p "$DEVICE_FW_DIR/Headers"
+cp "$CORE_DIR/include/edge_veda.h" "$DEVICE_FW_DIR/Headers/"
+
+echo "Linking device dynamic framework..."
+clang -dynamiclib -arch arm64 \
+    -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+    -miphoneos-version-min=13.0 \
+    -framework Metal -framework MetalPerformanceShaders -framework Accelerate \
+    -lc++ \
+    -Wl,-force_load,"$MERGED_DIR/device/libedge_veda_full.a" \
+    -install_name @rpath/EdgeVedaCore.framework/EdgeVedaCore \
+    -o "$DEVICE_FW_DIR/EdgeVedaCore"
+
+cat > "$DEVICE_FW_DIR/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.edgeveda.core</string>
+  <key>CFBundleName</key>
+  <string>EdgeVedaCore</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundlePackageType</key>
+  <string>FMWK</string>
+  <key>CFBundleExecutable</key>
+  <string>EdgeVedaCore</string>
+  <key>MinimumOSVersion</key>
+  <string>13.0</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array><string>iPhoneOS</string></array>
+</dict>
+</plist>
+PLIST
+
+echo "Device framework: $(du -h "$DEVICE_FW_DIR/EdgeVedaCore" | cut -f1)"
+
+# SIMULATOR dynamic framework
+SIM_FW_DIR="$MERGED_DIR/simulator/EdgeVedaCore.framework"
+mkdir -p "$SIM_FW_DIR/Headers"
+cp "$CORE_DIR/include/edge_veda.h" "$SIM_FW_DIR/Headers/"
+
+echo "Linking simulator dynamic framework..."
+clang -dynamiclib -arch arm64 \
+    -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) \
+    -mios-simulator-version-min=13.0 \
+    -framework Accelerate \
+    -lc++ \
+    -Wl,-force_load,"$MERGED_DIR/simulator/libedge_veda_full.a" \
+    -install_name @rpath/EdgeVedaCore.framework/EdgeVedaCore \
+    -o "$SIM_FW_DIR/EdgeVedaCore"
+
+cat > "$SIM_FW_DIR/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.edgeveda.core</string>
+  <key>CFBundleName</key>
+  <string>EdgeVedaCore</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundlePackageType</key>
+  <string>FMWK</string>
+  <key>CFBundleExecutable</key>
+  <string>EdgeVedaCore</string>
+  <key>MinimumOSVersion</key>
+  <string>13.0</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array><string>iPhoneSimulator</string></array>
+</dict>
+</plist>
+PLIST
+
+echo "Simulator framework: $(du -h "$SIM_FW_DIR/EdgeVedaCore" | cut -f1)"
+
+# Create XCFramework from dynamic frameworks
 echo ""
 echo "=== Creating XCFramework ==="
 
 # Remove existing XCFramework
 rm -rf "$OUTPUT_DIR/EdgeVedaCore.xcframework"
 
-# Create XCFramework with static libraries
+# Create XCFramework with dynamic frameworks
 xcodebuild -create-xcframework \
-    -library "$MERGED_DIR/device/libedge_veda_full.a" \
-    -headers "$CORE_DIR/include" \
-    -library "$MERGED_DIR/simulator/libedge_veda_full.a" \
-    -headers "$CORE_DIR/include" \
+    -framework "$MERGED_DIR/device/EdgeVedaCore.framework" \
+    -framework "$MERGED_DIR/simulator/EdgeVedaCore.framework" \
     -output "$OUTPUT_DIR/EdgeVedaCore.xcframework"
 
 # Verify XCFramework
@@ -344,67 +427,69 @@ if [ -d "$OUTPUT_DIR/EdgeVedaCore.xcframework" ]; then
 
     # Check binary sizes
     echo "Binary sizes:"
-    find "$OUTPUT_DIR/EdgeVedaCore.xcframework" -name "*.a" -exec du -h {} \;
+    find "$OUTPUT_DIR/EdgeVedaCore.xcframework" -name "EdgeVedaCore" -not -name "*.xcframework" -not -name "*.plist" -exec du -h {} \;
 
     # Verify architectures
     echo ""
     echo "Architecture verification:"
-    for lib in $(find "$OUTPUT_DIR/EdgeVedaCore.xcframework" -name "*.a"); do
-        echo "  $lib:"
-        lipo -info "$lib" 2>/dev/null || echo "    (single architecture)"
+    for bin in $(find "$OUTPUT_DIR/EdgeVedaCore.xcframework" -name "EdgeVedaCore" -not -name "*.xcframework" -not -name "*.plist"); do
+        echo "  $bin:"
+        lipo -info "$bin" 2>/dev/null || echo "    (single architecture)"
+        file "$bin"
     done
 
-    # Verify llama.cpp symbols are present (CRITICAL)
+    # Verify symbols are present (CRITICAL)
     echo ""
     echo "=== Symbol verification ==="
     VERIFICATION_FAILED=false
-    for lib in $(find "$OUTPUT_DIR/EdgeVedaCore.xcframework" -name "*.a"); do
-        LLAMA_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "llama_init\|llama_load_model\|llama_decode\|llama_free" || echo "0")
-        echo "$lib: $LLAMA_SYMBOLS llama.cpp symbols found"
+    for bin in $(find "$OUTPUT_DIR/EdgeVedaCore.xcframework" -name "EdgeVedaCore" -not -name "*.xcframework" -not -name "*.plist"); do
+        echo ""
+        echo "--- $bin ---"
+
+        LLAMA_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "llama_init\|llama_load_model\|llama_decode\|llama_free" || echo "0")
+        echo "  llama.cpp symbols: $LLAMA_SYMBOLS"
         if [ "$LLAMA_SYMBOLS" -lt 10 ]; then
-            echo "ERROR: Insufficient llama.cpp symbols in $lib (found $LLAMA_SYMBOLS, need >= 10)"
-            echo "This indicates llama.cpp was not properly linked into the binary."
+            echo "  ERROR: Insufficient llama.cpp symbols (found $LLAMA_SYMBOLS, need >= 10)"
             VERIFICATION_FAILED=true
         fi
 
         # Verify vision symbols (ev_vision_* from vision_engine.cpp + libmtmd)
-        VISION_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "ev_vision_" || echo "0")
-        echo "$lib: $VISION_SYMBOLS ev_vision_* symbols found"
+        VISION_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "ev_vision_" || echo "0")
+        echo "  ev_vision_* symbols: $VISION_SYMBOLS"
         if [ "$VISION_SYMBOLS" -lt 5 ]; then
-            echo "WARNING: Expected at least 5 ev_vision_* symbols in $lib (found $VISION_SYMBOLS)"
+            echo "  WARNING: Expected at least 5 ev_vision_* symbols (found $VISION_SYMBOLS)"
         fi
 
-        MTMD_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "mtmd_" || echo "0")
-        echo "$lib: $MTMD_SYMBOLS mtmd_* symbols found"
+        MTMD_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "mtmd_" || echo "0")
+        echo "  mtmd_* symbols: $MTMD_SYMBOLS"
 
         # Verify whisper symbols (whisper_* from libwhisper)
-        WHISPER_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "whisper_" || echo "0")
-        echo "$lib: $WHISPER_SYMBOLS whisper_* symbols found"
+        WHISPER_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "whisper_" || echo "0")
+        echo "  whisper_* symbols: $WHISPER_SYMBOLS"
         if [ "$WHISPER_SYMBOLS" -lt 5 ]; then
-            echo "WARNING: Expected at least 5 whisper_* symbols in $lib (found $WHISPER_SYMBOLS)"
+            echo "  WARNING: Expected at least 5 whisper_* symbols (found $WHISPER_SYMBOLS)"
         fi
 
         # Verify image generation symbols (ev_image_* from image_engine.cpp + libstable-diffusion)
-        IMAGE_SYMBOLS=$(nm "$lib" 2>/dev/null | grep -c "ev_image_" || echo "0")
-        echo "$lib: $IMAGE_SYMBOLS ev_image_* symbols found"
+        IMAGE_SYMBOLS=$(nm "$bin" 2>/dev/null | grep -c "ev_image_" || echo "0")
+        echo "  ev_image_* symbols: $IMAGE_SYMBOLS"
         if [ "$IMAGE_SYMBOLS" -lt 5 ]; then
-            echo "WARNING: Expected at least 5 ev_image_* symbols in $lib (found $IMAGE_SYMBOLS)"
+            echo "  WARNING: Expected at least 5 ev_image_* symbols (found $IMAGE_SYMBOLS)"
         fi
 
         # Verify NO duplicate ggml symbols (critical: shared ggml, not duplicated)
-        GGML_DUP_CHECK=$(nm "$lib" 2>/dev/null | grep " T " | grep "ggml_" | sort | uniq -d | wc -l | tr -d ' ')
+        GGML_DUP_CHECK=$(nm "$bin" 2>/dev/null | grep " T " | grep "ggml_" | sort | uniq -d | wc -l | tr -d ' ')
         if [ "$GGML_DUP_CHECK" -gt 0 ]; then
-            echo "ERROR: Duplicate ggml symbols detected ($GGML_DUP_CHECK duplicates)"
-            echo "This indicates ggml was built twice (both llama.cpp and whisper.cpp)"
+            echo "  ERROR: Duplicate ggml symbols detected ($GGML_DUP_CHECK duplicates)"
             VERIFICATION_FAILED=true
         else
-            echo "$lib: No duplicate ggml symbols (shared ggml working correctly)"
+            echo "  No duplicate ggml symbols (shared ggml working correctly)"
         fi
     done
 
     if [ "$VERIFICATION_FAILED" = true ]; then
         echo ""
-        echo "VERIFICATION FAILED: llama.cpp symbols not properly linked"
+        echo "VERIFICATION FAILED: symbols not properly linked"
         exit 1
     fi
 
