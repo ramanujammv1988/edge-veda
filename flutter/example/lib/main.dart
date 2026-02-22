@@ -304,10 +304,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
           );
         }
-        print('EdgeVeda: Generation cancelled due to app backgrounding');
+        debugPrint('EdgeVeda: Generation cancelled due to app backgrounding');
       }
     } else if (state == AppLifecycleState.resumed) {
-      print('EdgeVeda: App resumed');
+      debugPrint('EdgeVeda: App resumed');
     }
   }
 
@@ -574,39 +574,39 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           initSw.elapsedMilliseconds +
           embedSw.elapsedMilliseconds +
           indexSw.elapsedMilliseconds;
-      print('');
-      print('╔══════════════════════════════════════════════════════════════╗');
-      print('║              RAG INDEXING METRICS                           ║');
-      print('╠══════════════════════════════════════════════════════════════╣');
-      print('║ Document                                                    ║');
-      print('║   File:            $fileName');
-      print('║   Size:            ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)');
-      print('║   Chunks:          ${chunks.length} (avg ${avgChunkSize} chars/chunk)');
-      print('║   Tokens:          $totalTokens');
-      print('║                                                             ║');
-      print('║ Throughput (size-independent)                               ║');
-      print('║   Embed Speed:     ${perChunkMs.toStringAsFixed(1).padLeft(6)} ms/chunk');
-      print('║   Embed Rate:      ${embedChunksPerSec.toStringAsFixed(0).padLeft(6)} chunks/sec');
-      print('║   Embed Rate:      ${embedKbPerSec.toStringAsFixed(1).padLeft(6)} KB/sec');
-      print('║   Vector Insert:   ${(indexSw.elapsedMilliseconds / chunks.length).toStringAsFixed(2).padLeft(6)} ms/vector');
-      print('║                                                             ║');
-      print('║ Latency Breakdown                                           ║');
-      print('║   File Read:       ${readSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Chunking:        ${chunkSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      debugPrint('');
+      debugPrint('╔══════════════════════════════════════════════════════════════╗');
+      debugPrint('║              RAG INDEXING METRICS                           ║');
+      debugPrint('╠══════════════════════════════════════════════════════════════╣');
+      debugPrint('║ Document                                                    ║');
+      debugPrint('║   File:            $fileName');
+      debugPrint('║   Size:            ${(fileSize / 1024).toStringAsFixed(1)} KB ($encoding)');
+      debugPrint('║   Chunks:          ${chunks.length} (avg ${avgChunkSize} chars/chunk)');
+      debugPrint('║   Tokens:          $totalTokens');
+      debugPrint('║                                                             ║');
+      debugPrint('║ Throughput (size-independent)                               ║');
+      debugPrint('║   Embed Speed:     ${perChunkMs.toStringAsFixed(1).padLeft(6)} ms/chunk');
+      debugPrint('║   Embed Rate:      ${embedChunksPerSec.toStringAsFixed(0).padLeft(6)} chunks/sec');
+      debugPrint('║   Embed Rate:      ${embedKbPerSec.toStringAsFixed(1).padLeft(6)} KB/sec');
+      debugPrint('║   Vector Insert:   ${(indexSw.elapsedMilliseconds / chunks.length).toStringAsFixed(2).padLeft(6)} ms/vector');
+      debugPrint('║                                                             ║');
+      debugPrint('║ Latency Breakdown                                           ║');
+      debugPrint('║   File Read:       ${readSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      debugPrint('║   Chunking:        ${chunkSw.elapsedMilliseconds.toString().padLeft(6)} ms');
       if (!wasDownloaded) {
-        print('║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms  ← one-time cost');
+        debugPrint('║   Model Download:  ${downloadSw.elapsedMilliseconds.toString().padLeft(6)} ms  ← one-time cost');
       }
-      print('║   Embedder Init:   ${initSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   Index Build:     ${indexSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║   ──────────────────────────────');
-      print('║   Processing:      ${processingMs.toString().padLeft(6)} ms  (excl. download)');
-      print('║   Wall Clock:      ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms');
-      print('║                                                             ║');
-      print('║ Embedding Model: all-MiniLM-L6-v2 (F16, 384d, 46MB)        ║');
-      print('║ Hardware: Apple A18 Pro GPU (Metal), on-device              ║');
-      print('╚══════════════════════════════════════════════════════════════╝');
-      print('');
+      debugPrint('║   Embedder Init:   ${initSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      debugPrint('║   Batch Embed:     ${embedSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      debugPrint('║   Index Build:     ${indexSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      debugPrint('║   ──────────────────────────────');
+      debugPrint('║   Processing:      ${processingMs.toString().padLeft(6)} ms  (excl. download)');
+      debugPrint('║   Wall Clock:      ${pipelineSw.elapsedMilliseconds.toString().padLeft(6)} ms');
+      debugPrint('║                                                             ║');
+      debugPrint('║ Embedding Model: all-MiniLM-L6-v2 (F16, 384d, 46MB)        ║');
+      debugPrint('║ Hardware: Apple A18 Pro GPU (Metal), on-device              ║');
+      debugPrint('╚══════════════════════════════════════════════════════════════╝');
+      debugPrint('');
 
       setState(() {
         _attachedDocName = fileName;
@@ -771,27 +771,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ? genMs / _streamingTokenCount
             : 0.0;
         final responseChars = buffer.length;
-        print('');
-        print('╔══════════════════════════════════════════════════════════════╗');
-        print('║              RAG QUERY METRICS                              ║');
-        print('╠══════════════════════════════════════════════════════════════╣');
-        print('║ Query: "${prompt.length > 50 ? '${prompt.substring(0, 50)}...' : prompt}"');
-        print('║                                                             ║');
-        print('║ Throughput (size-independent)                               ║');
-        print('║   Generation:     ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s  (${msPerTok.toStringAsFixed(1)} ms/tok)');
-        print('║   TTFT (warm):    ${ttft.toString().padLeft(6)} ms');
-        print('║   Vector Search:       <1 ms');
-        print('║                                                             ║');
-        print('║ This Query                                                  ║');
-        print('║   Retrieval:      ${ttft.toString().padLeft(6)} ms  (embed + search + build)');
-        print('║   Generation:     ${genMs.toString().padLeft(6)} ms  ($_streamingTokenCount tokens, $responseChars chars)');
-        print('║   ──────────────────────────────');
-        print('║   End-to-End:     ${totalMs.toString().padLeft(6)} ms');
-        print('║                                                             ║');
-        print('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)      ║');
-        print('║ Hardware: Apple A18 Pro GPU (Metal)                         ║');
-        print('╚══════════════════════════════════════════════════════════════╝');
-        print('');
+        debugPrint('');
+        debugPrint('╔══════════════════════════════════════════════════════════════╗');
+        debugPrint('║              RAG QUERY METRICS                              ║');
+        debugPrint('╠══════════════════════════════════════════════════════════════╣');
+        debugPrint('║ Query: "${prompt.length > 50 ? '${prompt.substring(0, 50)}...' : prompt}"');
+        debugPrint('║                                                             ║');
+        debugPrint('║ Throughput (size-independent)                               ║');
+        debugPrint('║   Generation:     ${tokSec.toStringAsFixed(1).padLeft(6)} tok/s  (${msPerTok.toStringAsFixed(1)} ms/tok)');
+        debugPrint('║   TTFT (warm):    ${ttft.toString().padLeft(6)} ms');
+        debugPrint('║   Vector Search:       <1 ms');
+        debugPrint('║                                                             ║');
+        debugPrint('║ This Query                                                  ║');
+        debugPrint('║   Retrieval:      ${ttft.toString().padLeft(6)} ms  (embed + search + build)');
+        debugPrint('║   Generation:     ${genMs.toString().padLeft(6)} ms  ($_streamingTokenCount tokens, $responseChars chars)');
+        debugPrint('║   ──────────────────────────────');
+        debugPrint('║   End-to-End:     ${totalMs.toString().padLeft(6)} ms');
+        debugPrint('║                                                             ║');
+        debugPrint('║ Models: all-MiniLM-L6-v2 (embed) + Llama 3.2 1B (gen)      ║');
+        debugPrint('║ Hardware: Apple A18 Pro GPU (Metal)                         ║');
+        debugPrint('╚══════════════════════════════════════════════════════════════╝');
+        debugPrint('');
       }
     } catch (e) {
       querySw.stop();
@@ -879,14 +879,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
       _scrollToBottom();
 
-      print('EdgeVeda: Tool calling complete - ${latencyMs}ms, reply: ${reply.content.length} chars');
+      debugPrint('EdgeVeda: Tool calling complete - ${latencyMs}ms, reply: ${reply.content.length} chars');
     } catch (e) {
       stopwatch.stop();
       setState(() {
         _statusMessage = 'Tool calling error';
       });
       _showError('Tool calling failed: ${e.toString()}');
-      print('EdgeVeda: Tool calling error: $e');
+      debugPrint('EdgeVeda: Tool calling error: $e');
     } finally {
       _isGenerating = false;
       setState(() {
@@ -1039,8 +1039,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       } catch (_) {
         // Worker may still be busy; skip memory update
       }
-      print('EdgeVeda: Streaming complete - ${_streamingTokenCount} tokens');
-      print('EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s');
+      debugPrint('EdgeVeda: Streaming complete - ${_streamingTokenCount} tokens');
+      debugPrint('EdgeVeda: TTFT: ${_timeToFirstTokenMs}ms, ${_tokensPerSecond?.toStringAsFixed(1)} tok/s');
     } catch (e) {
       stopwatch.stop();
       setState(() {
@@ -1048,7 +1048,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _streamingText = '';
       });
       _showError('Streaming failed: ${e.toString()}');
-      print('EdgeVeda: Streaming error: $e');
+      debugPrint('EdgeVeda: Streaming error: $e');
     } finally {
       _isGenerating = false;
       setState(() {
@@ -1064,7 +1064,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _cancelGeneration() {
     if (_isStreaming && _cancelToken != null) {
       _cancelToken!.cancel();
-      print('EdgeVeda: Cancellation requested');
+      debugPrint('EdgeVeda: Cancellation requested');
     }
   }
 
@@ -1242,7 +1242,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _statusMessage = 'Model switch failed: ${e.toString()}';
       });
       _showError('Failed to switch model: ${e.toString()}');
-      print('EdgeVeda: Model switch error: $e');
+      debugPrint('EdgeVeda: Model switch error: $e');
 
       // Attempt to restore the model that was loaded before the switch
       try {
@@ -1271,7 +1271,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           });
         }
       } catch (restoreError) {
-        print('EdgeVeda: Failed to restore model: $restoreError');
+        debugPrint('EdgeVeda: Failed to restore model: $restoreError');
         setState(() {
           _isInitialized = false;
           _statusMessage = 'Model unloaded -- tap Initialize to restart';
@@ -1436,20 +1436,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final avgLatency = latencies.reduce((a, b) => a + b) ~/ latencies.length;
 
       // Print results to console (visible in Xcode logs)
-      print('');
-      print('=== BENCHMARK RESULTS ===');
-      print('Device: iPhone (iOS)');
-      print('Model: Llama 3.2 1B Q4_K_M');
-      print('Tests: 10 runs');
-      print('');
-      print('Speed: ${avgTokensPerSec.toStringAsFixed(1)} tok/s (avg)');
-      print('  Min: ${minTokensPerSec.toStringAsFixed(1)} tok/s');
-      print('  Max: ${maxTokensPerSec.toStringAsFixed(1)} tok/s');
-      print('TTFT: ${avgTTFT}ms (avg)');
-      print('Latency: ${avgLatency}ms (avg)');
-      print('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB');
-      print('=========================');
-      print('');
+      debugPrint('');
+      debugPrint('=== BENCHMARK RESULTS ===');
+      debugPrint('Device: iPhone (iOS)');
+      debugPrint('Model: Llama 3.2 1B Q4_K_M');
+      debugPrint('Tests: 10 runs');
+      debugPrint('');
+      debugPrint('Speed: ${avgTokensPerSec.toStringAsFixed(1)} tok/s (avg)');
+      debugPrint('  Min: ${minTokensPerSec.toStringAsFixed(1)} tok/s');
+      debugPrint('  Max: ${maxTokensPerSec.toStringAsFixed(1)} tok/s');
+      debugPrint('TTFT: ${avgTTFT}ms (avg)');
+      debugPrint('Latency: ${avgLatency}ms (avg)');
+      debugPrint('Peak Memory: ${peakMemory.toStringAsFixed(0)} MB');
+      debugPrint('=========================');
+      debugPrint('');
 
       setState(() {
         _runningBenchmark = false;

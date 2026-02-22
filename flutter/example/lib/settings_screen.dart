@@ -872,13 +872,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildAboutRow(
                 icon: Icons.auto_awesome,
                 title: 'Veda',
-                value: '2.1.2',
+                value: '2.4.0',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
                 icon: Icons.code,
                 title: 'Veda SDK',
-                value: '2.1.2',
+                value: '2.4.0',
               ),
               const Divider(color: AppTheme.border, indent: 16, endIndent: 16, height: 1),
               _buildAboutRow(
@@ -1300,8 +1300,6 @@ class _DeviceInfo {
     if (gb <= 0) return 'Unknown';
     return '${gb.toStringAsFixed(2)} GB';
   }
-
-  static bool get hasNeuralEngine => Platform.isIOS;
 
   static String _readString(String name) {
     final namePtr = name.toNativeUtf8();
