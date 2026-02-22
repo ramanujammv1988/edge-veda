@@ -951,8 +951,8 @@ class EdgeVedaNativeBindings {
     if (Platform.isAndroid) {
       return DynamicLibrary.open('libedge_veda.so');
     } else if (Platform.isIOS) {
-      // On iOS, the library is statically linked
-      return DynamicLibrary.process();
+      // On iOS, load the vendored dynamic framework
+      return DynamicLibrary.open('EdgeVedaCore.framework/EdgeVedaCore');
     } else if (Platform.isMacOS) {
       return DynamicLibrary.open('libedge_veda.dylib');
     } else if (Platform.isLinux) {
