@@ -205,6 +205,64 @@
 
 @end
 
+#pragma mark - MemoryPressureStreamHandler
+
+/// Stream handler for iOS memory pressure notifications.
+/// Observes UIApplicationDidReceiveMemoryWarningNotification and emits events
+/// matching the Android payload structure: { "level": int, "pressureLevel": string }.
+@interface EVMemoryPressureStreamHandler : NSObject<FlutterStreamHandler>
+@end
+
+@implementation EVMemoryPressureStreamHandler {
+    FlutterEventSink _eventSink;
+}
+
+- (FlutterError *)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)events {
+    _eventSink = events;
+
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector(didReceiveMemoryWarning:)
+               name:UIApplicationDidReceiveMemoryWarningNotification
+             object:nil];
+
+    // Emit initial "normal" state
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_eventSink) {
+            self->_eventSink(@{
+                @"level": @(0),
+                @"pressureLevel": @"normal",
+            });
+        }
+    });
+    return nil;
+}
+
+- (FlutterError *)onCancelWithArguments:(id)arguments {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationDidReceiveMemoryWarningNotification
+                                                  object:nil];
+    _eventSink = nil;
+    return nil;
+}
+
+- (void)didReceiveMemoryWarning:(NSNotification *)notification {
+    if (!_eventSink) return;
+
+    // iOS memory warnings are always critical-level (no gradations like Android's onTrimMemory).
+    // Map to Android-compatible level: TRIM_MEMORY_COMPLETE (80) = "critical".
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self->_eventSink) {
+            self->_eventSink(@{
+                @"level": @(80),
+                @"pressureLevel": @"critical",
+            });
+        }
+    });
+}
+
+@end
+
 #pragma mark - TtsStreamHandler
 
 /// Stream handler for TTS events (word boundaries, start/finish/cancel).
@@ -372,6 +430,12 @@
         eventChannelWithName:@"com.edgeveda.edge_veda/audio_capture"
              binaryMessenger:[registrar messenger]];
     [audioChannel setStreamHandler:[[EVAudioCaptureHandler alloc] init]];
+
+    // EventChannel for memory pressure notifications (parity with Android)
+    FlutterEventChannel *memoryPressureChannel = [FlutterEventChannel
+        eventChannelWithName:@"com.edgeveda.edge_veda/memory_pressure"
+             binaryMessenger:[registrar messenger]];
+    [memoryPressureChannel setStreamHandler:[[EVMemoryPressureStreamHandler alloc] init]];
 
     // EventChannel for TTS events (word boundaries, start/finish/cancel)
     EVTtsHandler *ttsHandler = [[EVTtsHandler alloc] init];
