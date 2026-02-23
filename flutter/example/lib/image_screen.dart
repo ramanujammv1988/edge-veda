@@ -99,16 +99,22 @@ class _ImageScreenState extends State<ImageScreen> {
     }
   }
 
+  String _downloadStatusText = '';
+
   Future<void> _downloadModel() async {
+    const model = ModelRegistry.sdV21Turbo;
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0;
+      _downloadStatusText = 'Downloading ${model.name} (${_formatBytes(model.sizeBytes)})...';
     });
 
     _downloadSubscription = _modelManager.downloadProgress.listen((progress) {
       if (mounted) {
         setState(() {
           _downloadProgress = progress.progress;
+          _downloadStatusText =
+              'Downloading ${model.name}: ${progress.progressPercent}% (${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)})';
         });
       }
     });
@@ -344,7 +350,9 @@ class _ImageScreenState extends State<ImageScreen> {
     double? progressValue;
 
     if (_isDownloading) {
-      statusText = 'Downloading model... ${(_downloadProgress * 100).toInt()}%';
+      statusText = _downloadStatusText.isNotEmpty
+          ? _downloadStatusText
+          : 'Downloading model... ${(_downloadProgress * 100).toInt()}%';
       progressValue = _downloadProgress > 0 ? _downloadProgress : null;
     } else if (_isInitializing) {
       statusText = 'Loading model into memory...';
@@ -912,5 +920,12 @@ class _ImageScreenState extends State<ImageScreen> {
         ],
       ),
     );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:camera/camera.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
@@ -124,7 +126,9 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
       ),
       body: Column(
         children: [
-          if (_service.cameraSupported &&
+          // ── Mobile: live camera preview ──────────────────────────────────
+          if (!Platform.isMacOS &&
+              _service.cameraSupported &&
               cameraController != null &&
               cameraController.value.isInitialized)
             SizedBox(
@@ -141,20 +145,75 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
                 ),
               ),
             ),
-          if (!_service.cameraSupported && isRunning)
+
+          // ── macOS: Vision description panel ──────────────────────────────
+          if (Platform.isMacOS && isRunning)
             Container(
-              height: 80,
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              color: AppTheme.surface,
-              child: const Center(
-                child: Text(
-                  'Manual soak monitoring (camera not available on macOS)',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                color: AppTheme.surface,
+                border: Border(
+                  bottom: BorderSide(color: AppTheme.border),
                 ),
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.accent.withValues(alpha: 0.6),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'VISION AI · LIVE SCREEN DESCRIPTION',
+                        style: TextStyle(
+                          color: AppTheme.accent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _service.lastDescription != null &&
+                          _service.lastDescription!.isNotEmpty
+                      ? Text(
+                          _service.lastDescription!,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                        )
+                      : const Text(
+                          'Describing your screen...',
+                          style: TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                ],
+              ),
             ),
-          if (_service.lastDescription != null &&
+
+          // ── Mobile: small description chip ───────────────────────────────
+          if (!Platform.isMacOS &&
+              _service.lastDescription != null &&
               _service.lastDescription!.isNotEmpty)
             Container(
               width: double.infinity,

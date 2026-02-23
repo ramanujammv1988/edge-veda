@@ -86,8 +86,8 @@ class DeviceProfile {
     required this.tier,
   });
 
-  /// Safe memory budget in MB (60% of total RAM)
-  int get safeMemoryBudgetMB => (totalRamGB * 1024 * 0.60).round();
+  /// Safe memory budget in MB (iOS: 60%, macOS: 80% due to Unified Memory limits)
+  int get safeMemoryBudgetMB => (totalRamGB * 1024 * (Platform.isMacOS ? 0.80 : 0.60)).round();
 
   // ── Detection (sync, cached) ──
 
@@ -112,12 +112,26 @@ class DeviceProfile {
 
     final entry = _deviceDb[identifier];
     if (entry != null) {
+      // For Macs, RAM is customizable; read exact hw.memsize instead of DB fallback
+      double ramGB = entry.$2;
+      if (identifier.startsWith('Mac') || identifier.startsWith('iMac')) {
+        try {
+          ramGB = _readInt64('hw.memsize') / (1024 * 1024 * 1024);
+        } catch (_) {}
+      }
+      
+      // Compute accurate tier for Macs since base RAM varies
+      var tier = entry.$4;
+      if (identifier.startsWith('Mac') || identifier.startsWith('iMac')) {
+        tier = ramGB < 6 ? DeviceTier.minimum : ramGB < 8 ? DeviceTier.low : ramGB < 10 ? DeviceTier.medium : ramGB < 16 ? DeviceTier.high : DeviceTier.ultra;
+      }
+
       _cached = DeviceProfile(
         identifier: identifier,
         deviceName: entry.$1,
-        totalRamGB: entry.$2,
+        totalRamGB: ramGB,
         chipName: entry.$3,
-        tier: entry.$4,
+        tier: tier,
       );
       return _cached!;
     }
@@ -140,11 +154,14 @@ class DeviceProfile {
                     ? DeviceTier.high
                     : DeviceTier.ultra;
 
+    bool isMac = identifier.startsWith('Mac') || identifier.startsWith('iMac');
+    String chipName = isMac ? 'Apple Silicon' : 'Unknown';
+
     _cached = DeviceProfile(
       identifier: identifier,
-      deviceName: identifier,
+      deviceName: isMac ? 'Mac' : identifier,
       totalRamGB: ramGB,
-      chipName: 'Unknown',
+      chipName: chipName,
       tier: tier,
     );
     return _cached!;
@@ -233,6 +250,49 @@ class DeviceProfile {
     'iPhone18,4': ('iPhone Air', 8, 'A19', DeviceTier.high),
     'iPhone18,1': ('iPhone 17 Pro', 12, 'A19 Pro', DeviceTier.ultra),
     'iPhone18,2': ('iPhone 17 Pro Max', 12, 'A19 Pro', DeviceTier.ultra),
+
+    // Mac M1 series (2020)
+    'MacBookAir10,1': ('MacBook Air M1', 8, 'M1', DeviceTier.high),
+    'MacBookPro17,1': ('MacBook Pro M1', 8, 'M1', DeviceTier.high),
+    'Macmini9,1': ('Mac mini M1', 8, 'M1', DeviceTier.high),
+    'iMac21,1': ('iMac M1', 8, 'M1', DeviceTier.high),
+    'iMac21,2': ('iMac M1', 8, 'M1', DeviceTier.high),
+
+    // Mac M1 Pro/Max (2021)
+    'MacBookPro18,1': ('MacBook Pro 16" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
+    'MacBookPro18,2': ('MacBook Pro 16" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
+    'MacBookPro18,3': ('MacBook Pro 14" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
+    'MacBookPro18,4': ('MacBook Pro 14" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
+
+    // Mac M2 series (2022)
+    'Mac14,2': ('MacBook Air M2', 8, 'M2', DeviceTier.high),
+    'Mac14,3': ('Mac mini M2', 8, 'M2', DeviceTier.high),
+    'Mac14,5': ('MacBook Pro M2', 8, 'M2', DeviceTier.high),
+    'Mac14,6': ('MacBook Pro M2 Max', 32, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac14,7': ('MacBook Pro M2', 8, 'M2', DeviceTier.high),
+    'Mac14,8': ('Mac Studio M2', 32, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac14,9': ('MacBook Pro M2 Pro', 16, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac14,10': ('MacBook Pro M2 Max', 32, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
+    
+    // Mac M3 series (2023)
+    'Mac15,3': ('MacBook Pro M3', 8, 'M3', DeviceTier.high),
+    'Mac15,4': ('iMac M3', 8, 'M3', DeviceTier.high),
+    'Mac15,5': ('iMac M3', 8, 'M3', DeviceTier.high),
+    'Mac15,6': ('MacBook Pro M3 Pro', 18, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac15,7': ('MacBook Pro M3 Max', 36, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac15,8': ('MacBook Pro M3 Max', 36, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac15,10': ('MacBook Pro M3 Max', 36, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac15,12': ('MacBook Air M3', 8, 'M3', DeviceTier.high),
+    'Mac15,13': ('MacBook Air M3', 8, 'M3', DeviceTier.high),
+    
+    // Mac M4 series (2024)
+    'Mac16,1': ('MacBook Pro M4', 16, 'M4', DeviceTier.ultra),
+    'Mac16,2': ('MacBook Pro M4', 16, 'M4', DeviceTier.ultra),
+    'Mac16,3': ('MacBook Pro M4', 16, 'M4', DeviceTier.ultra),
+    'Mac16,5': ('MacBook Pro M4', 16, 'M4', DeviceTier.ultra),
+    'Mac16,6': ('MacBook Pro M4 Pro', 24, 'M4 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac16,7': ('MacBook Pro M4 Max', 36, 'M4 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac16,8': ('Mac mini M4', 16, 'M4', DeviceTier.ultra),
   };
 
   @override
@@ -465,6 +525,7 @@ class ModelAdvisor {
 
   static const _familyBaseScores = <String, int>{
     'llama3': 78,
+    'mistral': 80,
     'phi3': 82,
     'gemma2': 72,
     'qwen3': 70,
@@ -483,6 +544,15 @@ class ModelAdvisor {
     'A18 Pro': 1.2,
     'A19': 1.2,
     'A19 Pro': 1.4,
+    'M1': 1.8,
+    'M1 Pro/Max/Ultra': 2.2,
+    'M2': 2.2,
+    'M2 Pro/Max/Ultra': 2.7,
+    'M3': 2.7,
+    'M3 Pro/Max/Ultra': 3.2,
+    'M4': 3.2,
+    'M4 Pro/Max/Ultra': 3.8,
+    'Apple Silicon': 2.0,
   };
 
   static const _quantSpeedMultipliers = <String, double>{

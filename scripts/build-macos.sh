@@ -88,7 +88,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Initialize submodules if needed
-if [ ! -f "$CORE_DIR/third_party/llama.cpp/CMakeLists.txt" ] || [ ! -f "$CORE_DIR/third_party/whisper.cpp/CMakeLists.txt" ]; then
+if [ ! -f "$CORE_DIR/third_party/llama.cpp/CMakeLists.txt" ] || [ ! -f "$CORE_DIR/third_party/whisper.cpp/CMakeLists.txt" ] || [ ! -f "$CORE_DIR/third_party/stable-diffusion.cpp/CMakeLists.txt" ]; then
     echo "Initializing git submodules..."
     cd "$PROJECT_ROOT"
     git submodule update --init --recursive
@@ -190,6 +190,7 @@ ARM64_GGML_CPU_LIB=$(find "$BUILD_MACOS_ARM64" -name "libggml-cpu.a" 2>/dev/null
 ARM64_GGML_BLAS_LIB=$(find "$BUILD_MACOS_ARM64" -name "libggml-blas.a" 2>/dev/null | head -1)
 ARM64_MTMD_LIB=$(find "$BUILD_MACOS_ARM64" -name "libmtmd.a" 2>/dev/null | head -1)
 ARM64_WHISPER_LIB=$(find "$BUILD_MACOS_ARM64" -name "libwhisper.a" 2>/dev/null | head -1)
+ARM64_SD_LIB=$(find "$BUILD_MACOS_ARM64" -name "libstable-diffusion.a" 2>/dev/null | head -1)
 
 echo "arm64 llama: $ARM64_LLAMA_LIB"
 echo "arm64 ggml: $ARM64_GGML_LIB"
@@ -199,7 +200,7 @@ echo "arm64 ggml-cpu: $ARM64_GGML_CPU_LIB"
 echo "arm64 ggml-blas: $ARM64_GGML_BLAS_LIB"
 echo "arm64 mtmd: $ARM64_MTMD_LIB"
 echo "arm64 whisper: $ARM64_WHISPER_LIB"
-
+echo "arm64 stable-diffusion: $ARM64_SD_LIB"
 # x86_64 dependency libs
 X86_LLAMA_LIB=$(find "$BUILD_MACOS_X86" -name "libllama.a" 2>/dev/null | head -1)
 X86_GGML_LIB=$(find "$BUILD_MACOS_X86" -name "libggml.a" 2>/dev/null | head -1)
@@ -209,6 +210,7 @@ X86_GGML_CPU_LIB=$(find "$BUILD_MACOS_X86" -name "libggml-cpu.a" 2>/dev/null | h
 X86_GGML_BLAS_LIB=$(find "$BUILD_MACOS_X86" -name "libggml-blas.a" 2>/dev/null | head -1)
 X86_MTMD_LIB=$(find "$BUILD_MACOS_X86" -name "libmtmd.a" 2>/dev/null | head -1)
 X86_WHISPER_LIB=$(find "$BUILD_MACOS_X86" -name "libwhisper.a" 2>/dev/null | head -1)
+X86_SD_LIB=$(find "$BUILD_MACOS_X86" -name "libstable-diffusion.a" 2>/dev/null | head -1)
 
 echo "x86_64 llama: $X86_LLAMA_LIB"
 echo "x86_64 ggml: $X86_GGML_LIB"
@@ -218,7 +220,7 @@ echo "x86_64 ggml-cpu: $X86_GGML_CPU_LIB"
 echo "x86_64 ggml-blas: $X86_GGML_BLAS_LIB"
 echo "x86_64 mtmd: $X86_MTMD_LIB"
 echo "x86_64 whisper: $X86_WHISPER_LIB"
-
+echo "x86_64 stable-diffusion: $X86_SD_LIB"
 # ============================================================================
 # Merge static libraries per architecture
 # ============================================================================
@@ -238,6 +240,7 @@ ARM64_LIBS_TO_MERGE="$ARM64_LIB"
 [ -n "$ARM64_GGML_BLAS_LIB" ] && [ -f "$ARM64_GGML_BLAS_LIB" ] && ARM64_LIBS_TO_MERGE="$ARM64_LIBS_TO_MERGE $ARM64_GGML_BLAS_LIB"
 [ -n "$ARM64_MTMD_LIB" ] && [ -f "$ARM64_MTMD_LIB" ] && ARM64_LIBS_TO_MERGE="$ARM64_LIBS_TO_MERGE $ARM64_MTMD_LIB"
 [ -n "$ARM64_WHISPER_LIB" ] && [ -f "$ARM64_WHISPER_LIB" ] && ARM64_LIBS_TO_MERGE="$ARM64_LIBS_TO_MERGE $ARM64_WHISPER_LIB"
+[ -n "$ARM64_SD_LIB" ] && [ -f "$ARM64_SD_LIB" ] && ARM64_LIBS_TO_MERGE="$ARM64_LIBS_TO_MERGE $ARM64_SD_LIB"
 
 # Build x86_64 merge list
 X86_LIBS_TO_MERGE="$X86_LIB"
@@ -249,6 +252,7 @@ X86_LIBS_TO_MERGE="$X86_LIB"
 [ -n "$X86_GGML_BLAS_LIB" ] && [ -f "$X86_GGML_BLAS_LIB" ] && X86_LIBS_TO_MERGE="$X86_LIBS_TO_MERGE $X86_GGML_BLAS_LIB"
 [ -n "$X86_MTMD_LIB" ] && [ -f "$X86_MTMD_LIB" ] && X86_LIBS_TO_MERGE="$X86_LIBS_TO_MERGE $X86_MTMD_LIB"
 [ -n "$X86_WHISPER_LIB" ] && [ -f "$X86_WHISPER_LIB" ] && X86_LIBS_TO_MERGE="$X86_LIBS_TO_MERGE $X86_WHISPER_LIB"
+[ -n "$X86_SD_LIB" ] && [ -f "$X86_SD_LIB" ] && X86_LIBS_TO_MERGE="$X86_LIBS_TO_MERGE $X86_SD_LIB"
 
 echo "Merging arm64 libraries: $ARM64_LIBS_TO_MERGE"
 # shellcheck disable=SC2086

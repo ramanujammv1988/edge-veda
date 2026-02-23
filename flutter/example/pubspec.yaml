@@ -19,6 +19,9 @@ dependencies:
   path_provider: 2.1.4
   file_picker: ^10.3.10
   syncfusion_flutter_pdf: ^31.2.5
+  record: ^6.2.0
+  screen_capturer: ^0.2.3
+  image: ^4.8.0
 
 dev_dependencies:
   flutter_test:

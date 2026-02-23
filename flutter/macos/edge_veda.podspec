@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'edge_veda'
-  s.version          = '2.1.0'
+  s.version          = '2.4.1'
   s.summary          = 'Edge Veda SDK - On-device AI inference for Flutter'
   s.description      = <<-DESC
 Edge Veda SDK enables running Large Language Models, Speech-to-Text, and
@@ -104,6 +104,15 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
       '-Wl,-u,_ev_free_embeddings', '-Wl,-exported_symbol,_ev_free_embeddings',
       # Streaming confidence
       '-Wl,-u,_ev_stream_get_token_info', '-Wl,-exported_symbol,_ev_stream_get_token_info',
+      # Image generation FFI symbols
+      '-Wl,-u,_ev_image_config_default', '-Wl,-exported_symbol,_ev_image_config_default',
+      '-Wl,-u,_ev_image_gen_params_default', '-Wl,-exported_symbol,_ev_image_gen_params_default',
+      '-Wl,-u,_ev_image_init', '-Wl,-exported_symbol,_ev_image_init',
+      '-Wl,-u,_ev_image_free', '-Wl,-exported_symbol,_ev_image_free',
+      '-Wl,-u,_ev_image_is_valid', '-Wl,-exported_symbol,_ev_image_is_valid',
+      '-Wl,-u,_ev_image_set_progress_callback', '-Wl,-exported_symbol,_ev_image_set_progress_callback',
+      '-Wl,-u,_ev_image_generate', '-Wl,-exported_symbol,_ev_image_generate',
+      '-Wl,-u,_ev_image_free_result', '-Wl,-exported_symbol,_ev_image_free_result',
     ].join(' ')
   }
 end

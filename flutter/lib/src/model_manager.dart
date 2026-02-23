@@ -472,6 +472,43 @@ class ModelManager {
 class ModelRegistry {
   static const String huggingFaceBaseUrl = 'https://huggingface.co/models';
 
+  // === Desktop Class Models ===
+
+  /// Llama 3.1 8B Instruct (Q4_K_M) - Desktop class reasoning model
+  static const ModelInfo llama31_8b = ModelInfo(
+    id: 'llama-3.1-8b-instruct-q4',
+    name: 'Llama 3.1 8B Instruct',
+    sizeBytes: 4920 * 1024 * 1024, // ~4.9 GB
+    description: 'Highly capable desktop-class 8B instruction model',
+    downloadUrl:
+        'https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    parametersB: 8.0,
+    maxContextLength: 131072,
+    capabilities: ['chat', 'instruct', 'reasoning', 'tool-calling'],
+    family: 'llama3',
+  );
+
+  /// Mistral Nemo 12B Instruct (Q4_K_M) - Desktop class wide-knowledge model
+  // ignore: constant_identifier_names
+  static const ModelInfo mistral_nemo_12b = ModelInfo(
+    id: 'mistral-nemo-12b-instruct-q4',
+    name: 'Mistral Nemo 12B Instruct',
+    sizeBytes: 7100 * 1024 * 1024, // ~7.1 GB
+    description: 'Powerful desktop-class 12B model with large context window',
+    downloadUrl:
+        'https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF/resolve/main/Mistral-Nemo-Instruct-2407-Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    parametersB: 12.0,
+    maxContextLength: 128000,
+    capabilities: ['chat', 'instruct', 'reasoning'],
+    family: 'mistral',
+  );
+
+  // === Mobile Class Models ===
+
   /// Llama 3.2 1B Instruct (Q4_K_M quantization) - Primary model
   static const ModelInfo llama32_1b = ModelInfo(
     id: 'llama-3.2-1b-instruct-q4',
@@ -557,6 +594,8 @@ class ModelRegistry {
 
   // === Vision Language Models ===
 
+  // -- Mobile --
+
   /// SmolVLM2-500M-Video-Instruct (Q8_0) - Vision Language Model
   static const ModelInfo smolvlm2_500m = ModelInfo(
     id: 'smolvlm2-500m-video-instruct-q8',
@@ -588,13 +627,81 @@ class ModelRegistry {
     family: 'smolvlm',
   );
 
+  // -- macOS Desktop --
+
+  /// LLaVA 1.6 Mistral 7B (Q4_K_M) - High quality VLM for macOS (~4.8 GB)
+  // ignore: constant_identifier_names
+  static const ModelInfo llava16_mistral_7b = ModelInfo(
+    id: 'llava-1.6-mistral-7b-q4',
+    name: 'LLaVA 1.6 Mistral 7B',
+    sizeBytes: 4370 * 1024 * 1024, // ~4.8 GB
+    description: 'State-of-the-art 7B vision-language model for detailed image understanding',
+    downloadUrl:
+        'https://huggingface.co/cjpais/llava-1.6-mistral-7b-gguf/resolve/main/llava-1.6-mistral-7b.Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    parametersB: 7.0,
+    maxContextLength: 32768,
+    capabilities: ['vision', 'chat'],
+    family: 'llava',
+  );
+
+  /// LLaVA 1.6 Mistral 7B mmproj (F16)
+  // ignore: constant_identifier_names
+  static const ModelInfo llava16_mistral_7b_mmproj = ModelInfo(
+    id: 'llava-1.6-mistral-7b-mmproj-f16',
+    name: 'LLaVA 1.6 Mistral 7B Multimodal Projector',
+    sizeBytes: 624 * 1024 * 1024, // ~624 MB
+    description: 'Multimodal projector for LLaVA 1.6 Mistral 7B',
+    downloadUrl:
+        'https://huggingface.co/cjpais/llava-1.6-mistral-7b-gguf/resolve/main/mmproj-model-f16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+    capabilities: ['vision-projector'],
+    family: 'llava',
+  );
+
+  /// Qwen2-VL 7B Instruct (Q4_K_M) - OCR-capable VLM, great for screen reading (~4.5 GB)
+  // ignore: constant_identifier_names
+  static const ModelInfo qwen2vl_7b = ModelInfo(
+    id: 'qwen2-vl-7b-instruct-q4',
+    name: 'Qwen2-VL 7B Instruct',
+    sizeBytes: 4540 * 1024 * 1024, // ~4.5 GB
+    description: 'Expert VLM with strong OCR and screen reading capabilities',
+    downloadUrl:
+        'https://huggingface.co/bartowski/Qwen2-VL-7B-Instruct-GGUF/resolve/main/Qwen2-VL-7B-Instruct-Q4_K_M.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    parametersB: 7.0,
+    maxContextLength: 32768,
+    capabilities: ['vision', 'chat', 'ocr'],
+    family: 'qwen2vl',
+  );
+
+  /// Qwen2-VL 7B mmproj (F16)
+  // ignore: constant_identifier_names
+  static const ModelInfo qwen2vl_7b_mmproj = ModelInfo(
+    id: 'qwen2-vl-7b-mmproj-f16',
+    name: 'Qwen2-VL 7B Multimodal Projector',
+    sizeBytes: 892 * 1024 * 1024, // ~892 MB
+    description: 'Multimodal projector for Qwen2-VL 7B',
+    downloadUrl:
+        'https://huggingface.co/bartowski/Qwen2-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2-VL-7B-Instruct-f16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+    capabilities: ['vision-projector'],
+    family: 'qwen2vl',
+  );
+
   // === Whisper Speech-to-Text Models ===
+
+  // -- Mobile --
 
   /// Whisper Tiny English - Fast, low memory (~77MB)
   static const ModelInfo whisperTinyEn = ModelInfo(
     id: 'whisper-tiny-en',
     name: 'Whisper Tiny (English)',
-    sizeBytes: 77 * 1024 * 1024, // ~77 MB download
+    sizeBytes: 77 * 1024 * 1024,
     description: 'Fast English speech recognition, low memory footprint',
     downloadUrl:
         'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
@@ -609,7 +716,7 @@ class ModelRegistry {
   static const ModelInfo whisperBaseEn = ModelInfo(
     id: 'whisper-base-en',
     name: 'Whisper Base (English)',
-    sizeBytes: 148 * 1024 * 1024, // ~148 MB download
+    sizeBytes: 148 * 1024 * 1024,
     description: 'Higher accuracy English speech recognition',
     downloadUrl:
         'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
@@ -620,14 +727,70 @@ class ModelRegistry {
     family: 'whisper',
   );
 
+  // -- macOS Desktop --
+
+  /// Whisper Small Multilingual - Good accuracy, 50+ languages (~244MB)
+  static const ModelInfo whisperSmall = ModelInfo(
+    id: 'whisper-small-multilingual',
+    name: 'Whisper Small (Multilingual)',
+    sizeBytes: 244 * 1024 * 1024,
+    description: 'Good accuracy STT in 50+ languages — best mobile fallback',
+    downloadUrl:
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
+    format: 'GGML',
+    quantization: null,
+    parametersB: 0.24,
+    capabilities: ['stt'],
+    family: 'whisper',
+  );
+
+  /// Whisper Medium Multilingual - Production quality, 50+ languages (~769MB)
+  static const ModelInfo whisperMedium = ModelInfo(
+    id: 'whisper-medium-multilingual',
+    name: 'Whisper Medium (Multilingual)',
+    sizeBytes: 769 * 1024 * 1024,
+    description: 'Production-quality multilingual STT for macOS',
+    downloadUrl:
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
+    format: 'GGML',
+    quantization: null,
+    parametersB: 0.31,
+    capabilities: ['stt'],
+    family: 'whisper',
+  );
+
+  /// Whisper Large v3 Multilingual - SOTA quality (~3.1GB, requires 8GB+ Mac)
+  // ignore: constant_identifier_names
+  static const ModelInfo whisperLargeV3 = ModelInfo(
+    id: 'whisper-large-v3-multilingual',
+    name: 'Whisper Large v3 (Multilingual)',
+    sizeBytes: 3100 * 1024 * 1024,
+    description: 'State-of-the-art STT in 100 languages — requires 8GB+ Mac',
+    downloadUrl:
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin',
+    format: 'GGML',
+    quantization: null,
+    parametersB: 1.55,
+    capabilities: ['stt'],
+    family: 'whisper',
+  );
+
   /// Get all available text models
   static List<ModelInfo> getAllModels() {
-    return [llama32_1b, phi35_mini, gemma2_2b, tinyLlama, qwen3_06b];
+    return [
+      llama31_8b,
+      mistral_nemo_12b,
+      llama32_1b,
+      phi35_mini,
+      gemma2_2b,
+      tinyLlama,
+      qwen3_06b,
+    ];
   }
 
   /// Get all available vision models (model + mmproj pairs)
   static List<ModelInfo> getVisionModels() {
-    return [smolvlm2_500m];
+    return [smolvlm2_500m, llava16_mistral_7b, qwen2vl_7b];
   }
 
   /// Get the multimodal projector for a vision model
@@ -639,6 +802,10 @@ class ModelRegistry {
     switch (modelId) {
       case 'smolvlm2-500m-video-instruct-q8':
         return smolvlm2_500m_mmproj;
+      case 'llava-1.6-mistral-7b-q4':
+        return llava16_mistral_7b_mmproj;
+      case 'qwen2-vl-7b-instruct-q4':
+        return qwen2vl_7b_mmproj;
       default:
         return null;
     }
@@ -646,37 +813,73 @@ class ModelRegistry {
 
   /// Get all available whisper STT models
   static List<ModelInfo> getWhisperModels() {
-    return [whisperTinyEn, whisperBaseEn];
+    return [whisperTinyEn, whisperBaseEn, whisperSmall, whisperMedium, whisperLargeV3];
   }
 
-  // === Image Generation Models (Stable Diffusion) ===
+  // === Image Generation Models ===
+
+  // -- Mobile --
 
   /// SD v2.1 Turbo Q8_0 - Fast 1-4 step 512x512 image generation
   static const ModelInfo sdV21Turbo = ModelInfo(
     id: 'sd-v2-1-turbo-q8',
     name: 'SD v2.1 Turbo Q8_0',
-    sizeBytes: 2320 * 1024 * 1024, // ~2.3 GB
+    sizeBytes: 2023745376,
     description: 'Fast 1-4 step 512x512 image generation via Stable Diffusion',
     downloadUrl:
-        'https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo-Q8_0.gguf',
+        'https://huggingface.co/Green-Sky/SD-Turbo-GGUF/resolve/main/sd_turbo-f16-q8_0.gguf',
     format: 'GGUF',
     quantization: 'Q8_0',
     capabilities: ['imageGeneration'],
     family: 'stable-diffusion',
   );
 
+  // -- macOS Desktop --
+
+  /// SDXL Turbo Q8_0 - 1024x1024 high quality, 4-step generation (~6.7 GB)
+  // ignore: constant_identifier_names
+  static const ModelInfo sdxlTurbo = ModelInfo(
+    id: 'sdxl-turbo-q8',
+    name: 'SDXL Turbo Q8_0',
+    sizeBytes: 6800 * 1024 * 1024, // ~6.7 GB
+    description: '1024×1024 high-quality 4-step image generation for macOS',
+    downloadUrl:
+        'https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors',
+    format: 'safetensors',
+    quantization: 'Q8_0',
+    capabilities: ['imageGeneration'],
+    family: 'stable-diffusion-xl',
+  );
+
+  /// FLUX.1 Schnell Q4_0 - SOTA 4-step 1024x1024 generation (~12 GB, 16GB+ Mac)
+  // ignore: constant_identifier_names
+  static const ModelInfo flux1Schnell = ModelInfo(
+    id: 'flux-1-schnell-q4',
+    name: 'FLUX.1 Schnell Q4_0',
+    sizeBytes: 12400 * 1024 * 1024, // ~12 GB
+    description: 'State-of-the-art 4-step text-to-image — requires 16GB+ Mac',
+    downloadUrl:
+        'https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q4_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_0',
+    capabilities: ['imageGeneration'],
+    family: 'flux',
+  );
+
   /// Get all available image generation models
   static List<ModelInfo> getImageModels() {
-    return [sdV21Turbo];
+    return [sdV21Turbo, sdxlTurbo, flux1Schnell];
   }
 
   // === Embedding Models ===
 
-  /// All MiniLM L6 v2 (F16) - Lightweight sentence embedding model
+  // -- Mobile + macOS --
+
+  /// All MiniLM L6 v2 (F16) - Lightweight sentence embedding model (~46MB)
   static const ModelInfo allMiniLmL6V2 = ModelInfo(
     id: 'all-minilm-l6-v2-f16',
     name: 'All MiniLM L6 v2',
-    sizeBytes: 46 * 1024 * 1024, // ~46 MB F16
+    sizeBytes: 46 * 1024 * 1024,
     description: 'Lightweight sentence embedding model (384 dimensions)',
     downloadUrl:
         'https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/all-MiniLM-L6-v2.F16.gguf',
@@ -688,17 +891,55 @@ class ModelRegistry {
     family: 'minilm',
   );
 
+  // -- macOS Desktop --
+
+  /// nomic-embed-text v1.5 (F16) - High quality 768-dim embeddings (~87MB)
+  // ignore: constant_identifier_names
+  static const ModelInfo nomicEmbedText = ModelInfo(
+    id: 'nomic-embed-text-v1.5-f16',
+    name: 'Nomic Embed Text v1.5',
+    sizeBytes: 87 * 1024 * 1024, // ~87 MB
+    description: 'High quality 768-dimension embeddings for RAG on macOS',
+    downloadUrl:
+        'https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+    parametersB: 0.14,
+    maxContextLength: 8192,
+    capabilities: ['embedding'],
+    family: 'nomic-embed',
+  );
+
+  /// mxbai-embed-large v1 (F16) - Best-in-class 1024-dim embeddings (~335MB)
+  // ignore: constant_identifier_names
+  static const ModelInfo mxbaiEmbedLarge = ModelInfo(
+    id: 'mxbai-embed-large-v1-f16',
+    name: 'mxbai-embed-large v1',
+    sizeBytes: 335 * 1024 * 1024, // ~335 MB
+    description: 'State-of-the-art 1024-dimension embeddings for complex RAG',
+    downloadUrl:
+        'https://huggingface.co/ChristianAzinn/mxbai-embed-large-v1-gguf/resolve/main/mxbai-embed-large-v1-f16.gguf',
+    format: 'GGUF',
+    quantization: 'F16',
+    parametersB: 0.34,
+    maxContextLength: 512,
+    capabilities: ['embedding'],
+    family: 'mxbai-embed',
+  );
+
   /// Get all available embedding models
   static List<ModelInfo> getEmbeddingModels() {
-    return [allMiniLmL6V2];
+    return [allMiniLmL6V2, nomicEmbedText, mxbaiEmbedLarge];
   }
 
-  /// Get model by ID (searches text, vision, whisper, embedding, and image models)
+  /// Get model by ID (searches all categories)
   static ModelInfo? getModelById(String id) {
     final allModels = [
       ...getAllModels(),
       ...getVisionModels(),
       smolvlm2_500m_mmproj,
+      llava16_mistral_7b_mmproj,
+      qwen2vl_7b_mmproj,
       ...getWhisperModels(),
       ...getEmbeddingModels(),
       ...getImageModels(),

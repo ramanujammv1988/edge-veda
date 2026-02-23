@@ -34,6 +34,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' show sqrt;
 import 'dart:typed_data';
 
@@ -203,9 +204,10 @@ class VoicePipeline {
   CancelToken? _llmCancelToken;
 
   // VAD state
-  /// Fixed VAD threshold. No calibration needed -- 0.03 works well across
-  /// typical environments.
-  final double _threshold = 0.03;
+  /// Platform-aware VAD threshold. macOS microphones output significantly
+  /// lower amplitude levels than iOS devices due to different hardware gain
+  /// and AGC characteristics. Use a 6x lower threshold on macOS.
+  final double _threshold = Platform.isMacOS ? 0.005 : 0.03;
   int _silentFrameCount = 0;
   int _totalSilentFrameCount = 0;
   bool _speechDetected = false;
@@ -521,7 +523,9 @@ class VoicePipeline {
       final text = _whisperSession?.transcript.trim() ?? '';
       _whisperSession?.resetTranscript();
 
-      if (text.isEmpty) return;
+      if (text.isEmpty) {
+        return;
+      }
 
       // Step 2: Emit user transcript event
       _emit(TranscriptUpdated(text, null));

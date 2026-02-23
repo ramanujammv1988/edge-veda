@@ -38,5 +38,7 @@
 	<string>Edge Veda needs permission to save photos for the Detective AI feature</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Edge Veda needs calendar access for the Detective AI feature</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Edge Veda needs screen capture access for continuous Vision AI testing</string>
 </dict>
 </plist>

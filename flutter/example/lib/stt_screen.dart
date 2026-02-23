@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'model_selector.dart';
 import 'soak_test_service.dart';
 
 /// STT (Speech-to-Text) demo tab with live microphone transcription.
@@ -78,19 +79,24 @@ class _SttScreenState extends State<SttScreen>
 
   Future<void> _checkModel() async {
     final mm = ModelManager();
-    final downloaded =
-        await mm.isModelDownloaded(ModelRegistry.whisperTinyEn.id);
+    final sel = await ModelSelector.bestWhisper(mm);
     if (mounted) {
       setState(() {
-        _isModelDownloaded = downloaded;
+        _isModelDownloaded = !sel.needsDownload;
       });
     }
   }
 
+  String _downloadStatusText = '';
+
   Future<void> _downloadModel() async {
+    // Nothing is downloaded yet — pick the platform fallback (whisperTinyEn on mobile).
+    final sel = await ModelSelector.bestWhisper();
+    final model = sel.model;
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0;
+      _downloadStatusText = 'Downloading ${model.name} (${_formatBytes(model.sizeBytes)})';
     });
 
     final modelManager = ModelManager();
@@ -99,12 +105,14 @@ class _SttScreenState extends State<SttScreen>
       if (mounted) {
         setState(() {
           _downloadProgress = progress.progress;
+          _downloadStatusText =
+              'Downloading ${model.name}: ${progress.progressPercent}% (${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)})';
         });
       }
     });
 
     try {
-      await modelManager.downloadModel(ModelRegistry.whisperTinyEn);
+      await modelManager.downloadModel(model);
 
       if (mounted) {
         setState(() {
@@ -151,10 +159,10 @@ class _SttScreenState extends State<SttScreen>
     });
 
     try {
-      // Get model path
+      // Get the best available whisper model path
       final modelManager = ModelManager();
-      final modelPath =
-          await modelManager.getModelPath(ModelRegistry.whisperTinyEn.id);
+      final sel = await ModelSelector.bestWhisper(modelManager);
+      final modelPath = await modelManager.getModelPath(sel.model.id);
 
       // Start whisper session
       _session = WhisperSession(modelPath: modelPath);
@@ -361,11 +369,14 @@ class _SttScreenState extends State<SttScreen>
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '${(_downloadProgress * 100).toInt()}%',
+                      _downloadStatusText.isNotEmpty
+                          ? _downloadStatusText
+                          : '${(_downloadProgress * 100).toInt()}%',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppTheme.textSecondary,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -703,5 +714,12 @@ class _SttScreenState extends State<SttScreen>
       ),
       body: _isModelDownloaded ? _buildRecordingState() : _buildDownloadState(),
     );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }

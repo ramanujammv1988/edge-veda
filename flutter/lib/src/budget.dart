@@ -15,6 +15,8 @@
 /// ```
 library;
 
+import 'dart:io' show Platform;
+
 /// Which budget constraint was violated.
 enum BudgetConstraint {
   /// p95 inference latency exceeded the declared maximum.
@@ -188,7 +190,7 @@ class EdgeVedaBudget {
   /// by application code.
   static EdgeVedaBudget resolve(BudgetProfile profile, MeasuredBaseline baseline) {
     final int resolvedP95;
-    final double? resolvedDrain;
+    double? resolvedDrain;
     final int resolvedThermal;
 
     switch (profile) {
@@ -210,6 +212,20 @@ class EdgeVedaBudget {
             ? baseline.measuredDrainPerTenMin! * 1.5
             : null;
         resolvedThermal = 3;
+    }
+
+    // macOS: skip battery enforcement entirely — Macs are typically on AC
+    // power, and battery level fluctuations are noise, not actual drain.
+    // Even on battery, macOS Unified Memory makes drain-based throttling
+    // less useful than thermal-based throttling.
+    if (Platform.isMacOS) {
+      resolvedDrain = null;
+    }
+
+    // If measured drain was zero (device plugged in during warm-up), disable
+    // battery enforcement — a 0.0 budget would trigger on any fluctuation.
+    if (resolvedDrain != null && resolvedDrain <= 0.0) {
+      resolvedDrain = null;
     }
 
     return EdgeVedaBudget(

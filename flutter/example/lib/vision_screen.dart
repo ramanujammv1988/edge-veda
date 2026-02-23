@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:camera/camera.dart';
 
 import 'app_theme.dart';
+import 'model_selector.dart';
 import 'soak_test_service.dart';
 
 /// Whether the camera package is supported on this platform.
@@ -250,39 +251,30 @@ class _VisionScreenState extends State<VisionScreen>
     return 'Vision error. Please try again.';
   }
 
-  /// Download SmolVLM2 model + mmproj if not already cached
+  /// Use the best already-downloaded vision model pair; downloads SmolVLM2 as fallback.
   Future<void> _ensureModelsDownloaded() async {
-    const model = ModelRegistry.smolvlm2_500m;
-    const mmproj = ModelRegistry.smolvlm2_500m_mmproj;
+    final selection = await ModelSelector.bestVision(_modelManager);
 
-    final modelDownloaded = await _modelManager.isModelDownloaded(model.id);
-    final mmprojDownloaded = await _modelManager.isModelDownloaded(mmproj.id);
-
-    if (!modelDownloaded || !mmprojDownloaded) {
+    if (selection.needsDownload) {
       setState(() {
         _isDownloading = true;
-        _statusMessage = 'Downloading vision model...';
+        _statusMessage =
+            'Downloading ${selection.model.name} (${_formatBytes(selection.model.sizeBytes)})';
       });
 
       _modelManager.downloadProgress.listen((progress) {
         if (mounted) {
           setState(() {
             _downloadProgress = progress.progress;
-            _statusMessage = 'Downloading: ${progress.progressPercent}%';
+            _statusMessage =
+                'Downloading: ${progress.progressPercent}% (${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)})';
           });
         }
       });
 
-      if (!modelDownloaded) {
-        _modelPath = await _modelManager.downloadModel(model);
-      } else {
-        _modelPath = await _modelManager.getModelPath(model.id);
-      }
-
-      if (!mmprojDownloaded) {
-        _mmprojPath = await _modelManager.downloadModel(mmproj);
-      } else {
-        _mmprojPath = await _modelManager.getModelPath(mmproj.id);
+      await _modelManager.downloadModel(selection.model);
+      if (selection.mmproj != null) {
+        await _modelManager.downloadModel(selection.mmproj!);
       }
 
       if (mounted) {
@@ -291,10 +283,12 @@ class _VisionScreenState extends State<VisionScreen>
           _downloadProgress = 1.0;
         });
       }
-    } else {
-      _modelPath = await _modelManager.getModelPath(model.id);
-      _mmprojPath = await _modelManager.getModelPath(mmproj.id);
     }
+
+    _modelPath = await _modelManager.getModelPath(selection.model.id);
+    _mmprojPath = selection.mmproj != null
+        ? await _modelManager.getModelPath(selection.mmproj!.id)
+        : null;
   }
 
   /// Initialize camera with back-facing lens
@@ -653,6 +647,13 @@ class _VisionScreenState extends State<VisionScreen>
         ],
       ),
     );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }
 
