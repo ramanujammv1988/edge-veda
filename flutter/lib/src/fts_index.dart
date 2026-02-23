@@ -98,7 +98,10 @@ class FtsIndex {
       _avgdl = 0;
       return;
     }
-    int totalLength = _documentLengths.values.fold(0, (sum, len) => sum + len);
+    final totalLength = _documentLengths.values.fold(
+      0,
+      (sum, len) => sum + len,
+    );
     _avgdl = totalLength / _totalDocs;
   }
 

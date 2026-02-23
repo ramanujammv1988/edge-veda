@@ -219,7 +219,7 @@ class RagPipeline {
           ..sort((a, b) => b.value.compareTo(a.value));
 
     // Normalize fused scores to [0.0 - 1.0] so they survive upstream thresholds
-    double maxScore = sortedFused.isNotEmpty ? sortedFused.first.value : 0.0;
+    final maxScore = sortedFused.isNotEmpty ? sortedFused.first.value : 0.0;
 
     final finalResults = <SearchResult>[];
     for (final entry in sortedFused) {

@@ -16,9 +16,7 @@ import 'model_selection_modal.dart';
 import 'settings_screen.dart';
 import 'soak_test_service.dart';
 import 'stt_screen.dart';
-import 'tts_screen.dart';
 import 'vision_screen.dart';
-import 'voice_screen.dart';
 import 'welcome_screen.dart';
 
 void main() {

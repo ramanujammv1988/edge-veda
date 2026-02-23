@@ -159,8 +159,8 @@ class DeviceProfile {
             ? DeviceTier.high
             : DeviceTier.ultra;
 
-    bool isMac = identifier.startsWith('Mac') || identifier.startsWith('iMac');
-    String chipName = isMac ? 'Apple Silicon' : 'Unknown';
+    final isMac = identifier.startsWith('Mac') || identifier.startsWith('iMac');
+    final chipName = isMac ? 'Apple Silicon' : 'Unknown';
 
     _cached = DeviceProfile(
       identifier: identifier,
