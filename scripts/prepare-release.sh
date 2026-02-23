@@ -22,6 +22,7 @@ FLUTTER_DIR="$PROJECT_ROOT/flutter"
 # Files to check
 PUBSPEC="$FLUTTER_DIR/pubspec.yaml"
 PODSPEC="$FLUTTER_DIR/ios/edge_veda.podspec"
+CORE_PODSPEC="$PROJECT_ROOT/EdgeVedaCore.podspec"
 CHANGELOG="$FLUTTER_DIR/CHANGELOG.md"
 
 # Print colored status
@@ -163,6 +164,23 @@ main() {
         errors=$((errors + 1))
     fi
 
+    # EdgeVedaCore.podspec
+    local core_podspec_version
+    if [ -f "$CORE_PODSPEC" ]; then
+        core_podspec_version=$(grep "s.version" "$CORE_PODSPEC" | head -1 | sed "s/.*'\([^']*\)'.*/\1/")
+    else
+        core_podspec_version="NOT_FOUND"
+    fi
+    if [ "$core_podspec_version" = "NOT_FOUND" ]; then
+        print_status "fail" "EdgeVedaCore.podspec: File not found"
+        errors=$((errors + 1))
+    elif [ "$core_podspec_version" = "$expected_version" ]; then
+        print_status "ok" "EdgeVedaCore.podspec: $core_podspec_version"
+    else
+        print_status "fail" "EdgeVedaCore.podspec: $core_podspec_version (expected $expected_version)"
+        errors=$((errors + 1))
+    fi
+
     # CHANGELOG.md
     local changelog_version
     changelog_version=$(get_changelog_version "$expected_version")
@@ -281,16 +299,70 @@ main() {
     echo "================================================"
     echo ""
 
+    # Check XCFramework exists
+    echo "Checking XCFramework..."
+    echo ""
+
+    local xcfw_dir="$FLUTTER_DIR/ios/Frameworks/EdgeVedaCore.xcframework"
+    local xcfw_zip="$PROJECT_ROOT/build/EdgeVedaCore.xcframework.zip"
+
+    if [ -d "$xcfw_dir" ]; then
+        # Count binary slices
+        local slice_count
+        slice_count=$(find "$xcfw_dir" -name "EdgeVedaCore" -not -name "*.xcframework" -not -name "*.plist" | wc -l | tr -d ' ')
+        print_status "ok" "XCFramework present ($slice_count slices)"
+
+        # Check if zip already created
+        if [ -f "$xcfw_zip" ]; then
+            local zip_size
+            zip_size=$(du -h "$xcfw_zip" | cut -f1)
+            print_status "ok" "XCFramework zip ready ($zip_size): $xcfw_zip"
+        else
+            print_status "warn" "XCFramework zip not yet created (will be created during release)"
+            warnings=$((warnings + 1))
+        fi
+    else
+        print_status "warn" "XCFramework not found — build before releasing"
+        echo "  Build: ./scripts/build-ios.sh --clean --release"
+        warnings=$((warnings + 1))
+    fi
+
+    echo ""
+
+    # Check gh CLI for release upload
+    echo "Checking release tools..."
+    echo ""
+
+    if command -v gh &> /dev/null; then
+        print_status "ok" "GitHub CLI (gh) available"
+        # Check auth
+        if gh auth status &>/dev/null; then
+            print_status "ok" "GitHub CLI authenticated"
+        else
+            print_status "warn" "GitHub CLI not authenticated — run: gh auth login"
+            warnings=$((warnings + 1))
+        fi
+    else
+        print_status "warn" "GitHub CLI (gh) not installed — needed for release upload"
+        echo "  Install: brew install gh"
+        warnings=$((warnings + 1))
+    fi
+
+    echo ""
+    echo "================================================"
+    echo "Summary"
+    echo "================================================"
+    echo ""
+
     # Final summary
     if [ $errors -eq 0 ]; then
         echo -e "${GREEN}Ready to release v$expected_version${NC}"
         echo ""
-        echo "Next steps:"
-        echo "  1. Create git tag: git tag v$expected_version"
-        echo "  2. Push tag: git push origin v$expected_version"
-        echo "  3. Build XCFramework: ./scripts/build-ios.sh --clean --release"
-        echo "  4. Upload XCFramework to GitHub Releases"
-        echo "  5. Publish to pub.dev: cd flutter && dart pub publish"
+        echo "Release steps:"
+        echo "  1. Build XCFramework:  ./scripts/build-ios.sh --clean --release"
+        echo "  2. Tag and push:       git tag v$expected_version && git push origin v$expected_version"
+        echo "  3. Publish pod:        ./scripts/publish-pod.sh $expected_version"
+        echo "  4. Publish to pub.dev: cd flutter && dart pub publish"
         exit 0
     else
         echo -e "${RED}Release blocked: $errors error(s), $warnings warning(s)${NC}"

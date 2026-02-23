@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 /// State of the TTS engine.
@@ -130,7 +132,16 @@ class TtsService {
   /// Current state of the TTS engine.
   TtsState get state => _state;
 
-  /// Speak the given [text] aloud.
+  /// Speak the given [text] aloud and wait for speech to finish.
+  ///
+  /// Returns when the utterance finishes or is cancelled. This blocking
+  /// behavior is essential for the voice pipeline -- callers need to know
+  /// when TTS is done before resuming the microphone.
+  ///
+  /// Includes a 30-second safety timeout: if iOS never fires the
+  /// finish/cancel delegate (e.g., audio session interrupted by phone call,
+  /// Bluetooth disconnect, system memory pressure), the method returns
+  /// instead of hanging the caller forever.
   ///
   /// Optional parameters:
   /// - [voiceId]: Platform voice identifier from [availableVoices].
@@ -144,7 +155,26 @@ class TtsService {
     double? pitch,
     double? volume,
   }) async {
+    if (text.isEmpty) return;
+
+    StreamSubscription<TtsEvent>? subscription;
+    Timer? timeout;
+
     try {
+      // Set up a completer that resolves when TTS finishes or is cancelled.
+      // Must subscribe to events BEFORE invoking speak to avoid race where
+      // the finish event fires before we start listening.
+      final completer = Completer<void>();
+
+      subscription = events.listen((event) {
+        if (event.type == TtsEventType.finish ||
+            event.type == TtsEventType.cancel) {
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        }
+      });
+
       await _methodChannel.invokeMethod('tts_speak', {
         'text': text,
         'voiceId': voiceId,
@@ -152,8 +182,24 @@ class TtsService {
         'pitch': pitch,
         'volume': volume,
       });
+
+      // Safety timeout: if iOS never fires the finish/cancel delegate
+      // (audio session interrupted, Bluetooth disconnect, synthesizer killed),
+      // force-complete so the caller doesn't hang forever.
+      timeout = Timer(const Duration(seconds: 30), () {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      // Wait for TTS to finish speaking (or be cancelled, or timeout).
+      await completer.future;
     } on MissingPluginException {
       // Non-iOS platform -- silently ignore.
+    } finally {
+      // Always clean up, even if invokeMethod throws an unexpected exception.
+      timeout?.cancel();
+      await subscription?.cancel();
     }
   }
 

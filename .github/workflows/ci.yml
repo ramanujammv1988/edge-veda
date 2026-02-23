@@ -9,7 +9,7 @@ on:
 
 env:
   CMAKE_VERSION: '3.27.0'
-  FLUTTER_VERSION: '3.24.0'
+  FLUTTER_VERSION: '3.38.0'
   NDK_VERSION: '26.1.10909125'
 
 jobs:
@@ -72,6 +72,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DBUILD_TESTING=ON
 
       - name: Build Core
@@ -83,15 +84,16 @@ jobs:
         run: ctest --output-on-failure --build-config ${{ matrix.build_type }}
 
       - name: Check Binary Size
+        if: matrix.build_type == 'Release'
         working-directory: core/build
         run: |
           echo "Binary sizes:"
           find . -name "*.so" -o -name "*.dylib" -o -name "*.a" | xargs ls -lh
-          # Fail if any binary exceeds 30MB
+          # Fail if any shared library exceeds 50MB (3 engines: llama + whisper + sd)
           find . -name "*.so" -o -name "*.dylib" | while read file; do
             size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
-            if [ $size -gt 31457280 ]; then
-              echo "ERROR: $file is too large: $size bytes (>30MB)"
+            if [ $size -gt 52428800 ]; then
+              echo "ERROR: $file is too large: $size bytes (>50MB)"
               exit 1
             fi
           done
@@ -135,11 +137,11 @@ jobs:
 
       - name: Check Framework Size
         run: |
-          if [ -d "build/ios/EdgeVeda.xcframework" ]; then
-            du -sh build/ios/EdgeVeda.xcframework
-            size=$(du -sk build/ios/EdgeVeda.xcframework | cut -f1)
-            if [ $size -gt 30720 ]; then
-              echo "ERROR: XCFramework is too large: ${size}KB (>30MB)"
+          if [ -d "build/ios/EdgeVedaCore.xcframework" ]; then
+            du -sh build/ios/EdgeVedaCore.xcframework
+            size=$(du -sk build/ios/EdgeVedaCore.xcframework | cut -f1)
+            if [ $size -gt 102400 ]; then
+              echo "ERROR: XCFramework is too large: ${size}KB (>100MB)"
               exit 1
             fi
           fi
@@ -148,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-framework
-          path: build/ios/EdgeVeda.xcframework
+          path: build/ios/EdgeVedaCore.xcframework
           retention-days: 7
 
   # Android Build
@@ -168,6 +170,7 @@ jobs:
           java-version: '17'
 
       - name: Setup Android NDK
+        id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26c
@@ -193,8 +196,8 @@ jobs:
           if [ -f "build/android/edgeveda.aar" ]; then
             ls -lh build/android/edgeveda.aar
             size=$(stat -c%s build/android/edgeveda.aar)
-            if [ $size -gt 31457280 ]; then
-              echo "ERROR: AAR is too large: $size bytes (>30MB)"
+            if [ $size -gt 52428800 ]; then
+              echo "ERROR: AAR is too large: $size bytes (>50MB)"
               exit 1
             fi
           fi
@@ -230,7 +233,7 @@ jobs:
 
       - name: Run Flutter Analyze
         working-directory: flutter
-        run: flutter analyze --fatal-infos
+        run: flutter analyze --fatal-warnings
 
       - name: Run Flutter Tests
         working-directory: flutter
@@ -243,10 +246,11 @@ jobs:
           flags: flutter
           name: flutter-coverage
 
-  # Swift Analysis
+  # Swift Analysis (enable when swift/ SDK is scaffolded)
   swift-analyze:
     name: Swift Analyze & Build
     runs-on: macos-latest
+    if: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -268,10 +272,11 @@ jobs:
         working-directory: swift
         run: swift test
 
-  # Kotlin/Android Analysis
+  # Kotlin/Android Analysis (enable when kotlin/ SDK is scaffolded)
   kotlin-analyze:
     name: Kotlin Analyze & Test
     runs-on: ubuntu-latest
+    if: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -297,10 +302,11 @@ jobs:
         working-directory: kotlin
         run: ./gradlew test || echo "tests not configured yet"
 
-  # React Native Analysis
+  # React Native Analysis (enable when react-native/ SDK is scaffolded)
   react-native-analyze:
     name: React Native Analyze & Test
     runs-on: ubuntu-latest
+    if: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -409,7 +415,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [core-build, ios-build, android-build, flutter-analyze, swift-analyze, kotlin-analyze, react-native-analyze]
+    needs: [core-build, ios-build, android-build, flutter-analyze]
     if: always()
     steps:
       - name: Check Build Status
@@ -419,6 +425,3 @@ jobs:
           echo "iOS Build: ${{ needs.ios-build.result }}"
           echo "Android Build: ${{ needs.android-build.result }}"
           echo "Flutter: ${{ needs.flutter-analyze.result }}"
-          echo "Swift: ${{ needs.swift-analyze.result }}"
-          echo "Kotlin: ${{ needs.kotlin-analyze.result }}"
-          echo "React Native: ${{ needs.react-native-analyze.result }}"

@@ -253,9 +253,9 @@
         }
     }
 
-    utterance.rate = rate ? [rate floatValue] : AVSpeechUtteranceDefaultSpeechRate;
-    utterance.pitchMultiplier = pitch ? [pitch floatValue] : 1.0f;
-    utterance.volume = volume ? [volume floatValue] : 1.0f;
+    utterance.rate = (rate && ![rate isEqual:[NSNull null]]) ? [rate floatValue] : AVSpeechUtteranceDefaultSpeechRate;
+    utterance.pitchMultiplier = (pitch && ![pitch isEqual:[NSNull null]]) ? [pitch floatValue] : 1.0f;
+    utterance.volume = (volume && ![volume isEqual:[NSNull null]]) ? [volume floatValue] : 1.0f;
 
     [_synthesizer speakUtterance:utterance];
 }
@@ -409,6 +409,10 @@
         [self handleGetCalendarInsights:call result:result];
     } else if ([@"getFreeDiskSpace" isEqualToString:call.method]) {
         [self handleGetFreeDiskSpace:result];
+    } else if ([@"configureVoicePipelineAudio" isEqualToString:call.method]) {
+        [self handleConfigureVoicePipelineAudio:result];
+    } else if ([@"resetAudioSession" isEqualToString:call.method]) {
+        [self handleResetAudioSession:result];
     } else if ([@"tts_speak" isEqualToString:call.method]) {
         NSDictionary *args = call.arguments;
         [_ttsHandler speakText:args[@"text"]
@@ -431,6 +435,73 @@
     } else {
         result(FlutterMethodNotImplemented);
     }
+}
+
+#pragma mark - Voice Pipeline Audio Session
+
+/// Configure AVAudioSession for voice pipeline: PlayAndRecord + Default mode.
+/// Enables simultaneous mic capture + TTS playback at full speaker volume.
+///
+/// We intentionally use AVAudioSessionModeDefault instead of VoiceChat because:
+/// - VoiceChat mode is designed for phone-to-ear conversations and applies
+///   heavy AGC, noise suppression, and volume reduction that degrades both
+///   speaker output volume and microphone quality for Whisper STT.
+/// - PlayAndRecord category inherently enables echo cancellation on iOS
+///   regardless of mode — VoiceChat is NOT required for echo cancellation.
+/// - DefaultToSpeaker routes audio to loudspeaker at full volume.
+/// - AllowBluetooth lets users use AirPods/headsets for voice conversations.
+- (void)handleConfigureVoicePipelineAudio:(FlutterResult)result {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+
+    // PlayAndRecord allows simultaneous mic input + speaker output.
+    // DefaultToSpeaker routes TTS to loudspeaker instead of earpiece.
+    // AllowBluetooth enables Bluetooth headset/AirPods for voice.
+    if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
+                  withOptions:(AVAudioSessionCategoryOptionDefaultToSpeaker |
+                               AVAudioSessionCategoryOptionAllowBluetooth)
+                        error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to set audio session category"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    // Default mode preserves natural speaker volume and mic sensitivity.
+    // Echo cancellation is provided by PlayAndRecord category, not by the mode.
+    if (![session setMode:AVAudioSessionModeDefault error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to set audio session mode"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    if (![session setActive:YES error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to activate audio session"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    result(@(YES));
+}
+
+/// Reset the audio session after voice pipeline stops.
+/// Deactivates the session and notifies other audio apps they can resume.
+- (void)handleResetAudioSession:(FlutterResult)result {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+
+    if (![session setActive:NO
+                withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                      error:&error]) {
+        result([FlutterError errorWithCode:@"AUDIO_SESSION"
+                                   message:@"Failed to deactivate audio session"
+                                   details:error.localizedDescription]);
+        return;
+    }
+
+    result(@(YES));
 }
 
 #pragma mark - Thermal

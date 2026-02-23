@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Developers can add on-device LLM inference to their Flutter apps with a simple API - text in, text out, on both iOS and Android.
-**Current focus:** Phase 23 Add Image Generation Capabilities. Plan 23-03 complete (ImageWorker + Dart API).
+**Current focus:** Phase 24 Voice Pipeline. Plan 24-01 complete (1/3 plans done).
 
 ## Current Position
 
-Phase: 23 (Add Image Generation Capabilities)
-Plan: 23-03 complete (3/4 plans done)
+Phase: 24 (Voice Pipeline — Unified STT -> LLM -> TTS Orchestration)
+Plan: 24-02 complete (2/3 plans done)
 Status: **In Progress**
-Last activity: 2026-02-20 - Completed quick task 8: ImageWorker Scheduler integration
+Last activity: 2026-02-20 - Completed 24-02: VoicePipeline conversation loop with LLM streaming, TTS, interruption
 
-Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4 complete)
+Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4, Phase 24: 2/3 complete)
 
 ## Milestone Summary
 
@@ -195,6 +195,33 @@ Phase 23 (Add Image Generation Capabilities) - IN PROGRESS
 ## Accumulated Context
 
 ### Decisions
+
+Quick task 10 (refactor VoicePipeline stop-mic) decisions:
+- Stop-mic pattern replaces barge-in: mic pauses during transcribing/thinking/speaking, resumes with 800ms cooldown
+- Fixed VAD threshold 0.03 replaces adaptive calibration (removes 2s startup delay)
+- Minimum 0.8s speech buffer (8 frames) prevents short noise from triggering processing
+- sendNow() push-to-talk method for immediate audio flush regardless of VAD
+- Audio level emitted every frame during listening via StateChanged for orb visualization
+- _onTtsEvent simplified to no-op; _processUserSpeech finally block handles mic resume after await _tts.speak()
+
+Phase 24 Plan 2 decisions:
+- LLM generation uses ChatSession.sendStream() with CancelToken for interruptible streaming
+- Post-TTS cooldown uses Timer-based _isCoolingDown flag + Future.delayed for state transition
+- Re-entrancy guard _isProcessingTurn prevents concurrent _processUserSpeech calls
+- Scheduler QoS uses local variable pattern for Dart null promotion on nullable _scheduler
+- Conversation turns stored in _turns list independent of ChatSession history (rollback/summarize safe)
+- TTS interruption starts cooldown before listening transition (prevents residual audio false detection)
+- pause() sets state to idle rather than adding a new "paused" enum value (simpler reuse)
+
+Phase 24 Plan 1 decisions:
+- VoicePipeline event-driven state machine: audio frames drive transitions, no async* generators
+- VAD threshold = mean + 2.5*stddev with 0.005 minimum clamp for adaptive speech detection
+- TTS threshold multiplier 1.5x (not 3x like RunAnywhere) balances echo rejection vs real interruption
+- Microphone stream called exactly once at start, never restarted (pause by not feeding to Whisper)
+- WhisperSession created without Scheduler to prevent double-registration (pipeline manages its own workload)
+- Audio NOT fed to WhisperSession during speaking/thinking states (echo prevention)
+- _processUserSpeech is a stub in Plan 01 (Plan 02 adds full LLM+TTS loop)
+- Frame buffer pattern: variable-size native audio chunks rebuffered into fixed 1600-sample frames
 
 Quick task 8 decisions:
 - Memory eviction is fire-and-forget via unawaited() to avoid blocking enforcement loop
@@ -477,6 +504,8 @@ Phase 9 Plan 3 decisions:
 - ev_vision_get_last_timings now exported in podspec and eagerly bound (supersedes lazy workaround from 09-03)
 
 (Prior decisions preserved in phase SUMMARY.md files)
+- [Phase quick-10]: Dynamic framework links Metal/MPS/Accelerate/libc++ internally; podspec uses vendored_frameworks (52 lines vs 205)
+- [Phase quick-10]: ffi constraint widened to ^2.0.0: DynamicLibrary.open() avoids the objective_c simulator crash from DynamicLibrary.process()
 
 ### Pending Todos
 
@@ -501,6 +530,8 @@ v1.1:
 | 7 | Strengthen enterprise-safe JSON/tool behavior (strict schema, recovery, telemetry) | 2026-02-20 | e822449, dcebd14 | [6-strengthen-enterprise-safe-tool-json-beh](./quick/6-strengthen-enterprise-safe-tool-json-beh/) |
 | 8 | ImageWorker Scheduler integration (QoS gating, latency tracking, memory eviction) | 2026-02-20 | 05518a8, 6a97bea | [7-image-generation-scheduler-integration-a](./quick/7-image-generation-scheduler-integration-a/) |
 | 9 | Add TTS via iOS AVSpeechSynthesizer + demo screen | 2026-02-20 | a29d60b, adea67e | [8-add-tts-via-ios-avspeechsynthesizer-plat](./quick/8-add-tts-via-ios-avspeechsynthesizer-plat/) |
+| 10 | Refactor VoicePipeline to stop-mic pattern (no calibration, no barge-in, sendNow, audio-reactive orb) | 2026-02-20 | 6713076, 7a47571 | [9-refactor-voicepipeline-adopt-stop-mic-pa](./quick/9-refactor-voicepipeline-adopt-stop-mic-pa/) |
+| 11 | Dynamic XCFramework + vendored_frameworks + ffi ^2.0.0 (eliminate use_modular_headers! requirement) | 2026-02-22 | 8793398, e4f030c, 4c6fc68 | [10-dynamic-xcframework-ffi-constraint-fix](./quick/10-dynamic-xcframework-ffi-constraint-fix/) |
 
 ### Blockers/Concerns
 
@@ -512,13 +543,13 @@ v1.1:
 - Xcode Command Line Tools only (users build XCFramework locally)
 - Android NDK not yet verified in dev environment
 - llama.cpp now at b7952 (upgraded from b4658)
-- ffi constrained to <2.1.0 (objective_c native assets crash on simulator)
+- ffi widened to ^2.0.0 (DynamicLibrary.open avoids objective_c process() crash)
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Completed quick task 9 (Add TTS via iOS AVSpeechSynthesizer + demo screen)
-Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
+Last session: 2026-02-22
+Stopped at: Completed quick-10 — Dynamic XCFramework + FFI Constraint Fix
+Resume file: .planning/phases/24-voice-pipeline-unified-stt-to-llm-to-tts-orchestration-with-real-time-voice-conversations/24-03-PLAN.md
 
 ---
 ### Roadmap Evolution
@@ -533,5 +564,8 @@ Resume file: .planning/phases/23-add-image-generation-capabilities/23-04-PLAN.md
 - Phase 22 added: On-Device Intent Engine Demo -- Virtual smart home app with LLM function calling, animated device dashboard, natural language home control, Home Assistant connector architecture
 - Phase 23 added: Add image generation capabilities
 - Phase 24 added: PR-1: Fix Image Worker Request Isolation -- prevent concurrent generateImage() cross-talk with per-request routing
+- Phase 24 added: Voice Pipeline — Unified STT → LLM → TTS orchestration with VAD, interruptible TTS, real-time voice conversations
+- Phase 25 added: LoRA Adapter Support — Hot-swappable fine-tuned adapters for domain specialization
+- Phase 26 added: Polished Example Apps — Production-quality sample apps for developer adoption and marketing
 
 *Phase 20 (Smart Model Advisor) COMPLETE: DeviceProfile with 27-entry iPhone DB, MemoryEstimator calibrated to real-world 400-550MB data, ModelAdvisor 4D scoring (fit/quality/speed/context) with use-case weighted recommendations. Settings screen shows tier badge + Recommended Models section with use-case selector chips and scored model cards. Human verified on real iPhone. Android work (Phases 5, 6, 7) deferred.*
