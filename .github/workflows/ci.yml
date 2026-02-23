@@ -137,9 +137,9 @@ jobs:
 
       - name: Check Framework Size
         run: |
-          if [ -d "build/ios/EdgeVedaCore.xcframework" ]; then
-            du -sh build/ios/EdgeVedaCore.xcframework
-            size=$(du -sk build/ios/EdgeVedaCore.xcframework | cut -f1)
+          if [ -d "flutter/ios/Frameworks/EdgeVedaCore.xcframework" ]; then
+            du -sh flutter/ios/Frameworks/EdgeVedaCore.xcframework
+            size=$(du -sk flutter/ios/Frameworks/EdgeVedaCore.xcframework | cut -f1)
             if [ $size -gt 102400 ]; then
               echo "ERROR: XCFramework is too large: ${size}KB (>100MB)"
               exit 1
@@ -150,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-framework
-          path: build/ios/EdgeVedaCore.xcframework
+          path: flutter/ios/Frameworks/EdgeVedaCore.xcframework
           retention-days: 7
 
   # Android Build
