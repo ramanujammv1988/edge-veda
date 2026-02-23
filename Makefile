@@ -116,53 +116,10 @@ build-macos-framework:
 # ============================================================================
 # iOS Build
 # ============================================================================
-build-ios: build-ios-device build-ios-simulator create-xcframework
-
-build-ios-device:
-	$(call print_header,Building C++ Core for iOS Device)
-	@mkdir -p $(BUILD_DIR)/ios-device
-	@cd $(BUILD_DIR)/ios-device && \
-		$(CMAKE) ../../$(CORE_DIR) \
-			-G Ninja \
-			-DCMAKE_TOOLCHAIN_FILE=../../$(CORE_DIR)/cmake/ios.toolchain.cmake \
-			-DPLATFORM=$(IOS_PLATFORM) \
-			-DDEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) \
-			-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
-			-DEDGE_VEDA_BUILD_SHARED=OFF \
-			-DEDGE_VEDA_BUILD_STATIC=ON \
-			-DBUILD_SHARED_LIBS=OFF
-	@cd $(BUILD_DIR)/ios-device && $(NINJA) -j $(NUM_JOBS)
-	$(call print_success,iOS device build complete)
-
-build-ios-simulator:
-	$(call print_header,Building C++ Core for iOS Simulator)
-	@mkdir -p $(BUILD_DIR)/ios-simulator
-	@cd $(BUILD_DIR)/ios-simulator && \
-		$(CMAKE) ../../$(CORE_DIR) \
-			-G Ninja \
-			-DCMAKE_TOOLCHAIN_FILE=../../$(CORE_DIR)/cmake/ios.toolchain.cmake \
-			-DPLATFORM=$(IOS_SIMULATOR_PLATFORM) \
-			-DDEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) \
-			-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
-			-DEDGE_VEDA_BUILD_SHARED=OFF \
-			-DEDGE_VEDA_BUILD_STATIC=ON \
-			-DBUILD_SHARED_LIBS=OFF
-	@cd $(BUILD_DIR)/ios-simulator && $(NINJA) -j $(NUM_JOBS)
-	$(call print_success,iOS simulator build complete)
-
-create-xcframework:
-	$(call print_header,Creating iOS XCFramework)
-	@mkdir -p $(BUILD_DIR)/ios
-	@if [ -d "$(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework" ]; then \
-		rm -rf $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework; \
-	fi
-	@xcodebuild -create-xcframework \
-		-library $(BUILD_DIR)/ios-device/libedge_veda.a \
-		-headers $(CORE_DIR)/include \
-		-library $(BUILD_DIR)/ios-simulator/libedge_veda.a \
-		-headers $(CORE_DIR)/include \
-		-output $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework
-	$(call print_success,XCFramework created: $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework)
+build-ios:
+	$(call print_header,Building iOS XCFramework via build-ios.sh)
+	@./scripts/build-ios.sh --clean --release
+	$(call print_success,iOS XCFramework built)
 
 # ============================================================================
 # Android Build
