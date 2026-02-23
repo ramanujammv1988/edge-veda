@@ -128,7 +128,7 @@ export 'src/model_manager.dart' show ModelManager, ModelRegistry;
 // Chat session (multi-turn conversation)
 export 'src/chat_session.dart' show ChatSession, ValidationEvent;
 export 'src/chat_types.dart' show ChatMessage, ChatRole, SystemPromptPreset;
-export 'src/chat_template.dart' show ChatTemplateFormat;
+export 'src/chat_template.dart' show ChatTemplateFormat, ChatTemplate;
 
 // Budget contracts and scheduler
 export 'src/budget.dart' show
@@ -179,6 +179,7 @@ export 'src/types.dart' show
 export 'src/vector_index.dart' show VectorIndex, SearchResult;
 
 // RAG pipeline
+export 'src/fts_index.dart' show FtsIndex;
 export 'src/rag_pipeline.dart' show RagPipeline, RagConfig;
 
 // Model advisor

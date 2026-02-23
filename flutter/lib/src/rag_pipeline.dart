@@ -22,6 +22,7 @@ library;
 import 'edge_veda_impl.dart';
 import 'types.dart';
 import 'vector_index.dart';
+import 'fts_index.dart';
 
 /// Configuration for the RAG pipeline
 class RagConfig {
@@ -51,6 +52,7 @@ class RagPipeline {
   final EdgeVeda _embedder;
   final EdgeVeda _generator;
   final VectorIndex _index;
+  final FtsIndex _ftsIndex;
   final RagConfig config;
 
   /// Create a RAG pipeline with a single EdgeVeda instance for both embedding
@@ -58,10 +60,12 @@ class RagPipeline {
   RagPipeline({
     required EdgeVeda edgeVeda,
     required VectorIndex index,
+    required FtsIndex ftsIndex,
     this.config = const RagConfig(),
   })  : _embedder = edgeVeda,
         _generator = edgeVeda,
-        _index = index;
+        _index = index,
+        _ftsIndex = ftsIndex;
 
   /// Create a RAG pipeline with separate embedding and generation models.
   ///
@@ -72,10 +76,12 @@ class RagPipeline {
     required EdgeVeda embedder,
     required EdgeVeda generator,
     required VectorIndex index,
+    required FtsIndex ftsIndex,
     this.config = const RagConfig(),
   })  : _embedder = embedder,
         _generator = generator,
-        _index = index;
+        _index = index,
+        _ftsIndex = ftsIndex;
 
   /// The underlying vector index
   VectorIndex get index => _index;
@@ -98,6 +104,7 @@ class RagPipeline {
         ...?metadata,
       },
     );
+    _ftsIndex.add(id, text);
   }
 
   /// Add multiple documents in batch
@@ -115,12 +122,9 @@ class RagPipeline {
     String queryText, {
     GenerateOptions? options,
   }) async {
-    // Step 1: Embed the query
-    final queryEmbedding = await _embedder.embed(queryText);
-
-    // Step 2: Search the vector index
-    final results = _index.query(
-      queryEmbedding.embedding,
+    // Step 1: Search the vector/FTS index (Hybrid search)
+    final results = await retrieve(
+      queryText,
       k: config.topK,
     );
 
@@ -160,12 +164,9 @@ class RagPipeline {
     GenerateOptions? options,
     CancelToken? cancelToken,
   }) async* {
-    // Step 1: Embed the query
-    final queryEmbedding = await _embedder.embed(queryText);
-
-    // Step 2: Search the vector index
-    final results = _index.query(
-      queryEmbedding.embedding,
+    // Step 1: Search the vector/FTS index (Hybrid search)
+    final results = await retrieve(
+      queryText,
       k: config.topK,
     );
 
@@ -200,10 +201,66 @@ class RagPipeline {
     String queryText, {
     int? k,
   }) async {
+    final searchK = k ?? config.topK;
+
+    // 1. Vector Search
     final queryEmbedding = await _embedder.embed(queryText);
-    return _index.query(
+    final vectorResults = _index.query(
       queryEmbedding.embedding,
-      k: k ?? config.topK,
+      k: searchK,
     );
+
+    // 2. Text Search (BM25)
+    final textScores = _ftsIndex.search(queryText);
+    final sortedTextResults = textScores.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    final bestTextResults = sortedTextResults.take(searchK).toList();
+
+    // 3. Reciprocal Rank Fusion (RRF)
+    final fusedScores = <String, double>{};
+    const rrfc = 60.0; // standard constant for RRF
+
+    for (int i = 0; i < vectorResults.length; i++) {
+      final id = vectorResults[i].id;
+      fusedScores[id] = (fusedScores[id] ?? 0.0) + (1.0 / (rrfc + i + 1));
+    }
+
+    for (int i = 0; i < bestTextResults.length; i++) {
+      final id = bestTextResults[i].key;
+      fusedScores[id] = (fusedScores[id] ?? 0.0) + (1.0 / (rrfc + i + 1));
+    }
+
+    // Convert back to SearchResult, sorting by fused score
+    final sortedFused = fusedScores.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    // Normalize fused scores to [0.0 - 1.0] so they survive upstream thresholds
+    double maxScore = sortedFused.isNotEmpty ? sortedFused.first.value : 0.0;
+
+    final finalResults = <SearchResult>[];
+    for (final entry in sortedFused) {
+      final id = entry.key;
+      final rawScore = entry.value;
+
+      Map<String, dynamic>? metadata;
+      try {
+        metadata = vectorResults.firstWhere((r) => r.id == id).metadata;
+      } catch (_) {
+        // Fallback: If VectorIndex didn't return this in topK, pull the text from FtsIndex
+        final docText = _ftsIndex.getDocument(id);
+        if (docText != null) {
+          metadata = {'text': docText};
+        }
+      }
+
+      finalResults.add(SearchResult(
+        id: id,
+        score: maxScore > 0 ? (rawScore / maxScore) : rawScore, // Normalize
+        metadata: metadata ?? {},
+      ));
+    }
+
+    return finalResults.take(searchK).toList();
   }
 }

@@ -107,9 +107,16 @@ class WhisperSession {
   /// Call [Stream.listen] to start capture, cancel the subscription to stop.
   static Stream<Float32List> microphone() {
     const channel = EventChannel('com.edgeveda.edge_veda/audio_capture');
+    int frameCount = 0;
     return channel
         .receiveBroadcastStream()
-        .map((data) => _decodeAudioSamples(data))
+        .map((data) {
+          frameCount++;
+          if (frameCount % 10 == 0) {
+            debugPrint('EdgeVeda: Received audio frame $frameCount, type: ${data.runtimeType}');
+          }
+          return _decodeAudioSamples(data);
+        })
         .where((samples) => samples.isNotEmpty);
   }
 

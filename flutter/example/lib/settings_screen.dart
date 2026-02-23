@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
@@ -406,15 +408,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Section 2: Storage ──────────────────────────────────────────────────
 
   Widget _buildStorageSection() {
-    // Sum known model sizes for the models used in the demo app
-    final models = [
-      ModelRegistry.llama32_1b,
-      ModelRegistry.smolvlm2_500m,
-      ModelRegistry.smolvlm2_500m_mmproj,
-      ModelRegistry.qwen3_06b,
+    // Dynamically use all registry models appropriate for this platform
+    final allModels = [
+      ...ModelRegistry.getAllModels(),
+      ...ModelRegistry.getVisionModels(),
+      ...ModelRegistry.getWhisperModels(),
+      ...ModelRegistry.getImageModels(),
+      ...ModelRegistry.getEmbeddingModels(),
     ];
-    final totalBytes = models.fold<int>(0, (sum, m) => sum + m.sizeBytes);
+    final platformModels = allModels.where(_isForThisPlatform).toList();
+    final totalBytes =
+        platformModels.fold<int>(0, (sum, m) => sum + m.sizeBytes);
     final totalGb = totalBytes / (1024 * 1024 * 1024);
+    final displayMax = Platform.isMacOS ? 64.0 : 4.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,7 +437,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Models',
+                        'Available Models',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 14,
@@ -439,7 +445,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     Text(
-                      '~${totalGb.toStringAsFixed(1)} GB',
+                      '~${totalGb.toStringAsFixed(1)} GB total',
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 14,
@@ -448,22 +454,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Storage bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
                   child: SizedBox(
                     height: 6,
                     child: Stack(
                       children: [
-                        // Background
                         Container(
-                          decoration: const BoxDecoration(
-                            color: AppTheme.surfaceVariant,
-                          ),
-                        ),
-                        // Fill (proportional to ~1.3GB out of ~4GB capacity estimate)
+                            decoration: const BoxDecoration(
+                                color: AppTheme.surfaceVariant)),
                         FractionallySizedBox(
-                          widthFactor: (totalGb / 4.0).clamp(0.0, 1.0),
+                          widthFactor: (totalGb / displayMax).clamp(0.0, 1.0),
                           child: Container(
                             decoration: BoxDecoration(
                               color: AppTheme.accent,
@@ -479,7 +480,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${totalGb.toStringAsFixed(1)} GB used',
+                    '${platformModels.length} models · ${totalGb.toStringAsFixed(1)} GB if all downloaded',
                     style: const TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 11,
@@ -494,36 +495,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── Section 3: Models ───────────────────────────────────────────────────
+  // ── Section 3: Models (platform-aware, grouped by category) ────────────
+
+  /// Returns true if this model should be shown on the current platform.
+  /// Desktop models (>2GB) are macOS-only; lightweight models show on both.
+  bool _isForThisPlatform(ModelInfo model) {
+    if (Platform.isMacOS) return true; // Mac sees everything
+    // iOS/Android: hide models that won't fit (<= 2GB threshold)
+    final sizeGB = model.sizeBytes / (1024 * 1024 * 1024);
+    return sizeGB <= 2.0;
+  }
+
+  String _platformBadge(ModelInfo model) {
+    final sizeGB = model.sizeBytes / (1024 * 1024 * 1024);
+    return sizeGB > 2.0 ? 'Mac' : 'Mobile';
+  }
+
+  Color _platformBadgeColor(ModelInfo model) {
+    final sizeGB = model.sizeBytes / (1024 * 1024 * 1024);
+    return sizeGB > 2.0 ? AppTheme.accent : AppTheme.success;
+  }
 
   Widget _buildModelsSection() {
-    final models = [
-      ModelRegistry.llama32_1b,
-      ModelRegistry.smolvlm2_500m,
-      ModelRegistry.smolvlm2_500m_mmproj,
-      ModelRegistry.qwen3_06b,
-    ];
+    final categories = <String, List<ModelInfo>>{
+      'Chat / LLM':
+          ModelRegistry.getAllModels().where(_isForThisPlatform).toList(),
+      'Vision': ModelRegistry
+          .getVisionModels()
+          .where((m) => !m.capabilities!.contains('vision-projector'))
+          .where(_isForThisPlatform)
+          .toList(),
+      'Speech (STT)':
+          ModelRegistry.getWhisperModels().where(_isForThisPlatform).toList(),
+      'Image Generation':
+          ModelRegistry.getImageModels().where(_isForThisPlatform).toList(),
+      'Embeddings':
+          ModelRegistry.getEmbeddingModels().where(_isForThisPlatform).toList(),
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('Models'),
-        _buildCard(
-          child: Column(
-            children: [
-              for (int i = 0; i < models.length; i++) ...[
-                _ModelRow(model: models[i], onDeleted: () => setState(() {})),
-                if (i < models.length - 1)
-                  const Divider(
-                    color: AppTheme.border,
-                    indent: 16,
-                    endIndent: 16,
-                    height: 1,
-                  ),
-              ],
-            ],
-          ),
-        ),
+        for (final entry in categories.entries)
+          if (entry.value.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 20, top: 16, bottom: 6),
+              child: Text(
+                entry.key.toUpperCase(),
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
+            _buildCard(
+              child: Column(
+                children: [
+                  for (int i = 0; i < entry.value.length; i++) ...[
+                    _ModelRow(
+                      model: entry.value[i],
+                      platformBadge: _platformBadge(entry.value[i]),
+                      platformBadgeColor: _platformBadgeColor(entry.value[i]),
+                      onDeleted: () => setState(() {}),
+                    ),
+                    if (i < entry.value.length - 1)
+                      const Divider(
+                        color: AppTheme.border,
+                        indent: 16,
+                        endIndent: 16,
+                        height: 1,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
       ],
     );
   }
@@ -733,9 +782,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _ModelRow extends StatefulWidget {
   final ModelInfo model;
+  final String platformBadge;
+  final Color platformBadgeColor;
   final VoidCallback? onDeleted;
 
-  const _ModelRow({required this.model, this.onDeleted});
+  const _ModelRow({
+    required this.model,
+    required this.platformBadge,
+    required this.platformBadgeColor,
+    this.onDeleted,
+  });
 
   @override
   State<_ModelRow> createState() => _ModelRowState();
@@ -743,6 +799,7 @@ class _ModelRow extends StatefulWidget {
 
 class _ModelRowState extends State<_ModelRow> {
   bool _isDeleting = false;
+  bool _isDownloading = false;
   bool? _isDownloaded;
 
   String _formatSize(int bytes) {
@@ -754,11 +811,44 @@ class _ModelRowState extends State<_ModelRow> {
   }
 
   IconData _modelIcon() {
-    if (widget.model.id.contains('mmproj')) return Icons.extension;
-    if (widget.model.id.contains('vlm') || widget.model.id.contains('smol')) {
-      return Icons.visibility;
-    }
+    final id = widget.model.id;
+    final family = widget.model.family ?? '';
+    if (id.contains('mmproj')) { return Icons.extension; }
+    if (family == 'whisper') { return Icons.mic; }
+    if (family == 'stable-diffusion' ||
+        family == 'stable-diffusion-xl' ||
+        family == 'flux') { return Icons.image; }
+    if (family == 'minilm' ||
+        family == 'nomic-embed' ||
+        family == 'mxbai-embed') { return Icons.hub; }
+    if (family == 'smolvlm' ||
+        family == 'llava' ||
+        family == 'qwen2vl') { return Icons.visibility; }
     return Icons.smart_toy;
+  }
+
+
+  Future<void> _startDownload() async {
+    setState(() => _isDownloading = true);
+    try {
+      await ModelManager().downloadModel(widget.model);
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _isDownloaded = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _confirmAndDelete() async {
@@ -819,12 +909,42 @@ class _ModelRowState extends State<_ModelRow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.model.name,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 14,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.model.name,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: widget.platformBadgeColor
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: widget.platformBadgeColor
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            widget.platformBadge,
+                            style: TextStyle(
+                              color: widget.platformBadgeColor,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -837,7 +957,16 @@ class _ModelRowState extends State<_ModelRow> {
                   ],
                 ),
               ),
-              if (snapshot.connectionState == ConnectionState.waiting ||
+              if (_isDownloading)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.accent,
+                  ),
+                )
+              else if (snapshot.connectionState == ConnectionState.waiting ||
                   _isDeleting)
                 const SizedBox(
                   width: 20,
@@ -848,25 +977,35 @@ class _ModelRowState extends State<_ModelRow> {
                   ),
                 )
               else ...[
-                Icon(
-                  isDownloaded
-                      ? Icons.check_circle
-                      : Icons.cloud_download_outlined,
-                  color:
-                      isDownloaded ? AppTheme.success : AppTheme.textTertiary,
-                  size: 20,
-                ),
-                if (isDownloaded) ...[
-                  const SizedBox(width: 8),
+                if (isDownloaded)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: AppTheme.success,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _confirmAndDelete,
+                        child: const Icon(
+                          Icons.delete_outline,
+                          color: AppTheme.textTertiary,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  )
+                else
                   GestureDetector(
-                    onTap: _confirmAndDelete,
+                    onTap: _startDownload,
                     child: const Icon(
-                      Icons.delete_outline,
-                      color: AppTheme.textTertiary,
+                      Icons.cloud_download_outlined,
+                      color: AppTheme.accent,
                       size: 20,
                     ),
                   ),
-                ],
               ],
             ],
           ),

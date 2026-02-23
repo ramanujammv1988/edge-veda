@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io' show File, Platform;
-
 import 'package:camera/camera.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
+import 'package:screen_capturer/screen_capturer.dart';
 
 /// App-level soak runner that keeps running even when the Soak screen is closed.
 class SoakTestService extends ChangeNotifier {
@@ -21,6 +22,7 @@ class SoakTestService extends ChangeNotifier {
 
   PerfTrace? _trace;
   CameraController? _cameraController;
+  Timer? _screenCaptureTimer;
 
   String? _modelPath;
   String? _mmprojPath;
@@ -53,12 +55,13 @@ class SoakTestService extends ChangeNotifier {
   DateTime? _startTime;
   bool _isManaged = true;
 
-  static const _testDuration = Duration(minutes: 10);
+  static const _testDuration = Duration(minutes: 30);
   static const _telemetryInterval = Duration(seconds: 2);
   static const _telemetryChannel =
       MethodChannel('com.edgeveda.edge_veda/telemetry');
 
-  bool get cameraSupported => Platform.isIOS || Platform.isAndroid;
+  /// True on any platform that can feed frames into the Vision pipeline
+  bool get cameraSupported => Platform.isIOS || Platform.isAndroid || Platform.isMacOS;
   CameraController? get cameraController => _cameraController;
   bool get isRunning => _isRunning;
   bool get isInitializing => _isInitializing;
@@ -115,13 +118,17 @@ class SoakTestService extends ChangeNotifier {
         await _visionWorker.initVision(
           modelPath: _modelPath!,
           mmprojPath: _mmprojPath!,
-          numThreads: 4,
+          numThreads: Platform.isMacOS ? 6 : 4,
           contextSize: 4096,
           useGpu: true,
         );
-        _statusMessage = 'Initializing camera...';
+        if (Platform.isMacOS) {
+          _statusMessage = 'Initializing screen capture...';
+        } else {
+          _statusMessage = 'Initializing camera...';
+          await _initializeCamera();
+        }
         notifyListeners();
-        await _initializeCamera();
       } else {
         _statusMessage = 'Monitoring user activity (manual soak mode)...';
         notifyListeners();
@@ -199,15 +206,20 @@ class SoakTestService extends ChangeNotifier {
       _isRunning = true;
       _isInitializing = false;
       _statusMessage = cameraSupported
-          ? 'Running in background...'
+          ? (Platform.isMacOS ? 'Screen capture running...' : 'Running in background...')
           : 'Monitoring user activity in background...';
       notifyListeners();
 
       if (cameraSupported) {
-        _startCameraStream();
+        if (Platform.isMacOS) {
+          _startScreenCaptureLoop();
+        } else {
+          _startCameraStream();
+        }
       }
     } catch (e) {
       _stopCameraStream();
+      _stopScreenCaptureLoop();
       _telemetryTimer?.cancel();
       _telemetryTimer = null;
       _elapsedTimer?.cancel();
@@ -232,6 +244,7 @@ class SoakTestService extends ChangeNotifier {
     _isInitializing = false;
 
     _stopCameraStream();
+    _stopScreenCaptureLoop();
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
     _elapsedTimer?.cancel();
@@ -263,38 +276,86 @@ class SoakTestService extends ChangeNotifier {
   }
 
   Future<void> _ensureModelsDownloaded() async {
-    const model = ModelRegistry.smolvlm2_500m;
-    const mmproj = ModelRegistry.smolvlm2_500m_mmproj;
+    // ── Step 1: find the best vision model already on disk ─────────────────
+    // Priority: prefer larger/more capable models on macOS, smaller on mobile.
+    // Accept a candidate even if only the mmproj is missing — we'll fetch it.
+    final candidates = Platform.isMacOS
+        ? [
+            ModelRegistry.qwen2vl_7b,
+            ModelRegistry.llava16_mistral_7b,
+            ModelRegistry.smolvlm2_500m,
+          ]
+        : [
+            ModelRegistry.smolvlm2_500m,
+          ];
 
-    final modelDownloaded = await _modelManager.isModelDownloaded(model.id);
-    final mmprojDownloaded = await _modelManager.isModelDownloaded(mmproj.id);
+    ModelInfo? selectedModel;
+    ModelInfo? selectedMmproj;
+    bool mmprojMissing = false;
 
-    if (!modelDownloaded || !mmprojDownloaded) {
-      _statusMessage = 'Downloading vision model...';
-      notifyListeners();
+    for (final candidate in candidates) {
+      final modelReady = await _modelManager.isModelDownloaded(candidate.id);
+      if (!modelReady) continue; // model itself missing — skip
 
-      if (!modelDownloaded) {
-        _modelPath = await _modelManager.downloadModel(model);
-      } else {
-        _modelPath = await _modelManager.getModelPath(model.id);
-      }
+      final mmproj = ModelRegistry.getMmprojForModel(candidate.id);
+      final mmprojReady =
+          mmproj == null || await _modelManager.isModelDownloaded(mmproj.id);
 
-      if (!mmprojDownloaded) {
-        _mmprojPath = await _modelManager.downloadModel(mmproj);
-      } else {
-        _mmprojPath = await _modelManager.getModelPath(mmproj.id);
-      }
-    } else {
-      _modelPath = await _modelManager.getModelPath(model.id);
-      _mmprojPath = await _modelManager.getModelPath(mmproj.id);
+      selectedModel = candidate;
+      selectedMmproj = mmproj;
+      mmprojMissing = !mmprojReady;
+      debugPrint('[SoakTest] matched model: ${candidate.id} (mmprojMissing=$mmprojMissing)');
+      break;
     }
+
+    // ── Step 2: upgrade or download the best model for this platform ──────
+    // On macOS, if only the mobile-tier SmolVLM2 is available, upgrade to
+    // Qwen2-VL 7B which produces far better screen descriptions.
+    if (selectedModel == null ||
+        (Platform.isMacOS && selectedModel.id == ModelRegistry.smolvlm2_500m.id)) {
+      if (Platform.isMacOS) {
+        selectedModel = ModelRegistry.qwen2vl_7b;
+        selectedMmproj = ModelRegistry.qwen2vl_7b_mmproj;
+      } else {
+        selectedModel = ModelRegistry.smolvlm2_500m;
+        selectedMmproj = ModelRegistry.smolvlm2_500m_mmproj;
+      }
+
+      final modelReady = await _modelManager.isModelDownloaded(selectedModel.id);
+      if (!modelReady) {
+        _statusMessage = 'Downloading ${selectedModel.name} (${_formatBytes(selectedModel.sizeBytes)})...';
+        notifyListeners();
+        await _modelManager.downloadModel(selectedModel);
+      }
+      mmprojMissing = true; // always check mmproj for the new model
+    }
+
+    // ── Step 2b: download missing mmproj only ──────────────────────────────
+    if (mmprojMissing && selectedMmproj != null) {
+      _statusMessage = 'Downloading mmproj for ${selectedModel.id}...';
+      notifyListeners();
+      await _modelManager.downloadModel(selectedMmproj);
+    }
+
+    // ── Step 3: resolve on-disk paths ───────────────────────────────────────
+    _modelPath = await _modelManager.getModelPath(selectedModel.id);
+    _mmprojPath = selectedMmproj != null
+        ? await _modelManager.getModelPath(selectedMmproj.id)
+        : null;
+
+    debugPrint('[SoakTest] model=$_modelPath');
+    debugPrint('[SoakTest] mmproj=$_mmprojPath');
   }
+
 
   Future<void> _disposeInferenceWorkers() async {
     await _visionWorker.dispose();
   }
 
   Future<void> _initializeCamera() async {
+    // macOS uses screen capture instead of a camera.
+    if (Platform.isMacOS) return;
+
     if (_cameraController != null && _cameraController!.value.isInitialized) {
       return;
     }
@@ -320,6 +381,70 @@ class SoakTestService extends ChangeNotifier {
     );
 
     await _cameraController!.initialize();
+  }
+
+  // ── macOS Screen Capture ──────────────────────────────────────────────────
+
+  String? _cachedTempPath;
+  int _lastFrameHash = 0;
+
+  /// On macOS, poll the desktop at ~1 FPS and funnel each frame through the
+  /// same [FrameQueue] / [_processNextFrame] pipeline used by the camera stream.
+  void _startScreenCaptureLoop() {
+    _screenCaptureTimer?.cancel();
+    _screenCaptureTimer = Timer.periodic(
+      const Duration(milliseconds: 1500), // ~0.7 FPS — gentle on GPU
+      (_) async {
+        if (!_isRunning) return;
+        try {
+          _cachedTempPath ??=
+              '${(await getTemporaryDirectory()).path}/screen_frame.png';
+
+          final capturedData = await ScreenCapturer.instance.capture(
+            mode: CaptureMode.screen,
+            imagePath: _cachedTempPath!,
+            copyToClipboard: false,
+            silent: true,
+          );
+          if (capturedData?.imageBytes == null) return;
+
+          // Decode PNG → raw RGB using the `image` package (dart-native).
+          final decoded = img.decodePng(capturedData!.imageBytes!);
+          if (decoded == null) return;
+
+          // Down-scale to 320-wide — CLIP patch count is proportional to
+          // resolution squared; 320 vs 640 gives ~4× fewer patches and
+          // proportionally faster image encoding (~750ms vs ~3000ms).
+          final scaled = decoded.width > 320
+              ? img.copyResize(decoded, width: 320)
+              : decoded;
+
+          // Bulk-extract bytes in RGB order (avoids slow per-pixel getPixel).
+          final rgb = Uint8List.fromList(
+              scaled.getBytes(order: img.ChannelOrder.rgb));
+
+          // Frame-diff: skip if the screen hasn't changed. Sample 64 evenly
+          // spaced pixels and hash them. Identical hash = identical frame.
+          final stride = rgb.length ~/ 64;
+          var hash = 0;
+          for (int i = 0; i < rgb.length; i += stride) {
+            hash = (hash * 31 + rgb[i]) & 0x7FFFFFFF;
+          }
+          if (hash == _lastFrameHash) return; // screen unchanged — skip
+          _lastFrameHash = hash;
+
+          _frameQueue.enqueue(rgb, scaled.width, scaled.height);
+          unawaited(_processNextFrame());
+        } catch (e) {
+          debugPrint('[SoakTest] screen capture error: $e');
+        }
+      },
+    );
+  }
+
+  void _stopScreenCaptureLoop() {
+    _screenCaptureTimer?.cancel();
+    _screenCaptureTimer = null;
   }
 
   void _startCameraStream() {
@@ -493,5 +618,12 @@ class SoakTestService extends ChangeNotifier {
     } catch (_) {
       // Ignore telemetry poll errors to keep soak running.
     }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }

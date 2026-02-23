@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
 
 import 'app_theme.dart';
+import 'model_selector.dart';
 
 /// Voice conversation demo tab with animated orb, transcript, and mic toggle.
 ///
@@ -55,6 +56,10 @@ class _VoiceScreenState extends State<VoiceScreen>
   final TtsService _tts = TtsService();
   String? _whisperModelPath;
 
+  // Selected models (resolved by ModelSelector)
+  ModelInfo? _selectedWhisper;
+  ModelInfo? _selectedLlm;
+
   // Orb animation
   late AnimationController _orbController;
 
@@ -99,21 +104,21 @@ class _VoiceScreenState extends State<VoiceScreen>
 
     final mm = ModelManager();
     try {
-      final whisperDownloaded =
-          await mm.isModelDownloaded(ModelRegistry.whisperTinyEn.id);
-      final llmDownloaded =
-          await mm.isModelDownloaded(ModelRegistry.llama32_1b.id);
+      final whisperSel = await ModelSelector.bestWhisper(mm);
+      final llmSel = await ModelSelector.bestLlm(mm);
+
+      _selectedWhisper = whisperSel.model;
+      _selectedLlm = llmSel.model;
 
       if (mounted) {
         setState(() {
-          _whisperReady = whisperDownloaded;
-          _llmReady = llmDownloaded;
+          _whisperReady = !whisperSel.needsDownload;
+          _llmReady = !llmSel.needsDownload;
           _isCheckingModels = false;
         });
       }
 
-      // If both ready, prepare model paths
-      if (whisperDownloaded && llmDownloaded) {
+      if (!whisperSel.needsDownload && !llmSel.needsDownload) {
         await _prepareModels(mm);
       }
     } catch (e) {
@@ -126,10 +131,11 @@ class _VoiceScreenState extends State<VoiceScreen>
   }
 
   Future<void> _prepareModels(ModelManager mm) async {
-    _whisperModelPath =
-        await mm.getModelPath(ModelRegistry.whisperTinyEn.id);
+    final whisper = _selectedWhisper ?? ModelRegistry.whisperTinyEn;
+    final llm = _selectedLlm ?? ModelRegistry.llama32_1b;
 
-    final llmPath = await mm.getModelPath(ModelRegistry.llama32_1b.id);
+    _whisperModelPath = await mm.getModelPath(whisper.id);
+    final llmPath = await mm.getModelPath(llm.id);
 
     _edgeVeda = EdgeVeda();
     await _edgeVeda!.init(EdgeVedaConfig(
@@ -166,51 +172,49 @@ class _VoiceScreenState extends State<VoiceScreen>
     try {
       // Download whisper model if needed
       if (!_whisperReady) {
-        setState(() => _downloadStatus = 'Downloading Whisper model...');
+        final whisper = _selectedWhisper ?? ModelRegistry.whisperTinyEn;
+        setState(() => _downloadStatus = 'Downloading ${whisper.name}...');
 
         _downloadSubscription = mm.downloadProgress.listen((progress) {
           if (mounted) {
             setState(() {
               _downloadProgress = progress.progress;
-              _downloadStatus =
-                  'Whisper: ${progress.progressPercent}%';
+              _downloadStatus = '${whisper.name}: ${progress.progressPercent}%';
             });
           }
         });
 
-        await mm.downloadModel(ModelRegistry.whisperTinyEn);
+        await mm.downloadModel(whisper);
+        _selectedWhisper = whisper;
         _downloadSubscription?.cancel();
         _downloadSubscription = null;
 
-        if (mounted) {
-          setState(() => _whisperReady = true);
-        }
+        if (mounted) setState(() => _whisperReady = true);
       }
 
       // Download LLM model if needed
       if (!_llmReady) {
+        final llm = _selectedLlm ?? ModelRegistry.llama32_1b;
         setState(() {
           _downloadProgress = 0.0;
-          _downloadStatus = 'Downloading LLM model...';
+          _downloadStatus = 'Downloading ${llm.name}...';
         });
 
         _downloadSubscription = mm.downloadProgress.listen((progress) {
           if (mounted) {
             setState(() {
               _downloadProgress = progress.progress;
-              _downloadStatus =
-                  'LLM: ${progress.progressPercent}%';
+              _downloadStatus = '${llm.name}: ${progress.progressPercent}%';
             });
           }
         });
 
-        await mm.downloadModel(ModelRegistry.llama32_1b);
+        await mm.downloadModel(llm);
+        _selectedLlm = llm;
         _downloadSubscription?.cancel();
         _downloadSubscription = null;
 
-        if (mounted) {
-          setState(() => _llmReady = true);
-        }
+        if (mounted) setState(() => _llmReady = true);
       }
 
       // Prepare model instances
@@ -477,13 +481,13 @@ class _VoiceScreenState extends State<VoiceScreen>
             const SizedBox(height: 24),
             // Model status indicators
             _buildModelStatus(
-              'Whisper Tiny (77 MB)',
+              _selectedWhisper?.name ?? 'Whisper Tiny (77 MB)',
               _whisperReady,
               Icons.mic,
             ),
             const SizedBox(height: 8),
             _buildModelStatus(
-              'Llama 3.2 1B (668 MB)',
+              _selectedLlm?.name ?? 'Llama 3.2 1B (668 MB)',
               _llmReady,
               Icons.smart_toy,
             ),

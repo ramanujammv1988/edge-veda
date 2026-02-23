@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const ChatScreen(),
           VisionScreen(isActive: _currentIndex == 1),
-          const VoiceScreen(),
+          const SttScreen(),
           const ImageScreen(),
           const SettingsScreen(),
         ],
@@ -88,9 +88,9 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Vision',
           ),
           NavigationDestination(
-            icon: Icon(Icons.record_voice_over_outlined),
-            selectedIcon: Icon(Icons.record_voice_over),
-            label: 'Voice',
+            icon: Icon(Icons.mic_outlined),
+            selectedIcon: Icon(Icons.mic),
+            label: 'STT',
           ),
           NavigationDestination(
             icon: Icon(Icons.image_outlined),
@@ -148,9 +148,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String _statusMessage = 'Ready to initialize';
 
   // RAG document state
-  RagPipeline? _ragPipeline;
-  VectorIndex? _vectorIndex;
   EdgeVeda? _ragEmbedder; // Separate EdgeVeda for embedding model
+  VectorIndex? _vectorIndex;
+  FtsIndex? _ftsIndex;
+  RagPipeline? _ragPipeline;
   String? _attachedDocName; // Display name of attached document
   int _attachedChunkCount = 0;
   bool _isIndexingDocument = false;
@@ -703,6 +704,8 @@ Answer:
 
   static String _postCleanModelResponse(String response) {
     var cleaned = response.replaceAll('\u0000', '').trim();
+    // Strip LLaMA / ChatML special tokens
+    cleaned = cleaned.replaceAll(RegExp(r'<\|.*?\|>'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\r\n?'), '\n');
     cleaned = cleaned.replaceAll(RegExp(r'[ \t]+'), ' ');
     cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
@@ -978,6 +981,7 @@ Answer:
     }
 
     setState(() {
+      _ragMessages.clear();
       _isIndexingDocument = true;
       _indexingProgress = 0;
       _indexingTotal = 0;
@@ -1072,15 +1076,17 @@ Answer:
       final embeddings = await _ragEmbedder!.embedBatch(chunks);
       embedSw.stop();
 
-      // Step 7: Build vector index
+      // Step 7: Build vector and FTS index
       final indexSw = Stopwatch()..start();
       _vectorIndex = VectorIndex(dimensions: 384);
+      _ftsIndex = FtsIndex();
       for (int i = 0; i < chunks.length; i++) {
         _vectorIndex!.add(
           'chunk_$i',
           embeddings[i].embedding,
           metadata: {'text': chunks[i]},
         );
+        _ftsIndex!.add('chunk_$i', chunks[i]);
       }
       indexSw.stop();
 
@@ -1094,6 +1100,7 @@ Answer:
         embedder: _ragEmbedder!,
         generator: _edgeVeda,
         index: _vectorIndex!,
+        ftsIndex: _ftsIndex!,
         config: const RagConfig(
           topK: 4,
           minScore: 0.15,
@@ -1220,8 +1227,10 @@ Answer:
     _ragEmbedder?.dispose(); // Free embedding model memory
     _ragEmbedder = null;
     setState(() {
+      _ragMessages.clear();
       _ragPipeline = null;
       _vectorIndex = null;
+      _ftsIndex = null;
       _attachedDocName = null;
       _attachedChunkCount = 0;
       _statusMessage = 'Ready to chat!';
@@ -1357,9 +1366,20 @@ Answer:
         return;
       }
 
-      ragPrompt = _strictRagPromptTemplate
-          .replaceAll('{context}', contextParts.join('\n\n'))
-          .replaceAll('{query}', cleanedPrompt);
+      final ragSystemPrompt = '''You are an on-device document QA assistant.
+Answer ONLY from the provided context.
+If the context does not contain the answer, reply exactly:
+"I couldn't find that in the attached document."
+Keep answers concise and factual.
+
+Context:
+${contextParts.join('\n\n')}''';
+
+      ragPrompt = ChatTemplate.format(
+        template: _session?.templateFormat ?? ChatTemplateFormat.llama3Instruct,
+        systemPrompt: ragSystemPrompt,
+        messages: _ragMessages,
+      );
 
       final stream = _edgeVeda.generateStream(
         ragPrompt,
@@ -1369,6 +1389,7 @@ Answer:
           topP: 0.9,
           topK: 40,
           repeatPenalty: 1.05,
+          stopSequences: ['<|eot_id|>', '<|start_header_id|>', '<|end_header_id|>', '<|end_of_text|>'],
         ),
         cancelToken: _cancelToken,
       );
@@ -1413,7 +1434,7 @@ Answer:
           setState(() {
             _statusMessage =
                 'Streaming from document... ($_streamingTokenCount tokens)';
-            _streamingText = buffer.toString();
+            _streamingText = buffer.toString().replaceAll(RegExp(r'<\|.*?\|>'), '');
           });
           _scrollToBottom();
         }
@@ -1532,15 +1553,21 @@ Answer:
           final fallback = await _edgeVeda
               .generate(
                 ragPrompt ??
-                    _strictRagPromptTemplate
-                        .replaceAll('{context}', '')
-                        .replaceAll('{query}', cleanedPrompt),
+                    ChatTemplate.format(
+                      template: _session?.templateFormat ?? ChatTemplateFormat.llama3Instruct,
+                      systemPrompt: '''You are an on-device document QA assistant. Answer ONLY from the provided context. If the context does not contain the answer, reply exactly: "I couldn't find that in the attached document." Keep answers concise and factual.
+
+Context:
+''',
+                      messages: _ragMessages,
+                    ),
                 options: const GenerateOptions(
                   maxTokens: 220,
                   temperature: 0.15,
                   topP: 0.9,
                   topK: 40,
                   repeatPenalty: 1.05,
+                  stopSequences: ['<|eot_id|>', '<|start_header_id|>', '<|end_header_id|>', '<|end_of_text|>'],
                 ),
               )
               .timeout(const Duration(seconds: 120));
@@ -1796,8 +1823,9 @@ Answer:
             _streamingTokenCount % 3 == 0 ||
             chunk.token.contains('\n')) {
           setState(() {
-            _statusMessage = 'Streaming... ($_streamingTokenCount tokens)';
-            _streamingText = buffer.toString();
+            _statusMessage =
+                'Tokens: $_streamingTokenCount${_timeToFirstTokenMs != null ? ' (TTFT: ${_timeToFirstTokenMs}ms)' : ''}';
+            _streamingText = buffer.toString().replaceAll(RegExp(r'<\|.*?\|>'), '');
           });
           _scrollToBottom();
         }

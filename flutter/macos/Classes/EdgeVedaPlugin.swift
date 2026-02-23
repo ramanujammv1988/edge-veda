@@ -1,6 +1,7 @@
 import Cocoa
 import FlutterMacOS
 import AVFoundation
+import CoreAudio
 import Photos
 import EventKit
 import IOKit.ps
@@ -72,6 +73,16 @@ class EVAudioCaptureHandler: NSObject, FlutterStreamHandler {
     func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         self.eventSink = events
 
+        // Check microphone permission before starting
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        guard authStatus == .authorized else {
+            return FlutterError(
+                code: "MIC_PERMISSION_DENIED",
+                message: "Microphone permission not granted (status=\(authStatus.rawValue)). Call requestMicrophonePermission first.",
+                details: nil
+            )
+        }
+
         do {
             let engine = AVAudioEngine()
             self.audioEngine = engine
@@ -108,7 +119,7 @@ class EVAudioCaptureHandler: NSObject, FlutterStreamHandler {
                 self.audioEngine = nil
                 return FlutterError(
                     code: "AUDIO_CONVERTER_FAILED",
-                    message: "Failed to create audio format converter",
+                    message: "Failed to create audio format converter from \(nativeFormat.sampleRate)Hz to 16kHz",
                     details: nil
                 )
             }
@@ -178,9 +189,104 @@ class EVAudioCaptureHandler: NSObject, FlutterStreamHandler {
     }
 }
 
+// MARK: - TtsStreamHandler
+
+/// Stream handler for TTS events (word boundaries, start/finish/cancel).
+/// Also serves as AVSpeechSynthesizerDelegate to receive speech callbacks.
+class EVTtsHandler: NSObject, FlutterStreamHandler, AVSpeechSynthesizerDelegate {
+    private var synthesizer: AVSpeechSynthesizer
+    private var eventSink: FlutterEventSink?
+
+    override init() {
+        self.synthesizer = AVSpeechSynthesizer()
+        super.init()
+        self.synthesizer.delegate = self
+    }
+
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        self.eventSink = events
+        return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        self.eventSink = nil
+        return nil
+    }
+
+    func speakText(_ text: String, voiceId: String?, rate: NSNumber?, pitch: NSNumber?, volume: NSNumber?) {
+        let utterance = AVSpeechUtterance(string: text)
+        if let vid = voiceId, let voice = AVSpeechSynthesisVoice(identifier: vid) {
+            utterance.voice = voice
+        }
+        if let r = rate { utterance.rate = r.floatValue }
+        if let p = pitch { utterance.pitchMultiplier = p.floatValue }
+        if let v = volume { utterance.volume = v.floatValue }
+        synthesizer.speak(utterance)
+    }
+
+    func stop() -> Bool {
+        return synthesizer.stopSpeaking(at: .immediate)
+    }
+
+    func pause() -> Bool {
+        return synthesizer.pauseSpeaking(at: .immediate)
+    }
+
+    func resume() -> Bool {
+        return synthesizer.continueSpeaking()
+    }
+
+    func availableVoices() -> [[String: Any]] {
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        var all: [[String: Any]] = []
+        var enhanced: [[String: Any]] = []
+
+        for voice in allVoices {
+            let dict: [String: Any] = [
+                "id": voice.identifier,
+                "name": voice.name,
+                "language": voice.language,
+                "quality": voice.quality.rawValue
+            ]
+            all.append(dict)
+            if voice.quality.rawValue >= AVSpeechSynthesisVoiceQuality.enhanced.rawValue {
+                enhanced.append(dict)
+            }
+        }
+        return enhanced.count > 0 ? enhanced : all
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
+        guard let sink = self.eventSink else { return }
+        let word = (utterance.speechString as NSString).substring(with: characterRange)
+        DispatchQueue.main.async {
+            sink([
+                "type": "wordBoundary",
+                "start": characterRange.location,
+                "length": characterRange.length,
+                "text": word
+            ])
+        }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { self.eventSink?(["type": "start"]) }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { self.eventSink?(["type": "finish"]) }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { self.eventSink?(["type": "cancel"]) }
+    }
+}
+
 // MARK: - EdgeVedaPlugin
 
 public class EdgeVedaPlugin: NSObject, FlutterPlugin {
+
+    private var ttsHandler: EVTtsHandler?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         // MethodChannel for on-demand telemetry polling
@@ -205,6 +311,15 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
             binaryMessenger: registrar.messenger
         )
         audioChannel.setStreamHandler(EVAudioCaptureHandler())
+
+        // EventChannel for TTS events
+        let ttsHandler = EVTtsHandler()
+        instance.ttsHandler = ttsHandler
+        let ttsChannel = FlutterEventChannel(
+            name: "com.edgeveda.edge_veda/tts_events",
+            binaryMessenger: registrar.messenger
+        )
+        ttsChannel.setStreamHandler(ttsHandler)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -235,9 +350,122 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
             handleGetCalendarInsights(call, result: result)
         case "getFreeDiskSpace":
             handleGetFreeDiskSpace(result)
+        case "configureVoicePipelineAudio":
+            handleConfigureVoicePipelineAudio(result)
+        case "resetAudioSession":
+            handleResetAudioSession(result)
+        case "tts_speak":
+            guard let args = call.arguments as? [String: Any],
+                  let text = args["text"] as? String else {
+                result(FlutterError(code: "INVALID_ARG", message: "Missing 'text' argument", details: nil))
+                return
+            }
+            ttsHandler?.speakText(
+                text,
+                voiceId: args["voiceId"] as? String,
+                rate: args["rate"] as? NSNumber,
+                pitch: args["pitch"] as? NSNumber,
+                volume: args["volume"] as? NSNumber
+            )
+            result(true)
+        case "tts_stop":
+            let _ = ttsHandler?.stop()
+            result(true)
+        case "tts_pause":
+            let _ = ttsHandler?.pause()
+            result(true)
+        case "tts_resume":
+            let _ = ttsHandler?.resume()
+            result(true)
+        case "tts_voices":
+            result(ttsHandler?.availableVoices() ?? [])
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    // MARK: - Voice Pipeline Audio Session
+
+    /// Configure audio for voice pipeline on macOS.
+    ///
+    /// macOS does not have AVAudioSession like iOS. Instead we:
+    /// 1. Verify a usable audio input device exists (mic / headset / Bluetooth)
+    /// 2. On macOS 12+ claim audio routing via AVAudioRoutingArbiter so the
+    ///    system knows we intend simultaneous capture + playback and routes
+    ///    audio accordingly (equivalent to iOS PlayAndRecord category).
+    /// 3. Validate the default input device is operational.
+    private func handleConfigureVoicePipelineAudio(_ result: FlutterResult) {
+        // 1. Verify an audio input device is available
+        var defaultInputID = AudioDeviceID(0)
+        var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0, nil,
+            &propertySize,
+            &defaultInputID
+        )
+
+        if status != noErr || defaultInputID == kAudioObjectUnknown {
+            result(FlutterError(
+                code: "AUDIO_INPUT_UNAVAILABLE",
+                message: "No default audio input device found",
+                details: "OSStatus=\(status)"
+            ))
+            return
+        }
+
+        // 2. Verify the input device is alive (not disconnected)
+        var isAlive: UInt32 = 0
+        var aliveSize = UInt32(MemoryLayout<UInt32>.size)
+        var aliveAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectGetPropertyData(defaultInputID, &aliveAddr, 0, nil, &aliveSize, &isAlive)
+
+        if isAlive == 0 {
+            result(FlutterError(
+                code: "AUDIO_INPUT_NOT_ALIVE",
+                message: "Default audio input device is not operational",
+                details: nil
+            ))
+            return
+        }
+
+        // 3. On macOS 12+, begin audio routing arbitration.
+        //    This tells the system we want simultaneous capture + playback,
+        //    equivalent to iOS AVAudioSession PlayAndRecord category.
+        if #available(macOS 12.0, *) {
+            AVAudioRoutingArbiter.shared.begin(category: .playAndRecordVoice) { deviceChanged, error in
+                if let error = error {
+                    os_log(.error, "Audio routing arbitration error: %{public}@", error.localizedDescription)
+                } else if deviceChanged {
+                    os_log(.info, "Audio routing device changed during voice pipeline")
+                }
+            }
+        }
+
+        result(true)
+    }
+
+    /// Reset the audio session after voice pipeline stops.
+    ///
+    /// On macOS 12+, leaves audio routing arbitration so the system can
+    /// reclaim routing priority for other apps (equivalent to iOS
+    /// AVAudioSession deactivation with NotifyOthersOnDeactivation).
+    private func handleResetAudioSession(_ result: FlutterResult) {
+        if #available(macOS 12.0, *) {
+            AVAudioRoutingArbiter.shared.leave()
+        }
+        result(true)
     }
 
     // MARK: - Thermal
@@ -316,23 +544,45 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
     }
 
     /// Returns available memory in bytes.
+    ///
+    /// On macOS 12+, uses os_proc_available_memory() which returns the
+    /// per-process memory available before the system terminates the app
+    /// (equivalent to iOS behavior). This is critical for the Scheduler/Budget
+    /// engine to make correct QoS decisions.
+    ///
+    /// Falls back to vm_statistics64 (system-wide free + inactive) on macOS 11
+    /// which over-reports but is the best available metric.
     private func handleGetAvailableMemory(_ result: FlutterResult) {
-        var vmStats = vm_statistics64()
-        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<natural_t>.size)
-
-        let kerr = withUnsafeMutablePointer(to: &vmStats) { vmStatsPtr in
-            vmStatsPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rawPtr in
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, rawPtr, &count)
-            }
-        }
-
-        if kerr == KERN_SUCCESS {
-            let pageSize = Int64(vm_kernel_page_size)
-            let free = Int64(vmStats.free_count) * pageSize
-            let inactive = Int64(vmStats.inactive_count) * pageSize
-            result(free + inactive)
+        // os_proc_available_memory() is a C function declared in <os/proc.h>.
+        // Import it as a dynamically-resolved symbol since Swift doesn't expose
+        // it directly on macOS despite it being available at runtime since 12.0.
+        typealias ProcAvailMemFn = @convention(c) () -> Int
+        if let handle = dlopen(nil, RTLD_LAZY),
+           let sym = dlsym(handle, "os_proc_available_memory") {
+            let fn = unsafeBitCast(sym, to: ProcAvailMemFn.self)
+            let available = fn()
+            result(Int64(available))
         } else {
-            result(Int64(0))
+            // Fallback for macOS 11: system-wide free + inactive pages.
+            // Over-reports compared to per-process limit but is the best
+            // available metric on older macOS.
+            var vmStats = vm_statistics64()
+            var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<natural_t>.size)
+
+            let kerr = withUnsafeMutablePointer(to: &vmStats) { vmStatsPtr in
+                vmStatsPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rawPtr in
+                    host_statistics64(mach_host_self(), HOST_VM_INFO64, rawPtr, &count)
+                }
+            }
+
+            if kerr == KERN_SUCCESS {
+                let pageSize = Int64(vm_kernel_page_size)
+                let free = Int64(vmStats.free_count) * pageSize
+                let inactive = Int64(vmStats.inactive_count) * pageSize
+                result(free + inactive)
+            } else {
+                result(Int64(0))
+            }
         }
     }
 
