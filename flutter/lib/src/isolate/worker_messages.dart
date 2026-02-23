@@ -159,18 +159,12 @@ class TokenResponse extends WorkerResponse {
   });
 
   /// Create response for successful token
-  factory TokenResponse.token(String token) => TokenResponse(
-        token: token,
-        isFinal: false,
-        errorCode: 0,
-      );
+  factory TokenResponse.token(String token) =>
+      TokenResponse(token: token, isFinal: false, errorCode: 0);
 
   /// Create response for stream end
-  factory TokenResponse.end() => TokenResponse(
-        token: null,
-        isFinal: true,
-        errorCode: 0,
-      );
+  factory TokenResponse.end() =>
+      TokenResponse(token: null, isFinal: true, errorCode: 0);
 }
 
 /// Stream error occurred

@@ -27,7 +27,8 @@ void main() {
   group('Leading/trailing garbage', () {
     test('strips leading text before JSON', () {
       final result = JsonRecovery.tryRepairWithDetails(
-          'Here is the JSON: {"name":"John"}');
+        'Here is the JSON: {"name":"John"}',
+      );
       expect(result.repaired, '{"name":"John"}');
       expect(result.wasModified, true);
       expect(result.repairs, contains(contains('leading characters')));
@@ -35,15 +36,17 @@ void main() {
 
     test('strips trailing text after JSON', () {
       final result = JsonRecovery.tryRepairWithDetails(
-          '{"name":"John"} and that\'s it!');
+        '{"name":"John"} and that\'s it!',
+      );
       expect(result.repaired, '{"name":"John"}');
       expect(result.wasModified, true);
       expect(result.repairs, contains(contains('trailing characters')));
     });
 
     test('strips both leading and trailing text', () {
-      final result =
-          JsonRecovery.tryRepairWithDetails('Sure! {"a":1} hope that helps');
+      final result = JsonRecovery.tryRepairWithDetails(
+        'Sure! {"a":1} hope that helps',
+      );
       expect(result.repaired, '{"a":1}');
       expect(result.wasModified, true);
     });
@@ -90,8 +93,7 @@ void main() {
     });
 
     test('repaired output with unterminated string is parseable', () {
-      final result =
-          JsonRecovery.tryRepairWithDetails('{"title":"Hello World');
+      final result = JsonRecovery.tryRepairWithDetails('{"title":"Hello World');
       expect(result.repaired, isNotNull);
       expect(result.wasModified, true);
       final parsed = jsonDecode(result.repaired!);
@@ -119,8 +121,7 @@ void main() {
 
   group('tryRepairWithDetails', () {
     test('repairs list is populated for each repair type', () {
-      final result = JsonRecovery.tryRepairWithDetails(
-          'prefix {"name":"John');
+      final result = JsonRecovery.tryRepairWithDetails('prefix {"name":"John');
       expect(result.repairs, isNotEmpty);
       expect(result.wasModified, true);
       // Should have: stripped leading chars, closed string, closed bracket

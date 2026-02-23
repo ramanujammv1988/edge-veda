@@ -25,7 +25,8 @@ class AppTheme {
   static const Color accentDim = Color(0xFF00838F);
 
   /// Radial glow color (teal with low opacity)
-  static Color get accentGlow => const Color(0xFF00BCD4).withValues(alpha: 0.15);
+  static Color get accentGlow =>
+      const Color(0xFF00BCD4).withValues(alpha: 0.15);
 
   // ── Text Colors ──────────────────────────────────────────────────────────
 

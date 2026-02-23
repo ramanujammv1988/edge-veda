@@ -63,11 +63,13 @@ enum SystemPromptPreset {
 
   /// Coding-focused assistant with code examples
   coder(
-      'You are a coding assistant. Provide clear, working code examples with brief explanations.'),
+    'You are a coding assistant. Provide clear, working code examples with brief explanations.',
+  ),
 
   /// Creative writing assistant
   creative(
-      'You are a creative writing assistant. Be imaginative, vivid, and engaging.');
+    'You are a creative writing assistant. Be imaginative, vivid, and engaging.',
+  );
 
   /// The system prompt text for this preset
   final String prompt;

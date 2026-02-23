@@ -68,10 +68,7 @@ class VisionWorker {
     final initPort = ReceivePort();
 
     // Spawn the worker isolate
-    _isolate = await Isolate.spawn(
-      _visionWorkerEntryPoint,
-      initPort.sendPort,
-    );
+    _isolate = await Isolate.spawn(_visionWorkerEntryPoint, initPort.sendPort);
 
     // Wait for worker to send its command port
     _commandPort = await initPort.first as SendPort;
@@ -119,14 +116,16 @@ class VisionWorker {
       }
     });
 
-    _commandPort!.send(InitVisionCommand(
-      modelPath: modelPath,
-      mmprojPath: mmprojPath,
-      numThreads: numThreads,
-      contextSize: contextSize,
-      useGpu: useGpu,
-      memoryLimitBytes: memoryLimitBytes,
-    ));
+    _commandPort!.send(
+      InitVisionCommand(
+        modelPath: modelPath,
+        mmprojPath: mmprojPath,
+        numThreads: numThreads,
+        contextSize: contextSize,
+        useGpu: useGpu,
+        memoryLimitBytes: memoryLimitBytes,
+      ),
+    );
 
     try {
       // Vision model loading can take 5-10 seconds
@@ -163,14 +162,16 @@ class VisionWorker {
       }
     });
 
-    _commandPort!.send(DescribeFrameCommand(
-      rgbBytes: rgbBytes,
-      width: width,
-      height: height,
-      prompt: prompt,
-      maxTokens: maxTokens,
-      temperature: temperature,
-    ));
+    _commandPort!.send(
+      DescribeFrameCommand(
+        rgbBytes: rgbBytes,
+        width: width,
+        height: height,
+        prompt: prompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+      ),
+    );
 
     try {
       // Vision inference can take 2-5 seconds per frame
@@ -265,10 +266,12 @@ void _visionWorkerEntryPoint(SendPort mainSendPort) {
       });
     } else if (message is DescribeFrameCommand) {
       if (nativeVisionContext == null || bindings == null) {
-        responseSendPort.send(VisionErrorResponse(
-          message: 'Vision worker not initialized',
-          errorCode: -6, // EV_ERROR_CONTEXT_INVALID
-        ));
+        responseSendPort.send(
+          VisionErrorResponse(
+            message: 'Vision worker not initialized',
+            errorCode: -6, // EV_ERROR_CONTEXT_INVALID
+          ),
+        );
         return;
       }
       _handleDescribeFrame(
@@ -296,7 +299,7 @@ void _handleInitVision(
   InitVisionCommand cmd,
   SendPort responseSendPort,
   void Function(ffi.Pointer<EvVisionContextImpl>, EdgeVedaNativeBindings)
-      onSuccess,
+  onSuccess,
 ) {
   final bindings = EdgeVedaNativeBindings.instance;
 
@@ -319,10 +322,12 @@ void _handleInitVision(
     final ctx = bindings.evVisionInit(configPtr, errorPtr);
 
     if (ctx == ffi.nullptr) {
-      responseSendPort.send(VisionInitErrorResponse(
-        message: 'Failed to initialize vision context',
-        errorCode: errorPtr.value,
-      ));
+      responseSendPort.send(
+        VisionInitErrorResponse(
+          message: 'Failed to initialize vision context',
+          errorCode: errorPtr.value,
+        ),
+      );
       return;
     }
 
@@ -354,8 +359,9 @@ void _handleDescribeFrame(
 ) {
   // Allocate native memory for image bytes
   final nativeBytes = calloc<ffi.UnsignedChar>(cmd.rgbBytes.length);
-  final nativeBytesTyped =
-      nativeBytes.cast<ffi.Uint8>().asTypedList(cmd.rgbBytes.length);
+  final nativeBytesTyped = nativeBytes.cast<ffi.Uint8>().asTypedList(
+    cmd.rgbBytes.length,
+  );
   nativeBytesTyped.setAll(0, cmd.rgbBytes);
 
   // Set up generation params
@@ -389,10 +395,12 @@ void _handleDescribeFrame(
     );
 
     if (result != 0) {
-      responseSendPort.send(VisionErrorResponse(
-        message: 'Vision describe failed: error code $result',
-        errorCode: result,
-      ));
+      responseSendPort.send(
+        VisionErrorResponse(
+          message: 'Vision describe failed: error code $result',
+          errorCode: result,
+        ),
+      );
       return;
     }
 
@@ -409,8 +417,7 @@ void _handleDescribeFrame(
 
     final timingsPtr = calloc<EvTimingsData>();
     try {
-      final timingsResult =
-          bindings.evVisionGetLastTimings(ctx, timingsPtr);
+      final timingsResult = bindings.evVisionGetLastTimings(ctx, timingsPtr);
       if (timingsResult == 0) {
         modelLoadMs = timingsPtr.ref.modelLoadMs;
         imageEncodeMs = timingsPtr.ref.imageEncodeMs;
@@ -423,15 +430,17 @@ void _handleDescribeFrame(
       calloc.free(timingsPtr);
     }
 
-    responseSendPort.send(VisionResultResponse(
-      description: description,
-      modelLoadMs: modelLoadMs,
-      imageEncodeMs: imageEncodeMs,
-      promptEvalMs: promptEvalMs,
-      decodeMs: decodeMs,
-      promptTokens: promptTokens,
-      generatedTokens: generatedTokens,
-    ));
+    responseSendPort.send(
+      VisionResultResponse(
+        description: description,
+        modelLoadMs: modelLoadMs,
+        imageEncodeMs: imageEncodeMs,
+        promptEvalMs: promptEvalMs,
+        decodeMs: decodeMs,
+        promptTokens: promptTokens,
+        generatedTokens: generatedTokens,
+      ),
+    );
   } finally {
     calloc.free(promptPtr);
     calloc.free(paramsPtr);

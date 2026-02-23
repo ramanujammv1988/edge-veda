@@ -8,10 +8,12 @@ import 'package:flutter/services.dart';
 /// thermal state change notifications. Gracefully returns defaults on
 /// non-iOS platforms (catches [MissingPluginException]).
 class TelemetryService {
-  static const _methodChannel =
-      MethodChannel('com.edgeveda.edge_veda/telemetry');
-  static const _thermalEventChannel =
-      EventChannel('com.edgeveda.edge_veda/thermal');
+  static const _methodChannel = MethodChannel(
+    'com.edgeveda.edge_veda/telemetry',
+  );
+  static const _thermalEventChannel = EventChannel(
+    'com.edgeveda.edge_veda/thermal',
+  );
 
   Stream<Map<String, dynamic>>? _thermalStream;
 
@@ -20,8 +22,7 @@ class TelemetryService {
   /// Returns -1 on non-iOS platforms or error.
   Future<int> getThermalState() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<int>('getThermalState');
+      final result = await _methodChannel.invokeMethod<int>('getThermalState');
       return result ?? -1;
     } on PlatformException {
       return -1;
@@ -35,8 +36,9 @@ class TelemetryService {
   /// Returns -1.0 on error or unknown.
   Future<double> getBatteryLevel() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<double>('getBatteryLevel');
+      final result = await _methodChannel.invokeMethod<double>(
+        'getBatteryLevel',
+      );
       return result ?? -1.0;
     } on PlatformException {
       return -1.0;
@@ -48,8 +50,7 @@ class TelemetryService {
   /// Get current battery state: 0=unknown, 1=unplugged, 2=charging, 3=full.
   Future<int> getBatteryState() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<int>('getBatteryState');
+      final result = await _methodChannel.invokeMethod<int>('getBatteryState');
       return result ?? 0;
     } on PlatformException {
       return 0;
@@ -63,8 +64,7 @@ class TelemetryService {
   /// Returns 0 on error.
   Future<int> getMemoryRSS() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<int>('getMemoryRSS');
+      final result = await _methodChannel.invokeMethod<int>('getMemoryRSS');
       return result ?? 0;
     } on PlatformException {
       return 0;
@@ -78,8 +78,9 @@ class TelemetryService {
   /// Returns 0 on error.
   Future<int> getAvailableMemory() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<int>('getAvailableMemory');
+      final result = await _methodChannel.invokeMethod<int>(
+        'getAvailableMemory',
+      );
       return result ?? 0;
     } on PlatformException {
       return 0;
@@ -93,8 +94,7 @@ class TelemetryService {
   /// Returns -1 on non-iOS platforms or error.
   Future<int> getFreeDiskSpace() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<int>('getFreeDiskSpace');
+      final result = await _methodChannel.invokeMethod<int>('getFreeDiskSpace');
       return result ?? -1;
     } on PlatformException {
       return -1;
@@ -108,8 +108,7 @@ class TelemetryService {
   /// Returns false on non-iOS platforms.
   Future<bool> isLowPowerMode() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<bool>('isLowPowerMode');
+      final result = await _methodChannel.invokeMethod<bool>('isLowPowerMode');
       return result ?? false;
     } on PlatformException {
       return false;
@@ -127,9 +126,9 @@ class TelemetryService {
   /// On non-iOS platforms, this stream will emit an error and then close.
   /// Callers should handle errors gracefully.
   Stream<Map<String, dynamic>> get thermalStateChanges {
-    _thermalStream ??= _thermalEventChannel
-        .receiveBroadcastStream()
-        .map((event) => Map<String, dynamic>.from(event as Map));
+    _thermalStream ??= _thermalEventChannel.receiveBroadcastStream().map(
+      (event) => Map<String, dynamic>.from(event as Map),
+    );
     return _thermalStream!;
   }
 

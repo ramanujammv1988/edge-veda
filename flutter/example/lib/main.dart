@@ -185,38 +185,38 @@ Answer:
 
   // Demo tool definitions for function calling
   List<ToolDefinition> get _demoTools => [
-    ToolDefinition(
-      name: 'get_time',
-      description:
-          'Get the current date and time for a location. Pass the city or region name exactly as the user said it.',
-      parameters: {
-        'type': 'object',
-        'properties': {
-          'location': {
-            'type': 'string',
-            'description':
-                'City or region name (e.g., "San Francisco", "London", "Tokyo", "Bali", "New York")',
+        ToolDefinition(
+          name: 'get_time',
+          description:
+              'Get the current date and time for a location. Pass the city or region name exactly as the user said it.',
+          parameters: {
+            'type': 'object',
+            'properties': {
+              'location': {
+                'type': 'string',
+                'description':
+                    'City or region name (e.g., "San Francisco", "London", "Tokyo", "Bali", "New York")',
+              },
+            },
+            'required': ['location'],
           },
-        },
-        'required': ['location'],
-      },
-    ),
-    ToolDefinition(
-      name: 'calculate',
-      description: 'Perform a math calculation',
-      parameters: {
-        'type': 'object',
-        'properties': {
-          'expression': {
-            'type': 'string',
-            'description':
-                'Math expression to evaluate (e.g., "2+2", "sqrt(16)")',
+        ),
+        ToolDefinition(
+          name: 'calculate',
+          description: 'Perform a math calculation',
+          parameters: {
+            'type': 'object',
+            'properties': {
+              'expression': {
+                'type': 'string',
+                'description':
+                    'Math expression to evaluate (e.g., "2+2", "sqrt(16)")',
+              },
+            },
+            'required': ['expression'],
           },
-        },
-        'required': ['expression'],
-      },
-    ),
-  ];
+        ),
+      ];
 
   // Benchmark test prompts - varying complexity for realistic testing
   final List<String> _benchmarkPrompts = [
@@ -262,42 +262,41 @@ Answer:
   /// This receives onTrimMemory events from EdgeVedaPlugin.kt
   void _setupMemoryPressureListener() {
     if (Platform.isAndroid) {
-      _memorySubscription = _memoryPressureChannel
-          .receiveBroadcastStream()
-          .listen(
-            (event) {
-              if (event is Map) {
-                final level = event['pressureLevel'] as String?;
-                debugPrint('EdgeVeda: Memory pressure event: $level');
+      _memorySubscription =
+          _memoryPressureChannel.receiveBroadcastStream().listen(
+        (event) {
+          if (event is Map) {
+            final level = event['pressureLevel'] as String?;
+            debugPrint('EdgeVeda: Memory pressure event: $level');
 
-                setState(() {
-                  _memoryPressureLevel = level;
-                });
+            setState(() {
+              _memoryPressureLevel = level;
+            });
 
-                // Show warning for critical memory pressure
-                if (level == 'critical' || level == 'running_critical') {
-                  setState(() {
-                    _statusMessage =
-                        'Memory pressure: $level - consider restarting';
-                  });
+            // Show warning for critical memory pressure
+            if (level == 'critical' || level == 'running_critical') {
+              setState(() {
+                _statusMessage =
+                    'Memory pressure: $level - consider restarting';
+              });
 
-                  // Show snackbar warning
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Memory pressure: $level'),
-                        backgroundColor: AppTheme.warning,
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                }
+              // Show snackbar warning
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Memory pressure: $level'),
+                    backgroundColor: AppTheme.warning,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
               }
-            },
-            onError: (error) {
-              debugPrint('EdgeVeda: Memory pressure stream error: $error');
-            },
-          );
+            }
+          }
+        },
+        onError: (error) {
+          debugPrint('EdgeVeda: Memory pressure stream error: $error');
+        },
+      );
     }
   }
 
@@ -907,9 +906,8 @@ Answer:
       final bytes = await File(filePath).readAsBytes();
       final sampleLength = math.min(bytes.length, 4096);
       final sample = bytes.take(sampleLength);
-      final nonPrintable = sample
-          .where((b) => b < 0x09 || (b > 0x0D && b < 0x20))
-          .length;
+      final nonPrintable =
+          sample.where((b) => b < 0x09 || (b > 0x0D && b < 0x20)).length;
       final binaryRatio = sampleLength == 0 ? 0.0 : nonPrintable / sampleLength;
       if (binaryRatio > 0.25) {
         throw const FormatException(
@@ -1016,8 +1014,7 @@ Answer:
         setState(() => _isIndexingDocument = false);
         return;
       }
-      final avgChunkSize =
-          chunks.fold<int>(0, (s, c) => s + c.length) ~/
+      final avgChunkSize = chunks.fold<int>(0, (s, c) => s + c.length) ~/
           math.max(1, chunks.length);
 
       setState(() {
@@ -1121,8 +1118,7 @@ Answer:
         0,
         (sum, e) => sum + e.tokenCount,
       );
-      final processingMs =
-          readSw.elapsedMilliseconds +
+      final processingMs = readSw.elapsedMilliseconds +
           chunkSw.elapsedMilliseconds +
           initSw.elapsedMilliseconds +
           embedSw.elapsedMilliseconds +
@@ -1389,7 +1385,12 @@ ${contextParts.join('\n\n')}''';
           topP: 0.9,
           topK: 40,
           repeatPenalty: 1.05,
-          stopSequences: ['<|eot_id|>', '<|start_header_id|>', '<|end_header_id|>', '<|end_of_text|>'],
+          stopSequences: [
+            '<|eot_id|>',
+            '<|start_header_id|>',
+            '<|end_header_id|>',
+            '<|end_of_text|>'
+          ],
         ),
         cancelToken: _cancelToken,
       );
@@ -1434,7 +1435,8 @@ ${contextParts.join('\n\n')}''';
           setState(() {
             _statusMessage =
                 'Streaming from document... ($_streamingTokenCount tokens)';
-            _streamingText = buffer.toString().replaceAll(RegExp(r'<\|.*?\|>'), '');
+            _streamingText =
+                buffer.toString().replaceAll(RegExp(r'<\|.*?\|>'), '');
           });
           _scrollToBottom();
         }
@@ -1473,9 +1475,8 @@ ${contextParts.join('\n\n')}''';
         final totalMs = querySw.elapsedMilliseconds;
         final ttft = (_timeToFirstTokenMs ?? totalMs);
         final tokSec = _tokensPerSecond ?? 0;
-        final msPerTok = _streamingTokenCount > 0
-            ? genMs / _streamingTokenCount
-            : 0.0;
+        final msPerTok =
+            _streamingTokenCount > 0 ? genMs / _streamingTokenCount : 0.0;
         final responseChars = buffer.length;
         print('');
         print(
@@ -1538,8 +1539,7 @@ ${contextParts.join('\n\n')}''';
     } catch (e) {
       final message = e.toString();
       final isTimeout = message.contains('TimeoutException');
-      final isStreamStartFailure =
-          message.contains('Failed to start stream') ||
+      final isStreamStartFailure = message.contains('Failed to start stream') ||
           message.contains('Streaming failed') ||
           message.contains('Future not completed');
 
@@ -1554,8 +1554,10 @@ ${contextParts.join('\n\n')}''';
               .generate(
                 ragPrompt ??
                     ChatTemplate.format(
-                      template: _session?.templateFormat ?? ChatTemplateFormat.llama3Instruct,
-                      systemPrompt: '''You are an on-device document QA assistant. Answer ONLY from the provided context. If the context does not contain the answer, reply exactly: "I couldn't find that in the attached document." Keep answers concise and factual.
+                      template: _session?.templateFormat ??
+                          ChatTemplateFormat.llama3Instruct,
+                      systemPrompt:
+                          '''You are an on-device document QA assistant. Answer ONLY from the provided context. If the context does not contain the answer, reply exactly: "I couldn't find that in the attached document." Keep answers concise and factual.
 
 Context:
 ''',
@@ -1567,7 +1569,12 @@ Context:
                   topP: 0.9,
                   topK: 40,
                   repeatPenalty: 1.05,
-                  stopSequences: ['<|eot_id|>', '<|start_header_id|>', '<|end_header_id|>', '<|end_of_text|>'],
+                  stopSequences: [
+                    '<|eot_id|>',
+                    '<|start_header_id|>',
+                    '<|end_header_id|>',
+                    '<|end_of_text|>'
+                  ],
                 ),
               )
               .timeout(const Duration(seconds: 120));
@@ -1825,7 +1832,8 @@ Context:
           setState(() {
             _statusMessage =
                 'Tokens: $_streamingTokenCount${_timeToFirstTokenMs != null ? ' (TTFT: ${_timeToFirstTokenMs}ms)' : ''}';
-            _streamingText = buffer.toString().replaceAll(RegExp(r'<\|.*?\|>'), '');
+            _streamingText =
+                buffer.toString().replaceAll(RegExp(r'<\|.*?\|>'), '');
           });
           _scrollToBottom();
         }
@@ -2141,8 +2149,8 @@ Context:
   Future<ToolResult> _handleToolCall(ToolCall call) async {
     switch (call.name) {
       case 'get_time':
-        final location = (call.arguments['location'] as String? ?? 'UTC')
-            .toLowerCase();
+        final location =
+            (call.arguments['location'] as String? ?? 'UTC').toLowerCase();
         // Map location keywords to UTC offset hours
         const locationOffsets = <String, double>{
           // Americas
@@ -2270,13 +2278,13 @@ Context:
 
         // Calculate metrics
         final latencyMs = _stopwatch.elapsedMilliseconds;
-        final tokenCount = (response.text.length / 4)
-            .round(); // Estimate ~4 chars/token
+        final tokenCount =
+            (response.text.length / 4).round(); // Estimate ~4 chars/token
         final tokensPerSec = tokenCount / (latencyMs / 1000);
 
         // TTFT approximation (can't measure precisely without streaming)
-        final ttftMs = (latencyMs * 0.2)
-            .round(); // Assume 20% is prompt processing
+        final ttftMs =
+            (latencyMs * 0.2).round(); // Assume 20% is prompt processing
 
         // Avoid benchmark failure when worker-memory stats are temporarily unavailable.
         final memoryMb = _memoryMb ?? 0.0;
@@ -2391,9 +2399,8 @@ Context:
                   ? 'Meets >15 tok/s target'
                   : 'Below 15 tok/s target',
               style: TextStyle(
-                color: avgTokensPerSec >= 15
-                    ? AppTheme.success
-                    : AppTheme.warning,
+                color:
+                    avgTokensPerSec >= 15 ? AppTheme.success : AppTheme.warning,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2587,9 +2594,8 @@ Context:
         children: [
           _buildMetricChip(
             label: 'TTFT',
-            value: _timeToFirstTokenMs != null
-                ? '${_timeToFirstTokenMs}ms'
-                : '-',
+            value:
+                _timeToFirstTokenMs != null ? '${_timeToFirstTokenMs}ms' : '-',
             icon: Icons.timer,
           ),
           _buildMetricChip(
@@ -2601,9 +2607,8 @@ Context:
           ),
           _buildMetricChip(
             label: 'Memory',
-            value: _memoryMb != null
-                ? '${_memoryMb!.toStringAsFixed(0)} MB'
-                : '-',
+            value:
+                _memoryMb != null ? '${_memoryMb!.toStringAsFixed(0)} MB' : '-',
             icon: Icons.memory,
           ),
         ],
@@ -2716,13 +2721,11 @@ Context:
                   selectedColor: AppTheme.accent.withValues(alpha: 0.2),
                   backgroundColor: AppTheme.surfaceVariant,
                   labelStyle: TextStyle(
-                    color: isSelected
-                        ? AppTheme.accent
-                        : AppTheme.textSecondary,
+                    color:
+                        isSelected ? AppTheme.accent : AppTheme.textSecondary,
                     fontSize: 13,
-                    fontWeight: isSelected
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                   side: BorderSide(
                     color: isSelected ? AppTheme.accent : AppTheme.border,
@@ -2833,9 +2836,8 @@ Context:
   Widget _buildIndexingOverlay() {
     if (!_isIndexingDocument) return const SizedBox.shrink();
 
-    final progress = _indexingTotal > 0
-        ? _indexingProgress / _indexingTotal
-        : 0.0;
+    final progress =
+        _indexingTotal > 0 ? _indexingProgress / _indexingTotal : 0.0;
 
     return Container(
       color: Colors.black.withValues(alpha: 0.7),
@@ -2987,8 +2989,8 @@ Context:
                 MemoryStats memStats;
                 try {
                   memStats = await _edgeVeda.getMemoryStats().timeout(
-                    const Duration(seconds: 15),
-                  );
+                        const Duration(seconds: 15),
+                      );
                 } catch (_) {
                   memStats = const MemoryStats(
                     currentBytes: 0,
@@ -2999,8 +3001,8 @@ Context:
                   );
                 }
                 final memoryMb = memStats.currentBytes / (1024 * 1024);
-                final usagePercent = (memStats.usagePercent * 100)
-                    .toStringAsFixed(1);
+                final usagePercent =
+                    (memStats.usagePercent * 100).toStringAsFixed(1);
 
                 if (!context.mounted) return;
 
@@ -3119,9 +3121,8 @@ Context:
                     ),
                     const SizedBox(width: 6),
                     _buildStatusPill(
-                      icon: _preferOfflineModel
-                          ? Icons.memory
-                          : Icons.cloud_sync,
+                      icon:
+                          _preferOfflineModel ? Icons.memory : Icons.cloud_sync,
                       label: _preferOfflineModel ? 'Local' : 'Auto',
                       color: _preferOfflineModel
                           ? AppTheme.accent
@@ -3305,17 +3306,16 @@ Context:
                         width: 48,
                         height: 48,
                         child: Material(
-                          color: _isStreaming
-                              ? AppTheme.danger
-                              : AppTheme.accent,
+                          color:
+                              _isStreaming ? AppTheme.danger : AppTheme.accent,
                           shape: const CircleBorder(),
                           child: InkWell(
                             customBorder: const CircleBorder(),
                             onTap: _isStreaming
                                 ? _cancelGeneration
                                 : (_isInitialized && !_isLoading
-                                      ? _sendMessage
-                                      : null),
+                                    ? _sendMessage
+                                    : null),
                             child: Icon(
                               _isStreaming ? Icons.stop : Icons.arrow_upward,
                               color: _isStreaming
@@ -3397,9 +3397,8 @@ class MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[

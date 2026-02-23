@@ -103,8 +103,11 @@ class TranscriptUpdated extends VoicePipelineEvent {
   /// True during streaming LLM response (partial text).
   final bool isPartial;
 
-  TranscriptUpdated(this.userText, this.assistantText,
-      {this.isPartial = false});
+  TranscriptUpdated(
+    this.userText,
+    this.assistantText, {
+    this.isPartial = false,
+  });
 }
 
 /// Emitted when an error occurs in the pipeline.
@@ -189,8 +192,9 @@ class VoicePipeline {
   final Scheduler? _scheduler;
   final VoicePipelineConfig config;
 
-  static const _methodChannel =
-      MethodChannel('com.edgeveda.edge_veda/telemetry');
+  static const _methodChannel = MethodChannel(
+    'com.edgeveda.edge_veda/telemetry',
+  );
 
   // State machine
   VoicePipelineState _state = VoicePipelineState.idle;
@@ -252,10 +256,10 @@ class VoicePipeline {
     required String whisperModelPath,
     Scheduler? scheduler,
     this.config = const VoicePipelineConfig(),
-  })  : _chatSession = chatSession,
-        _tts = tts,
-        _whisperModelPath = whisperModelPath,
-        _scheduler = scheduler;
+  }) : _chatSession = chatSession,
+       _tts = tts,
+       _whisperModelPath = whisperModelPath,
+       _scheduler = scheduler;
 
   /// Broadcast event stream for pipeline state changes, transcripts, and errors.
   Stream<VoicePipelineEvent> get events => _eventController.stream;
@@ -265,8 +269,7 @@ class VoicePipeline {
 
   /// Whether the pipeline is currently active (not idle or error).
   bool get isActive =>
-      _state != VoicePipelineState.idle &&
-      _state != VoicePipelineState.error;
+      _state != VoicePipelineState.idle && _state != VoicePipelineState.error;
 
   /// All completed conversation turns.
   ///
@@ -286,7 +289,8 @@ class VoicePipeline {
   Future<void> start() async {
     if (_state != VoicePipelineState.idle) {
       throw StateError(
-          'VoicePipeline.start() called in state $_state (expected idle)');
+        'VoicePipeline.start() called in state $_state (expected idle)',
+      );
     }
 
     try {
@@ -298,8 +302,10 @@ class VoicePipeline {
       await _whisperSession!.start();
 
       // Register voice pipeline workload with Scheduler at high priority
-      _scheduler?.registerWorkload(WorkloadId.voicePipeline,
-          priority: WorkloadPriority.high);
+      _scheduler?.registerWorkload(
+        WorkloadId.voicePipeline,
+        priority: WorkloadPriority.high,
+      );
 
       // Subscribe to TTS events for state transitions on finish/cancel
       _ttsSubscription = _tts.events.listen(_onTtsEvent);
@@ -317,8 +323,7 @@ class VoicePipeline {
       _setState(VoicePipelineState.listening);
     } catch (e) {
       _setState(VoicePipelineState.error);
-      _emit(PipelineError('Failed to start pipeline: $e',
-          fatal: true));
+      _emit(PipelineError('Failed to start pipeline: $e', fatal: true));
       // Clean up any partially initialized resources
       await _cleanup();
       rethrow;
@@ -537,12 +542,10 @@ class VoicePipeline {
       int maxTokens = config.maxResponseTokens;
       final scheduler = _scheduler;
       if (scheduler != null) {
-        final knobs =
-            scheduler.getKnobsForWorkload(WorkloadId.voicePipeline);
+        final knobs = scheduler.getKnobsForWorkload(WorkloadId.voicePipeline);
         if (knobs.maxFps == 0) {
           // QoS paused -- don't generate, just listen
-          _emit(
-              PipelineError('Voice pipeline paused by scheduler'));
+          _emit(PipelineError('Voice pipeline paused by scheduler'));
           return;
         }
         // At reduced QoS, use scheduler's maxTokens limit if lower
@@ -569,11 +572,7 @@ class VoicePipeline {
           // Clean special tokens from the partial text to prevent
           // Llama 3 / ChatML tags from appearing in the UI.
           final partialClean = cleanResponseText(responseBuffer.toString());
-          _emit(TranscriptUpdated(
-            text,
-            partialClean,
-            isPartial: true,
-          ));
+          _emit(TranscriptUpdated(text, partialClean, isPartial: true));
         }
       } catch (e) {
         // CancelToken cancellation throws GenerationException.
@@ -629,7 +628,8 @@ class VoicePipeline {
       // played -- the 800ms prevents residual reverb/echo from triggering
       // false speech detection. Early returns (empty transcript, QoS
       // paused, LLM error) skip the cooldown for instant mic re-enable.
-      if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
+      if (_state != VoicePipelineState.idle &&
+          _state != VoicePipelineState.error) {
         if (ttsPlayed) {
           await Future<void>.delayed(config.ttsCooldown);
         }
@@ -643,7 +643,8 @@ class VoicePipeline {
         // Re-check state: stop() or pause() may have been called during the
         // cooldown delay above, changing state to idle. Only re-enable mic
         // processing if the pipeline is still active.
-        if (_state != VoicePipelineState.idle && _state != VoicePipelineState.error) {
+        if (_state != VoicePipelineState.idle &&
+            _state != VoicePipelineState.error) {
           // Re-enable mic processing -- only frames arriving AFTER this
           // point will be processed. No buffered backlog exists because
           // we use a flag gate instead of StreamSubscription.pause().

@@ -346,7 +346,8 @@ class NativeParamsScope {
   bool _isFreed = false;
 
   /// Create a native params scope from Dart params
-  NativeParamsScope(GenerationParams params) : ptr = calloc<EvGenerationParams>() {
+  NativeParamsScope(GenerationParams params)
+    : ptr = calloc<EvGenerationParams>() {
     ptr.ref.maxTokens = params.maxTokens;
     ptr.ref.temperature = params.temperature;
     ptr.ref.topP = params.topP;
@@ -359,7 +360,9 @@ class NativeParamsScope {
 
     // Allocate stop sequences if any
     if (params.stopSequences.isNotEmpty) {
-      _stopSequencesArrayPtr = calloc<Pointer<Utf8>>(params.stopSequences.length);
+      _stopSequencesArrayPtr = calloc<Pointer<Utf8>>(
+        params.stopSequences.length,
+      );
 
       for (var i = 0; i < params.stopSequences.length; i++) {
         final strPtr = params.stopSequences[i].toNativeUtf8();

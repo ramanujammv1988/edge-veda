@@ -149,8 +149,7 @@ void main() {
   });
 
   group('Low power mode', () {
-    test('isLowPowerMode=true with no other pressure escalates to reduced',
-        () {
+    test('isLowPowerMode=true with no other pressure escalates to reduced', () {
       final policy = RuntimePolicy();
       final level = policy.evaluate(
         thermalState: 0,

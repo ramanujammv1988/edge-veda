@@ -73,30 +73,32 @@ void main() {
   });
 
   group('Memory ratio and fits', () {
-    test('model exceeding safe budget has fits=false and memoryRatio > 1.0',
-        () {
-      // Create a huge model on a small device
-      const model = ModelInfo(
-        id: 'huge-model',
-        name: 'Huge Model',
-        sizeBytes: 10000 * 1024 * 1024, // 10 GB
-        downloadUrl: 'https://example.com/huge.gguf',
-        family: 'llama3',
-        parametersB: 13.0,
-        quantization: 'Q4_K_M',
-      );
-      const device = DeviceProfile(
-        identifier: 'iPhone13,1',
-        deviceName: 'iPhone 12 mini',
-        totalRamGB: 4,
-        chipName: 'A14 Bionic',
-        tier: DeviceTier.minimum,
-      );
+    test(
+      'model exceeding safe budget has fits=false and memoryRatio > 1.0',
+      () {
+        // Create a huge model on a small device
+        const model = ModelInfo(
+          id: 'huge-model',
+          name: 'Huge Model',
+          sizeBytes: 10000 * 1024 * 1024, // 10 GB
+          downloadUrl: 'https://example.com/huge.gguf',
+          family: 'llama3',
+          parametersB: 13.0,
+          quantization: 'Q4_K_M',
+        );
+        const device = DeviceProfile(
+          identifier: 'iPhone13,1',
+          deviceName: 'iPhone 12 mini',
+          totalRamGB: 4,
+          chipName: 'A14 Bionic',
+          tier: DeviceTier.minimum,
+        );
 
-      final estimate = MemoryEstimator.estimate(model: model, device: device);
-      expect(estimate.fits, false);
-      expect(estimate.memoryRatio, greaterThan(1.0));
-    });
+        final estimate = MemoryEstimator.estimate(model: model, device: device);
+        expect(estimate.fits, false);
+        expect(estimate.memoryRatio, greaterThan(1.0));
+      },
+    );
 
     test('model within budget has fits=true and memoryRatio <= 1.0', () {
       const model = ModelInfo(
@@ -187,10 +189,14 @@ void main() {
         tier: DeviceTier.high,
       );
 
-      final estimateQ4 =
-          MemoryEstimator.estimate(model: modelQ4, device: device);
-      final estimateF16 =
-          MemoryEstimator.estimate(model: modelF16, device: device);
+      final estimateQ4 = MemoryEstimator.estimate(
+        model: modelQ4,
+        device: device,
+      );
+      final estimateF16 = MemoryEstimator.estimate(
+        model: modelF16,
+        device: device,
+      );
 
       // F16 kvQuantFactor=2.0, Q4_K_M kvQuantFactor=1.0
       expect(estimateF16.kvCacheMB, estimateQ4.kvCacheMB * 2);

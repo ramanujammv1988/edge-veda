@@ -113,7 +113,9 @@ class WhisperSession {
         .map((data) {
           frameCount++;
           if (frameCount % 10 == 0) {
-            debugPrint('EdgeVeda: Received audio frame $frameCount, type: ${data.runtimeType}');
+            debugPrint(
+              'EdgeVeda: Received audio frame $frameCount, type: ${data.runtimeType}',
+            );
           }
           return _decodeAudioSamples(data);
         })
@@ -180,8 +182,9 @@ class WhisperSession {
   /// On iOS this triggers the system permission dialog on first call.
   static Future<bool> requestMicrophonePermission() async {
     const channel = MethodChannel('com.edgeveda.edge_veda/telemetry');
-    final result =
-        await channel.invokeMethod<bool>('requestMicrophonePermission');
+    final result = await channel.invokeMethod<bool>(
+      'requestMicrophonePermission',
+    );
     return result ?? false;
   }
 
@@ -277,9 +280,10 @@ class WhisperSession {
     _isProcessing = true;
 
     // Take up to chunkSizeSamples from buffer
-    final chunkLen = _audioBuffer.length < _chunkSizeSamples
-        ? _audioBuffer.length
-        : _chunkSizeSamples;
+    final chunkLen =
+        _audioBuffer.length < _chunkSizeSamples
+            ? _audioBuffer.length
+            : _chunkSizeSamples;
     final chunk = Float32List.fromList(_audioBuffer.sublist(0, chunkLen));
 
     // Remove processed samples from buffer
@@ -295,7 +299,9 @@ class WhisperSession {
 
       // Report latency to Scheduler for p95 tracking
       scheduler?.reportLatency(
-          WorkloadId.stt, stopwatch.elapsedMilliseconds.toDouble());
+        WorkloadId.stt,
+        stopwatch.elapsedMilliseconds.toDouble(),
+      );
 
       for (final segment in response.segments) {
         _segments.add(segment);

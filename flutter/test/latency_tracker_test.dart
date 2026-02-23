@@ -3,13 +3,15 @@ import 'package:edge_veda/src/latency_tracker.dart';
 
 void main() {
   group('LatencyTracker', () {
-    test('empty tracker: p95 returns null, isWarmedUp false, sampleCount 0',
-        () {
-      final tracker = LatencyTracker();
-      expect(tracker.p95, isNull);
-      expect(tracker.isWarmedUp, false);
-      expect(tracker.sampleCount, 0);
-    });
+    test(
+      'empty tracker: p95 returns null, isWarmedUp false, sampleCount 0',
+      () {
+        final tracker = LatencyTracker();
+        expect(tracker.p95, isNull);
+        expect(tracker.isWarmedUp, false);
+        expect(tracker.sampleCount, 0);
+      },
+    );
 
     test('add 1 sample: p95 returns that value, isWarmedUp still false', () {
       final tracker = LatencyTracker();

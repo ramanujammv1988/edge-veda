@@ -96,7 +96,8 @@ class _SttScreenState extends State<SttScreen>
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0;
-      _downloadStatusText = 'Downloading ${model.name} (${_formatBytes(model.sizeBytes)})';
+      _downloadStatusText =
+          'Downloading ${model.name} (${_formatBytes(model.sizeBytes)})';
     });
 
     final modelManager = ModelManager();
@@ -719,7 +720,8 @@ class _SttScreenState extends State<SttScreen>
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }

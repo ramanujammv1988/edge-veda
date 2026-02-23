@@ -156,11 +156,11 @@ class ChatSession {
     int maxResponseTokens = 512,
     ToolRegistry? tools,
     this.onValidationEvent,
-  })  : _edgeVeda = edgeVeda,
-        systemPrompt = systemPrompt ?? preset?.prompt,
-        _contextLength = edgeVeda.config?.contextLength ?? 2048,
-        _maxResponseTokens = maxResponseTokens,
-        _tools = tools {
+  }) : _edgeVeda = edgeVeda,
+       systemPrompt = systemPrompt ?? preset?.prompt,
+       _contextLength = edgeVeda.config?.contextLength ?? 2048,
+       _maxResponseTokens = maxResponseTokens,
+       _tools = tools {
     if (!edgeVeda.isInitialized) {
       throw const ConfigurationException(
         'EdgeVeda must be initialized before creating a ChatSession. Call init() first.',
@@ -222,11 +222,13 @@ class ChatSession {
     CancelToken? cancelToken,
   }) async {
     // Add user message
-    _messages.add(ChatMessage(
-      role: ChatRole.user,
-      content: prompt,
-      timestamp: DateTime.now(),
-    ));
+    _messages.add(
+      ChatMessage(
+        role: ChatRole.user,
+        content: prompt,
+        timestamp: DateTime.now(),
+      ),
+    );
 
     try {
       // Check and summarize if needed
@@ -281,11 +283,13 @@ class ChatSession {
     CancelToken? cancelToken,
   }) async* {
     // Add user message
-    _messages.add(ChatMessage(
-      role: ChatRole.user,
-      content: prompt,
-      timestamp: DateTime.now(),
-    ));
+    _messages.add(
+      ChatMessage(
+        role: ChatRole.user,
+        content: prompt,
+        timestamp: DateTime.now(),
+      ),
+    );
 
     try {
       // Check and summarize if needed
@@ -310,11 +314,13 @@ class ChatSession {
       // Add complete assistant message to history
       final responseText = buffer.toString();
       if (responseText.isNotEmpty) {
-        _messages.add(ChatMessage(
-          role: ChatRole.assistant,
-          content: responseText,
-          timestamp: DateTime.now(),
-        ));
+        _messages.add(
+          ChatMessage(
+            role: ChatRole.assistant,
+            content: responseText,
+            timestamp: DateTime.now(),
+          ),
+        );
       }
     } catch (e) {
       // Rollback user message on error
@@ -362,11 +368,13 @@ class ChatSession {
     int maxToolRounds = 3,
   }) async {
     // Add user message
-    _messages.add(ChatMessage(
-      role: ChatRole.user,
-      content: prompt,
-      timestamp: DateTime.now(),
-    ));
+    _messages.add(
+      ChatMessage(
+        role: ChatRole.user,
+        content: prompt,
+        timestamp: DateTime.now(),
+      ),
+    );
 
     try {
       // Check and summarize if needed
@@ -400,26 +408,31 @@ class ChatSession {
         final toolCall = toolCalls.first;
 
         // Add tool call message to history
-        _messages.add(ChatMessage(
-          role: ChatRole.toolCall,
-          content: jsonEncode({
-            'name': toolCall.name,
-            'arguments': toolCall.arguments,
-          }),
-          timestamp: DateTime.now(),
-        ));
+        _messages.add(
+          ChatMessage(
+            role: ChatRole.toolCall,
+            content: jsonEncode({
+              'name': toolCall.name,
+              'arguments': toolCall.arguments,
+            }),
+            timestamp: DateTime.now(),
+          ),
+        );
 
         // Invoke the developer's tool handler
         final toolResult = await onToolCall(toolCall);
 
         // Add tool result message to history
-        _messages.add(ChatMessage(
-          role: ChatRole.toolResult,
-          content: toolResult.isError
-              ? jsonEncode({'error': toolResult.error})
-              : jsonEncode(toolResult.data),
-          timestamp: DateTime.now(),
-        ));
+        _messages.add(
+          ChatMessage(
+            role: ChatRole.toolResult,
+            content:
+                toolResult.isError
+                    ? jsonEncode({'error': toolResult.error})
+                    : jsonEncode(toolResult.data),
+            timestamp: DateTime.now(),
+          ),
+        );
 
         // Loop continues -- model will see the tool result and may call
         // another tool or produce a final response.
@@ -427,8 +440,10 @@ class ChatSession {
 
       // Max rounds exhausted -- do one final generation without tool parsing
       final formatted = _formatConversationWithTools();
-      final finalResponse =
-          await _edgeVeda.generate(formatted, options: options);
+      final finalResponse = await _edgeVeda.generate(
+        formatted,
+        options: options,
+      );
       final assistantMsg = ChatMessage(
         role: ChatRole.assistant,
         content: finalResponse.text,
@@ -527,19 +542,20 @@ class ChatSession {
           repairs = recovery.repairs;
         } catch (_) {
           // Recovery parse also failed
-          final validationTimeMs = DateTime.now()
-              .difference(validationStart)
-              .inMilliseconds;
-          onValidationEvent?.call(ValidationEvent(
-            passed: false,
-            mode: mode,
-            recoveryAttempted: true,
-            recoverySucceeded: false,
-            repairs: recovery.repairs,
-            errors: ['JSON parse failed even after recovery'],
-            rawOutput: rawOutput,
-            validationTimeMs: validationTimeMs,
-          ));
+          final validationTimeMs =
+              DateTime.now().difference(validationStart).inMilliseconds;
+          onValidationEvent?.call(
+            ValidationEvent(
+              passed: false,
+              mode: mode,
+              recoveryAttempted: true,
+              recoverySucceeded: false,
+              repairs: recovery.repairs,
+              errors: ['JSON parse failed even after recovery'],
+              rawOutput: rawOutput,
+              validationTimeMs: validationTimeMs,
+            ),
+          );
           throw GenerationException(
             'Model output is not valid JSON (recovery failed)',
             details:
@@ -548,19 +564,20 @@ class ChatSession {
         }
       } else {
         // Unrecoverable
-        final validationTimeMs = DateTime.now()
-            .difference(validationStart)
-            .inMilliseconds;
-        onValidationEvent?.call(ValidationEvent(
-          passed: false,
-          mode: mode,
-          recoveryAttempted: true,
-          recoverySucceeded: false,
-          repairs: recovery.repairs,
-          errors: ['JSON unrecoverable: no structure found'],
-          rawOutput: rawOutput,
-          validationTimeMs: validationTimeMs,
-        ));
+        final validationTimeMs =
+            DateTime.now().difference(validationStart).inMilliseconds;
+        onValidationEvent?.call(
+          ValidationEvent(
+            passed: false,
+            mode: mode,
+            recoveryAttempted: true,
+            recoverySucceeded: false,
+            repairs: recovery.repairs,
+            errors: ['JSON unrecoverable: no structure found'],
+            rawOutput: rawOutput,
+            validationTimeMs: validationTimeMs,
+          ),
+        );
         throw GenerationException(
           'Model output is not valid JSON',
           details:
@@ -581,16 +598,18 @@ class ChatSession {
         DateTime.now().difference(validationStart).inMilliseconds;
 
     // Emit validation event regardless of pass/fail
-    onValidationEvent?.call(ValidationEvent(
-      passed: validation.isValid,
-      mode: mode,
-      recoveryAttempted: recoveryAttempted,
-      recoverySucceeded: recoverySucceeded,
-      repairs: repairs,
-      errors: validation.isValid ? const [] : validation.errors,
-      rawOutput: rawOutput,
-      validationTimeMs: validationTimeMs,
-    ));
+    onValidationEvent?.call(
+      ValidationEvent(
+        passed: validation.isValid,
+        mode: mode,
+        recoveryAttempted: recoveryAttempted,
+        recoverySucceeded: recoverySucceeded,
+        repairs: repairs,
+        errors: validation.isValid ? const [] : validation.errors,
+        rawOutput: rawOutput,
+        validationTimeMs: validationTimeMs,
+      ),
+    );
 
     if (!validation.isValid) {
       throw GenerationException(
@@ -688,7 +707,8 @@ class ChatSession {
       // Build summarization prompt
       final summaryPrompt = StringBuffer();
       summaryPrompt.writeln(
-          'Summarize this conversation concisely. Keep key facts and decisions:');
+        'Summarize this conversation concisely. Keep key facts and decisions:',
+      );
       for (final msg in oldMessages) {
         if (msg.role == ChatRole.summary) {
           summaryPrompt.writeln('summary: ${msg.content}');
@@ -705,11 +725,13 @@ class ChatSession {
 
       // Replace old messages with summary + recent messages
       _messages.clear();
-      _messages.add(ChatMessage(
-        role: ChatRole.summary,
-        content: summaryResponse.text,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(
+          role: ChatRole.summary,
+          content: summaryResponse.text,
+          timestamp: DateTime.now(),
+        ),
+      );
       _messages.addAll(recentMessages);
     } catch (e) {
       // Fallback: simple truncation if summarization fails
@@ -726,7 +748,8 @@ class ChatSession {
 
       // Log warning but never crash
       print(
-          'ChatSession: Summarization failed, fell back to truncation. Error: $e');
+        'ChatSession: Summarization failed, fell back to truncation. Error: $e',
+      );
     } finally {
       _isSummarizing = false;
     }

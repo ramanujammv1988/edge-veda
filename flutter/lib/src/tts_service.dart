@@ -121,10 +121,12 @@ class TtsVoice {
 /// });
 /// ```
 class TtsService {
-  static const _methodChannel =
-      MethodChannel('com.edgeveda.edge_veda/telemetry');
-  static const _eventChannel =
-      EventChannel('com.edgeveda.edge_veda/tts_events');
+  static const _methodChannel = MethodChannel(
+    'com.edgeveda.edge_veda/telemetry',
+  );
+  static const _eventChannel = EventChannel(
+    'com.edgeveda.edge_veda/tts_events',
+  );
 
   Stream<TtsEvent>? _eventStream;
   TtsState _state = TtsState.idle;
@@ -237,17 +239,21 @@ class TtsService {
   /// Returns an empty list on non-iOS platforms.
   Future<List<TtsVoice>> availableVoices() async {
     try {
-      final result = await _methodChannel.invokeMethod<List<dynamic>>('tts_voices');
+      final result = await _methodChannel.invokeMethod<List<dynamic>>(
+        'tts_voices',
+      );
       if (result == null) return [];
 
       return result
           .cast<Map<dynamic, dynamic>>()
-          .map((map) => TtsVoice(
-                id: map['id'] as String,
-                name: map['name'] as String,
-                language: map['language'] as String,
-                quality: map['quality'] as int,
-              ))
+          .map(
+            (map) => TtsVoice(
+              id: map['id'] as String,
+              name: map['name'] as String,
+              language: map['language'] as String,
+              quality: map['quality'] as int,
+            ),
+          )
           .toList();
     } on MissingPluginException {
       return [];
@@ -263,9 +269,8 @@ class TtsService {
   /// The stream is broadcast -- multiple listeners are supported.
   /// Internally updates [state] based on events received.
   Stream<TtsEvent> get events {
-    _eventStream ??= _eventChannel
-        .receiveBroadcastStream()
-        .map((dynamic event) {
+    _eventStream ??=
+        _eventChannel.receiveBroadcastStream().map((dynamic event) {
           final map = Map<String, dynamic>.from(event as Map);
           final ttsEvent = TtsEvent.fromMap(map);
 
@@ -284,8 +289,7 @@ class TtsService {
           }
 
           return ttsEvent;
-        })
-        .asBroadcastStream();
+        }).asBroadcastStream();
     return _eventStream!;
   }
 }

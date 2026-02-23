@@ -4,9 +4,7 @@ import 'package:edge_veda/edge_veda.dart';
 void main() {
   group('EdgeVedaConfig', () {
     test('creates config with required parameters', () {
-      const config = EdgeVedaConfig(
-        modelPath: '/path/to/model.gguf',
-      );
+      const config = EdgeVedaConfig(modelPath: '/path/to/model.gguf');
 
       expect(config.modelPath, '/path/to/model.gguf');
       expect(config.numThreads, 4);
@@ -34,10 +32,7 @@ void main() {
     });
 
     test('toJson returns correct map', () {
-      const config = EdgeVedaConfig(
-        modelPath: '/test.gguf',
-        numThreads: 2,
-      );
+      const config = EdgeVedaConfig(modelPath: '/test.gguf', numThreads: 2);
 
       final json = config.toJson();
       expect(json['modelPath'], '/test.gguf');
@@ -119,10 +114,7 @@ void main() {
 
   group('TokenChunk', () {
     test('creates token chunk', () {
-      const chunk = TokenChunk(
-        token: 'Hello',
-        index: 0,
-      );
+      const chunk = TokenChunk(token: 'Hello', index: 0);
 
       expect(chunk.token, 'Hello');
       expect(chunk.index, 0);
@@ -130,11 +122,7 @@ void main() {
     });
 
     test('creates final token chunk', () {
-      const chunk = TokenChunk(
-        token: '',
-        index: 10,
-        isFinal: true,
-      );
+      const chunk = TokenChunk(token: '', index: 10, isFinal: true);
 
       expect(chunk.isFinal, true);
     });
@@ -142,20 +130,14 @@ void main() {
 
   group('DownloadProgress', () {
     test('calculates progress percentage', () {
-      const progress = DownloadProgress(
-        totalBytes: 1000,
-        downloadedBytes: 500,
-      );
+      const progress = DownloadProgress(totalBytes: 1000, downloadedBytes: 500);
 
       expect(progress.progress, 0.5);
       expect(progress.progressPercent, 50);
     });
 
     test('handles zero total bytes', () {
-      const progress = DownloadProgress(
-        totalBytes: 0,
-        downloadedBytes: 0,
-      );
+      const progress = DownloadProgress(totalBytes: 0, downloadedBytes: 0);
 
       expect(progress.progress, 0.0);
     });
@@ -200,10 +182,7 @@ void main() {
     });
 
     test('exception toString includes details', () {
-      const exception = GenerationException(
-        'Failed',
-        details: 'Out of memory',
-      );
+      const exception = GenerationException('Failed', details: 'Out of memory');
 
       final str = exception.toString();
       expect(str, contains('Failed'));

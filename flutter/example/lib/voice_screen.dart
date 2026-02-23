@@ -261,7 +261,8 @@ class _VoiceScreenState extends State<VoiceScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Microphone permission is required for voice conversations'),
+            content: Text(
+                'Microphone permission is required for voice conversations'),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -500,8 +501,7 @@ class _VoiceScreenState extends State<VoiceScreen>
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
-                        value:
-                            _downloadProgress > 0 ? _downloadProgress : null,
+                        value: _downloadProgress > 0 ? _downloadProgress : null,
                         color: AppTheme.accent,
                         backgroundColor: AppTheme.surfaceVariant,
                         minHeight: 6,
@@ -601,8 +601,7 @@ class _VoiceScreenState extends State<VoiceScreen>
   }
 
   Widget _buildTranscript() {
-    final hasContent = _transcript.isNotEmpty ||
-        _currentUserText != null;
+    final hasContent = _transcript.isNotEmpty || _currentUserText != null;
 
     if (!hasContent) {
       return Center(
@@ -733,9 +732,7 @@ class _VoiceScreenState extends State<VoiceScreen>
                 ),
                 child: Icon(
                   _isActive ? Icons.stop : Icons.mic,
-                  color: _isActive
-                      ? AppTheme.textPrimary
-                      : AppTheme.background,
+                  color: _isActive ? AppTheme.textPrimary : AppTheme.background,
                   size: 32,
                 ),
               ),

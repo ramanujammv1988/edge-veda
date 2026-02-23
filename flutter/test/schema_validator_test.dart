@@ -12,7 +12,10 @@ void main() {
         },
         'required': ['name'],
       };
-      final result = SchemaValidator.validate({'name': 'John', 'age': 30}, schema);
+      final result = SchemaValidator.validate({
+        'name': 'John',
+        'age': 30,
+      }, schema);
       expect(result.isValid, true);
       expect(result.errors, isEmpty);
     });
@@ -38,7 +41,9 @@ void main() {
         },
         'required': ['count'],
       };
-      final result = SchemaValidator.validate({'count': 'not a number'}, schema);
+      final result = SchemaValidator.validate({
+        'count': 'not a number',
+      }, schema);
       expect(result.isValid, false);
       expect(result.errors, isNotEmpty);
     });
@@ -50,8 +55,10 @@ void main() {
           'name': {'type': 'string'},
         },
       };
-      final result =
-          SchemaValidator.validate({'name': 'John', 'extra': 'x'}, schema);
+      final result = SchemaValidator.validate({
+        'name': 'John',
+        'extra': 'x',
+      }, schema);
       expect(result.isValid, true);
     });
   });
@@ -64,8 +71,10 @@ void main() {
           'name': {'type': 'string'},
         },
       };
-      final result = SchemaValidator.validateStrict(
-          {'name': 'John', 'extra': 'x'}, schema);
+      final result = SchemaValidator.validateStrict({
+        'name': 'John',
+        'extra': 'x',
+      }, schema);
       expect(result.isValid, false);
       expect(result.errors, contains(contains('extra')));
     });
@@ -96,17 +105,16 @@ void main() {
           'name': {'type': 'string'},
         },
       };
-      final result =
-          SchemaValidator.validateStrict({'name': 'John'}, schema);
+      final result = SchemaValidator.validateStrict({'name': 'John'}, schema);
       expect(result.isValid, true);
     });
 
     test('schema with no properties defined is permissive', () {
-      final schema = {
-        'type': 'object',
-      };
-      final result = SchemaValidator.validateStrict(
-          {'anything': 'goes', 'foo': 42}, schema);
+      final schema = {'type': 'object'};
+      final result = SchemaValidator.validateStrict({
+        'anything': 'goes',
+        'foo': 42,
+      }, schema);
       expect(result.isValid, true);
     });
   });
@@ -120,8 +128,7 @@ void main() {
         },
         'required': ['name'],
       };
-      expect(
-          SchemaValidator.validate({'name': 'hello'}, schema).isValid, true);
+      expect(SchemaValidator.validate({'name': 'hello'}, schema).isValid, true);
     });
 
     test('integer type validates correctly', () {
@@ -143,8 +150,7 @@ void main() {
         },
         'required': ['active'],
       };
-      expect(
-          SchemaValidator.validate({'active': true}, schema).isValid, true);
+      expect(SchemaValidator.validate({'active': true}, schema).isValid, true);
     });
 
     test('array type validates correctly', () {
@@ -160,7 +166,7 @@ void main() {
       };
       expect(
         SchemaValidator.validate({
-          'items': [1, 2, 3]
+          'items': [1, 2, 3],
         }, schema).isValid,
         true,
       );
@@ -182,7 +188,7 @@ void main() {
       };
       expect(
         SchemaValidator.validate({
-          'person': {'name': 'John'}
+          'person': {'name': 'John'},
         }, schema).isValid,
         true,
       );

@@ -67,10 +67,7 @@ class StreamingWorker {
     final initPort = ReceivePort();
 
     // Spawn the worker isolate
-    _isolate = await Isolate.spawn(
-      _workerEntryPoint,
-      initPort.sendPort,
-    );
+    _isolate = await Isolate.spawn(_workerEntryPoint, initPort.sendPort);
 
     // Wait for worker to send its command port
     _commandPort = await initPort.first as SendPort;
@@ -117,16 +114,18 @@ class StreamingWorker {
       }
     });
 
-    _commandPort!.send(InitWorkerCommand(
-      modelPath: modelPath,
-      numThreads: numThreads,
-      contextSize: contextSize,
-      useGpu: useGpu,
-      memoryLimitBytes: memoryLimitBytes,
-      flashAttn: flashAttn,
-      kvCacheTypeK: kvCacheTypeK,
-      kvCacheTypeV: kvCacheTypeV,
-    ));
+    _commandPort!.send(
+      InitWorkerCommand(
+        modelPath: modelPath,
+        numThreads: numThreads,
+        contextSize: contextSize,
+        useGpu: useGpu,
+        memoryLimitBytes: memoryLimitBytes,
+        flashAttn: flashAttn,
+        kvCacheTypeK: kvCacheTypeK,
+        kvCacheTypeV: kvCacheTypeV,
+      ),
+    );
 
     try {
       return await completer.future.timeout(const Duration(seconds: 60));
@@ -159,17 +158,19 @@ class StreamingWorker {
       }
     });
 
-    _commandPort!.send(StartStreamCommand(
-      prompt: prompt,
-      maxTokens: maxTokens,
-      temperature: temperature,
-      topP: topP,
-      topK: topK,
-      repeatPenalty: repeatPenalty,
-      confidenceThreshold: confidenceThreshold,
-      grammarStr: grammarStr,
-      grammarRoot: grammarRoot,
-    ));
+    _commandPort!.send(
+      StartStreamCommand(
+        prompt: prompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        topP: topP,
+        topK: topK,
+        repeatPenalty: repeatPenalty,
+        confidenceThreshold: confidenceThreshold,
+        grammarStr: grammarStr,
+        grammarRoot: grammarRoot,
+      ),
+    );
 
     try {
       // First stream setup can take longer on large prompts / constrained devices.
@@ -218,13 +219,15 @@ class StreamingWorker {
 
     final subscription = responses.listen((response) {
       if (response is MemoryStatsResponse) {
-        completer.complete(MemoryStats(
-          currentBytes: response.currentBytes,
-          peakBytes: response.peakBytes,
-          limitBytes: response.limitBytes,
-          modelBytes: response.modelBytes,
-          contextBytes: response.contextBytes,
-        ));
+        completer.complete(
+          MemoryStats(
+            currentBytes: response.currentBytes,
+            peakBytes: response.peakBytes,
+            limitBytes: response.limitBytes,
+            modelBytes: response.modelBytes,
+            contextBytes: response.contextBytes,
+          ),
+        );
       }
     });
 
@@ -325,10 +328,12 @@ void _workerEntryPoint(SendPort mainSendPort) {
       });
     } else if (message is StartStreamCommand) {
       if (nativeContext == null || bindings == null) {
-        responseSendPort.send(StreamErrorResponse(
-          message: 'Worker not initialized',
-          errorCode: -6, // EV_ERROR_CONTEXT_INVALID
-        ));
+        responseSendPort.send(
+          StreamErrorResponse(
+            message: 'Worker not initialized',
+            errorCode: -6, // EV_ERROR_CONTEXT_INVALID
+          ),
+        );
         return;
       }
       if (currentStream != null) {
@@ -348,8 +353,11 @@ void _workerEntryPoint(SendPort mainSendPort) {
         return;
       }
       final streamEnded = _handleNextToken(
-          currentStream!, bindings!, responseSendPort,
-          confidenceThreshold: currentConfidenceThreshold);
+        currentStream!,
+        bindings!,
+        responseSendPort,
+        confidenceThreshold: currentConfidenceThreshold,
+      );
       if (streamEnded && currentStream != null) {
         bindings!.evStreamFree(currentStream!);
         currentStream = null;
@@ -363,13 +371,15 @@ void _workerEntryPoint(SendPort mainSendPort) {
       responseSendPort.send(CancelledResponse());
     } else if (message is GetMemoryStatsCommand) {
       if (nativeContext == null || bindings == null) {
-        responseSendPort.send(MemoryStatsResponse(
-          currentBytes: 0,
-          peakBytes: 0,
-          limitBytes: 0,
-          modelBytes: 0,
-          contextBytes: 0,
-        ));
+        responseSendPort.send(
+          MemoryStatsResponse(
+            currentBytes: 0,
+            peakBytes: 0,
+            limitBytes: 0,
+            modelBytes: 0,
+            contextBytes: 0,
+          ),
+        );
         return;
       }
       _handleGetMemoryStats(nativeContext!, bindings!, responseSendPort);
@@ -421,10 +431,12 @@ void _handleInit(
     final ctx = bindings.evInit(configPtr, errorPtr);
 
     if (ctx == ffi.nullptr) {
-      responseSendPort.send(InitErrorResponse(
-        message: 'Failed to initialize native context',
-        errorCode: errorPtr.value,
-      ));
+      responseSendPort.send(
+        InitErrorResponse(
+          message: 'Failed to initialize native context',
+          errorCode: errorPtr.value,
+        ),
+      );
       return;
     }
 
@@ -481,14 +493,20 @@ ffi.Pointer<EvStreamImpl>? _handleStartStream(
     paramsPtr.ref.confidenceThreshold = cmd.confidenceThreshold;
     paramsPtr.ref.reserved = ffi.nullptr;
 
-    final stream =
-        bindings.evGenerateStream(ctx, promptPtr, paramsPtr, errorPtr);
+    final stream = bindings.evGenerateStream(
+      ctx,
+      promptPtr,
+      paramsPtr,
+      errorPtr,
+    );
 
     if (stream == ffi.nullptr) {
-      responseSendPort.send(StreamErrorResponse(
-        message: 'Failed to start stream',
-        errorCode: errorPtr.value,
-      ));
+      responseSendPort.send(
+        StreamErrorResponse(
+          message: 'Failed to start stream',
+          errorCode: errorPtr.value,
+        ),
+      );
       return null;
     }
 
@@ -517,11 +535,9 @@ bool _handleNextToken(
 
     if (tokenPtr == ffi.nullptr) {
       // Stream ended (either naturally or cancelled)
-      responseSendPort.send(TokenResponse(
-        token: null,
-        isFinal: true,
-        errorCode: errorCode,
-      ));
+      responseSendPort.send(
+        TokenResponse(token: null, isFinal: true, errorCode: errorCode),
+      );
       return true;
     }
 
@@ -545,13 +561,15 @@ bool _handleNextToken(
       }
     }
 
-    responseSendPort.send(TokenResponse(
-      token: token,
-      isFinal: false,
-      errorCode: 0,
-      confidence: tokenConfidence,
-      needsCloudHandoff: needsHandoff,
-    ));
+    responseSendPort.send(
+      TokenResponse(
+        token: token,
+        isFinal: false,
+        errorCode: 0,
+        confidence: tokenConfidence,
+        needsCloudHandoff: needsHandoff,
+      ),
+    );
     return false;
   } finally {
     calloc.free(errorPtr);
@@ -567,22 +585,26 @@ void _handleGetMemoryStats(
   try {
     final result = bindings.evGetMemoryUsage(ctx, statsPtr);
     if (result != 0) {
-      responseSendPort.send(MemoryStatsResponse(
-        currentBytes: 0,
-        peakBytes: 0,
-        limitBytes: 0,
-        modelBytes: 0,
-        contextBytes: 0,
-      ));
+      responseSendPort.send(
+        MemoryStatsResponse(
+          currentBytes: 0,
+          peakBytes: 0,
+          limitBytes: 0,
+          modelBytes: 0,
+          contextBytes: 0,
+        ),
+      );
       return;
     }
-    responseSendPort.send(MemoryStatsResponse(
-      currentBytes: statsPtr.ref.currentBytes,
-      peakBytes: statsPtr.ref.peakBytes,
-      limitBytes: statsPtr.ref.limitBytes,
-      modelBytes: statsPtr.ref.modelBytes,
-      contextBytes: statsPtr.ref.contextBytes,
-    ));
+    responseSendPort.send(
+      MemoryStatsResponse(
+        currentBytes: statsPtr.ref.currentBytes,
+        peakBytes: statsPtr.ref.peakBytes,
+        limitBytes: statsPtr.ref.limitBytes,
+        modelBytes: statsPtr.ref.modelBytes,
+        contextBytes: statsPtr.ref.contextBytes,
+      ),
+    );
   } finally {
     calloc.free(statsPtr);
   }

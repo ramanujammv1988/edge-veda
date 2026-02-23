@@ -68,10 +68,7 @@ class ImageWorker {
     final initPort = ReceivePort();
 
     // Spawn the worker isolate
-    _isolate = await Isolate.spawn(
-      _imageWorkerEntryPoint,
-      initPort.sendPort,
-    );
+    _isolate = await Isolate.spawn(_imageWorkerEntryPoint, initPort.sendPort);
 
     // Wait for worker to send its command port
     _commandPort = await initPort.first as SendPort;
@@ -119,11 +116,13 @@ class ImageWorker {
       }
     });
 
-    _commandPort!.send(InitImageCommand(
-      modelPath: modelPath,
-      numThreads: numThreads,
-      useGpu: useGpu,
-    ));
+    _commandPort!.send(
+      InitImageCommand(
+        modelPath: modelPath,
+        numThreads: numThreads,
+        useGpu: useGpu,
+      ),
+    );
 
     try {
       // SD model loading can take 30-60 seconds for ~2GB models
@@ -172,17 +171,19 @@ class ImageWorker {
       subscription.cancel();
     };
 
-    _commandPort!.send(GenerateImageCommand(
-      prompt: prompt,
-      negativePrompt: negativePrompt,
-      width: width,
-      height: height,
-      steps: steps,
-      cfgScale: cfgScale,
-      seed: seed,
-      sampler: sampler,
-      schedule: schedule,
-    ));
+    _commandPort!.send(
+      GenerateImageCommand(
+        prompt: prompt,
+        negativePrompt: negativePrompt,
+        width: width,
+        height: height,
+        steps: steps,
+        cfgScale: cfgScale,
+        seed: seed,
+        sampler: sampler,
+        schedule: schedule,
+      ),
+    );
 
     return controller.stream;
   }
@@ -272,10 +273,12 @@ void _imageWorkerEntryPoint(SendPort mainSendPort) {
       });
     } else if (message is GenerateImageCommand) {
       if (nativeImageContext == null || bindings == null) {
-        responseSendPort.send(ImageErrorResponse(
-          message: 'Image worker not initialized',
-          errorCode: -6, // EV_ERROR_CONTEXT_INVALID
-        ));
+        responseSendPort.send(
+          ImageErrorResponse(
+            message: 'Image worker not initialized',
+            errorCode: -6, // EV_ERROR_CONTEXT_INVALID
+          ),
+        );
         return;
       }
       _handleGenerateImage(
@@ -303,7 +306,7 @@ void _handleInitImage(
   InitImageCommand cmd,
   SendPort responseSendPort,
   void Function(ffi.Pointer<EvImageContextImpl>, EdgeVedaNativeBindings)
-      onSuccess,
+  onSuccess,
 ) {
   final bindings = EdgeVedaNativeBindings.instance;
 
@@ -321,10 +324,12 @@ void _handleInitImage(
     final ctx = bindings.evImageInit(configPtr, errorPtr);
 
     if (ctx == ffi.nullptr) {
-      responseSendPort.send(ImageInitErrorResponse(
-        message: 'Failed to initialize image generation context',
-        errorCode: errorPtr.value,
-      ));
+      responseSendPort.send(
+        ImageInitErrorResponse(
+          message: 'Failed to initialize image generation context',
+          errorCode: errorPtr.value,
+        ),
+      );
       return;
     }
 
@@ -358,9 +363,10 @@ void _handleGenerateImage(
   // Set up gen params
   final paramsPtr = calloc<EvImageGenParams>();
   final promptPtr = cmd.prompt.toNativeUtf8();
-  final negPromptPtr = cmd.negativePrompt != null
-      ? cmd.negativePrompt!.toNativeUtf8()
-      : ''.toNativeUtf8();
+  final negPromptPtr =
+      cmd.negativePrompt != null
+          ? cmd.negativePrompt!.toNativeUtf8()
+          : ''.toNativeUtf8();
 
   // Allocate result struct
   final resultPtr = calloc<EvImageResult>();
@@ -378,11 +384,13 @@ void _handleGenerateImage(
     double elapsedS,
     ffi.Pointer<ffi.Void> userData,
   ) {
-    responseSendPort.send(ImageProgressResponse(
-      step: step,
-      totalSteps: totalSteps,
-      elapsedSeconds: elapsedS,
-    ));
+    responseSendPort.send(
+      ImageProgressResponse(
+        step: step,
+        totalSteps: totalSteps,
+        elapsedSeconds: elapsedS,
+      ),
+    );
   }
 
   nativeCallback = ffi.NativeCallable<EvImageProgressCbNative>.isolateLocal(
@@ -413,10 +421,12 @@ void _handleGenerateImage(
     final result = bindings.evImageGenerate(ctx, paramsPtr, resultPtr);
 
     if (result != 0) {
-      responseSendPort.send(ImageErrorResponse(
-        message: 'Image generation failed: error code $result',
-        errorCode: result,
-      ));
+      responseSendPort.send(
+        ImageErrorResponse(
+          message: 'Image generation failed: error code $result',
+          errorCode: result,
+        ),
+      );
       return;
     }
 
@@ -439,13 +449,15 @@ void _handleGenerateImage(
     // Free native result memory (after capturing all values)
     bindings.evImageFreeResult(resultPtr);
 
-    responseSendPort.send(ImageCompleteResponse(
-      pixelData: pixelData,
-      width: resultWidth,
-      height: resultHeight,
-      channels: resultChannels,
-      generationTimeMs: generationTimeMs,
-    ));
+    responseSendPort.send(
+      ImageCompleteResponse(
+        pixelData: pixelData,
+        width: resultWidth,
+        height: resultHeight,
+        channels: resultChannels,
+        generationTimeMs: generationTimeMs,
+      ),
+    );
   } finally {
     // Clear progress callback to avoid stale pointer
     bindings.evImageSetProgressCallback(ctx, ffi.nullptr, ffi.nullptr);

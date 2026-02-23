@@ -132,10 +132,8 @@ ws ::= | " " | "\n" [ \t]{0,20}
 
   /// Build an object rule from properties and required list.
   String _buildObject(Map<String, dynamic> schema) {
-    final properties =
-        schema['properties'] as Map<String, dynamic>? ?? {};
-    final requiredList =
-        (schema['required'] as List?)?.cast<String>() ?? [];
+    final properties = schema['properties'] as Map<String, dynamic>? ?? {};
+    final requiredList = (schema['required'] as List?)?.cast<String>() ?? [];
 
     if (properties.isEmpty) {
       // Empty object: just {}
@@ -161,8 +159,7 @@ ws ::= | " " | "\n" [ \t]{0,20}
       final propSchema = properties[propName] as Map<String, dynamic>;
       final valueRef = _buildRule(propSchema);
       final propRuleName = _uniqueName('prop');
-      _rules[propRuleName] =
-          '"\\"$propName\\"" ws ":" ws $valueRef';
+      _rules[propRuleName] = '"\\"$propName\\"" ws ":" ws $valueRef';
       propRules.add(propRuleName);
     }
 
@@ -210,12 +207,10 @@ ws ::= | " " | "\n" [ \t]{0,20}
 
     if (items == null) {
       // Array of any values
-      _rules[name] =
-          '"[" ws (value ("," ws value)*)? "]" ws';
+      _rules[name] = '"[" ws (value ("," ws value)*)? "]" ws';
     } else {
       final itemRef = _buildRule(items);
-      _rules[name] =
-          '"[" ws ($itemRef ("," ws $itemRef)*)? "]" ws';
+      _rules[name] = '"[" ws ($itemRef ("," ws $itemRef)*)? "]" ws';
     }
 
     return name;
@@ -224,13 +219,15 @@ ws ::= | " " | "\n" [ \t]{0,20}
   /// Build an enum rule from a list of allowed values.
   String _buildEnum(List values) {
     final name = _uniqueName('enum');
-    final alternatives = values.map((v) {
-      if (v is String) {
-        return '"\\"${_escapeGbnf(v)}\\"" ws';
-      }
-      // Non-string enum values (numbers, booleans)
-      return '"$v" ws';
-    }).join(' | ');
+    final alternatives = values
+        .map((v) {
+          if (v is String) {
+            return '"\\"${_escapeGbnf(v)}\\"" ws';
+          }
+          // Non-string enum values (numbers, booleans)
+          return '"$v" ws';
+        })
+        .join(' | ');
     _rules[name] = '($alternatives)';
     return name;
   }
@@ -244,20 +241,15 @@ ws ::= | " " | "\n" [ \t]{0,20}
         r'''"\"" ([^"\\\x7F\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\"" ws''';
     _rules['number'] =
         r'("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws';
-    _rules['integer'] =
-        r'("-"? ([0-9] | [1-9] [0-9]{0,15})) ws';
-    _rules['boolean'] =
-        r'("true" | "false") ws';
+    _rules['integer'] = r'("-"? ([0-9] | [1-9] [0-9]{0,15})) ws';
+    _rules['boolean'] = r'("true" | "false") ws';
     _rules['object-any'] =
         r'"{" ws (string ":" ws value ("," ws string ":" ws value)*)? "}" ws';
-    _rules['array-any'] =
-        r'"[" ws (value ("," ws value)*)? "]" ws';
+    _rules['array-any'] = r'"[" ws (value ("," ws value)*)? "]" ws';
   }
 
   /// Escape special characters for GBNF string literals.
   static String _escapeGbnf(String value) {
-    return value
-        .replaceAll(r'\', r'\\')
-        .replaceAll('"', r'\"');
+    return value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
   }
 }

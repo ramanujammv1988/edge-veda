@@ -48,21 +48,13 @@ class VectorIndex {
   ///
   /// [dimensions] must match the embedding model's output size
   /// (e.g., 384 for all-MiniLM, 768 for nomic-embed-text).
-  VectorIndex({
-    required this.dimensions,
-  }) {
-    _index = LocalHNSW<String>(
-      dim: dimensions,
-      metric: LocalHnswMetric.cosine,
-    );
+  VectorIndex({required this.dimensions}) {
+    _index = LocalHNSW<String>(dim: dimensions, metric: LocalHnswMetric.cosine);
   }
 
   /// Private constructor for [load] factory.
   VectorIndex._internal({required this.dimensions}) {
-    _index = LocalHNSW<String>(
-      dim: dimensions,
-      metric: LocalHnswMetric.cosine,
-    );
+    _index = LocalHNSW<String>(dim: dimensions, metric: LocalHnswMetric.cosine);
   }
 
   /// Number of vectors in the index.
@@ -78,8 +70,11 @@ class VectorIndex {
   ///
   /// Throws [ArgumentError] if [embedding] length does not match [dimensions].
   /// If an entry with the same [id] already exists, it is replaced.
-  void add(String id, List<double> embedding,
-      {Map<String, dynamic>? metadata}) {
+  void add(
+    String id,
+    List<double> embedding, {
+    Map<String, dynamic>? metadata,
+  }) {
     if (embedding.length != dimensions) {
       throw ArgumentError(
         'Embedding dimension ${embedding.length} does not match '
@@ -170,8 +165,9 @@ class VectorIndex {
     // Restore metadata
     final meta = data['metadata'] as Map<String, dynamic>;
     for (final entry in meta.entries) {
-      vectorIndex._metadata[entry.key] =
-          Map<String, dynamic>.from(entry.value as Map);
+      vectorIndex._metadata[entry.key] = Map<String, dynamic>.from(
+        entry.value as Map,
+      );
       vectorIndex._ids.add(entry.key);
     }
 

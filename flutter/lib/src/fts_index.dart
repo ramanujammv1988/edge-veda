@@ -5,10 +5,10 @@ import 'dart:math' as math;
 class FtsIndex {
   final Map<String, List<String>> _documentTokens = {};
   final Map<String, int> _documentLengths = {};
-  
+
   // Inverted index: word -> { docId -> frequency }
   final Map<String, Map<String, int>> _invertedIndex = {};
-  
+
   // Document frequency: word -> number of documents containing the word
   final Map<String, int> _df = {};
 
@@ -39,7 +39,7 @@ class FtsIndex {
     if (_documentTokens.containsKey(id)) {
       remove(id);
     }
-    
+
     _documents[id] = text;
 
     final tokens = _tokenize(text);
@@ -77,7 +77,7 @@ class FtsIndex {
       if (_invertedIndex[token]?.isEmpty ?? true) {
         _invertedIndex.remove(token);
       }
-      
+
       if (_df.containsKey(token)) {
         _df[token] = _df[token]! - 1;
         if (_df[token]! <= 0) {

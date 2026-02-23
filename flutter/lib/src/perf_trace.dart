@@ -24,7 +24,7 @@ class PerfTrace {
 
   /// Create a PerfTrace that writes to the given file (append mode).
   PerfTrace(File traceFile)
-      : _sink = traceFile.openWrite(mode: FileMode.append);
+    : _sink = traceFile.openWrite(mode: FileMode.append);
 
   /// Current frame ID (zero-based, incremented by [nextFrame]).
   int get frameId => _frameId;

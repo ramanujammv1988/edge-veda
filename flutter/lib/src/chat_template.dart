@@ -140,7 +140,9 @@ class ChatTemplate {
         case ChatRole.user:
         case ChatRole.assistant:
         case ChatRole.system:
-          buffer.write('<|start_header_id|>${msg.role.name}<|end_header_id|>\n\n');
+          buffer.write(
+            '<|start_header_id|>${msg.role.name}<|end_header_id|>\n\n',
+          );
           buffer.write(msg.content);
           buffer.write('<|eot_id|>');
       }
@@ -289,10 +291,7 @@ class ChatTemplate {
   /// </tool_response><|im_end|>
   /// <|im_start|>assistant
   /// ```
-  static String _formatQwen3(
-    String? systemPrompt,
-    List<ChatMessage> messages,
-  ) {
+  static String _formatQwen3(String? systemPrompt, List<ChatMessage> messages) {
     final buffer = StringBuffer();
 
     // System prompt (optional)

@@ -61,7 +61,8 @@ class SoakTestService extends ChangeNotifier {
       MethodChannel('com.edgeveda.edge_veda/telemetry');
 
   /// True on any platform that can feed frames into the Vision pipeline
-  bool get cameraSupported => Platform.isIOS || Platform.isAndroid || Platform.isMacOS;
+  bool get cameraSupported =>
+      Platform.isIOS || Platform.isAndroid || Platform.isMacOS;
   CameraController? get cameraController => _cameraController;
   bool get isRunning => _isRunning;
   bool get isInitializing => _isInitializing;
@@ -206,7 +207,9 @@ class SoakTestService extends ChangeNotifier {
       _isRunning = true;
       _isInitializing = false;
       _statusMessage = cameraSupported
-          ? (Platform.isMacOS ? 'Screen capture running...' : 'Running in background...')
+          ? (Platform.isMacOS
+              ? 'Screen capture running...'
+              : 'Running in background...')
           : 'Monitoring user activity in background...';
       notifyListeners();
 
@@ -304,7 +307,8 @@ class SoakTestService extends ChangeNotifier {
       selectedModel = candidate;
       selectedMmproj = mmproj;
       mmprojMissing = !mmprojReady;
-      debugPrint('[SoakTest] matched model: ${candidate.id} (mmprojMissing=$mmprojMissing)');
+      debugPrint(
+          '[SoakTest] matched model: ${candidate.id} (mmprojMissing=$mmprojMissing)');
       break;
     }
 
@@ -312,7 +316,8 @@ class SoakTestService extends ChangeNotifier {
     // On macOS, if only the mobile-tier SmolVLM2 is available, upgrade to
     // Qwen2-VL 7B which produces far better screen descriptions.
     if (selectedModel == null ||
-        (Platform.isMacOS && selectedModel.id == ModelRegistry.smolvlm2_500m.id)) {
+        (Platform.isMacOS &&
+            selectedModel.id == ModelRegistry.smolvlm2_500m.id)) {
       if (Platform.isMacOS) {
         selectedModel = ModelRegistry.qwen2vl_7b;
         selectedMmproj = ModelRegistry.qwen2vl_7b_mmproj;
@@ -321,9 +326,11 @@ class SoakTestService extends ChangeNotifier {
         selectedMmproj = ModelRegistry.smolvlm2_500m_mmproj;
       }
 
-      final modelReady = await _modelManager.isModelDownloaded(selectedModel.id);
+      final modelReady =
+          await _modelManager.isModelDownloaded(selectedModel.id);
       if (!modelReady) {
-        _statusMessage = 'Downloading ${selectedModel.name} (${_formatBytes(selectedModel.sizeBytes)})...';
+        _statusMessage =
+            'Downloading ${selectedModel.name} (${_formatBytes(selectedModel.sizeBytes)})...';
         notifyListeners();
         await _modelManager.downloadModel(selectedModel);
       }
@@ -346,7 +353,6 @@ class SoakTestService extends ChangeNotifier {
     debugPrint('[SoakTest] model=$_modelPath');
     debugPrint('[SoakTest] mmproj=$_mmprojPath');
   }
-
 
   Future<void> _disposeInferenceWorkers() async {
     await _visionWorker.dispose();
@@ -420,8 +426,8 @@ class SoakTestService extends ChangeNotifier {
               : decoded;
 
           // Bulk-extract bytes in RGB order (avoids slow per-pixel getPixel).
-          final rgb = Uint8List.fromList(
-              scaled.getBytes(order: img.ChannelOrder.rgb));
+          final rgb =
+              Uint8List.fromList(scaled.getBytes(order: img.ChannelOrder.rgb));
 
           // Frame-diff: skip if the screen hasn't changed. Sample 64 evenly
           // spaced pixels and hash them. Identical hash = identical frame.
@@ -623,7 +629,8 @@ class SoakTestService extends ChangeNotifier {
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }

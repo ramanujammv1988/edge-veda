@@ -16,13 +16,15 @@ void main() {
       expect(warnings, isEmpty);
     });
 
-    test('batteryDrainPerTenMinutes=0.3 produces warning (< 0.5 restrictive)',
-        () {
-      const budget = EdgeVedaBudget(batteryDrainPerTenMinutes: 0.3);
-      final warnings = budget.validate();
-      expect(warnings, isNotEmpty);
-      expect(warnings.first, contains('batteryDrainPerTenMinutes'));
-    });
+    test(
+      'batteryDrainPerTenMinutes=0.3 produces warning (< 0.5 restrictive)',
+      () {
+        const budget = EdgeVedaBudget(batteryDrainPerTenMinutes: 0.3);
+        final warnings = budget.validate();
+        expect(warnings, isNotEmpty);
+        expect(warnings.first, contains('batteryDrainPerTenMinutes'));
+      },
+    );
 
     test('memoryCeilingMb=500 produces warning (< 2000 too low for VLM)', () {
       const budget = EdgeVedaBudget(memoryCeilingMb: 500);
@@ -49,14 +51,18 @@ void main() {
     );
 
     test('p95 = measuredP95 * 2.0', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.conservative, baseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.conservative,
+        baseline,
+      );
       expect(resolved.p95LatencyMs, 2000);
     });
 
     test('drain = measuredDrain * 0.6', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.conservative, baseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.conservative,
+        baseline,
+      );
       expect(resolved.batteryDrainPerTenMinutes, closeTo(1.8, 0.01));
     });
 
@@ -69,14 +75,18 @@ void main() {
         sampleCount: 20,
         measuredAt: DateTime.now(),
       );
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.conservative, nodrainBaseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.conservative,
+        nodrainBaseline,
+      );
       expect(resolved.batteryDrainPerTenMinutes, isNull);
     });
 
     test('thermal = max(currentThermal, 1)', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.conservative, baseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.conservative,
+        baseline,
+      );
       expect(resolved.maxThermalLevel, 1); // max(0, 1) = 1
     });
   });
@@ -92,20 +102,17 @@ void main() {
     );
 
     test('p95 = measuredP95 * 1.5', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
+      final resolved = EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
       expect(resolved.p95LatencyMs, 1500);
     });
 
     test('drain = measuredDrain * 1.0', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
+      final resolved = EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
       expect(resolved.batteryDrainPerTenMinutes, closeTo(3.0, 0.01));
     });
 
     test('thermal = 1 (always Fair)', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
+      final resolved = EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
       expect(resolved.maxThermalLevel, 1);
     });
   });
@@ -121,20 +128,26 @@ void main() {
     );
 
     test('p95 = measuredP95 * 1.1', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.performance, baseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.performance,
+        baseline,
+      );
       expect(resolved.p95LatencyMs, 1100);
     });
 
     test('drain = measuredDrain * 1.5', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.performance, baseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.performance,
+        baseline,
+      );
       expect(resolved.batteryDrainPerTenMinutes, closeTo(4.5, 0.01));
     });
 
     test('thermal = 3 (allow critical)', () {
-      final resolved =
-          EdgeVedaBudget.resolve(BudgetProfile.performance, baseline);
+      final resolved = EdgeVedaBudget.resolve(
+        BudgetProfile.performance,
+        baseline,
+      );
       expect(resolved.maxThermalLevel, 3);
     });
   });

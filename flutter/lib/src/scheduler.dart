@@ -37,10 +37,7 @@ class _WorkloadState {
   QoSLevel level = QoSLevel.full;
   DateTime? lastDegradation;
 
-  _WorkloadState({
-    required this.priority,
-    required this.latencyTracker,
-  });
+  _WorkloadState({required this.priority, required this.latencyTracker});
 }
 
 /// Central coordinator that enforces [EdgeVedaBudget] constraints across
@@ -84,16 +81,15 @@ class Scheduler {
     required TelemetryService telemetry,
     PerfTrace? perfTrace,
     this.restorationCooldown = const Duration(seconds: 30),
-  })  : _telemetry = telemetry,
-        _trace = perfTrace;
+  }) : _telemetry = telemetry,
+       _trace = perfTrace;
 
   /// Stream of budget violation events.
   ///
   /// Emitted when a constraint cannot be satisfied even after attempting
   /// mitigation (degrading workloads). Listen to this stream to display
   /// warnings or take app-level action.
-  Stream<BudgetViolation> get onBudgetViolation =>
-      _violationController.stream;
+  Stream<BudgetViolation> get onBudgetViolation => _violationController.stream;
 
   /// The currently active budget, or null if none set.
   EdgeVedaBudget? get budget => _budget;
@@ -128,8 +124,10 @@ class Scheduler {
       debugPrint('[Scheduler] Budget warning: $w');
     }
     if (budget.adaptiveProfile != null) {
-      debugPrint('[Scheduler] Adaptive budget (${budget.adaptiveProfile!.name}) '
-          'set. Enforcement deferred until warm-up completes.');
+      debugPrint(
+        '[Scheduler] Adaptive budget (${budget.adaptiveProfile!.name}) '
+        'set. Enforcement deferred until warm-up completes.',
+      );
     }
   }
 
@@ -137,8 +135,7 @@ class Scheduler {
   ///
   /// The workload starts at [QoSLevel.full]. If a workload with the same
   /// [id] is already registered, it is replaced.
-  void registerWorkload(WorkloadId id,
-      {required WorkloadPriority priority}) {
+  void registerWorkload(WorkloadId id, {required WorkloadPriority priority}) {
     _workloads[id] = _WorkloadState(
       priority: priority,
       latencyTracker: LatencyTracker(),
@@ -190,8 +187,7 @@ class Scheduler {
   /// [QoSLevel.full]), the Scheduler may call [callback] to free the
   /// workload's model memory. This is a one-shot mechanism: after
   /// eviction fires, both the workload and callback are unregistered.
-  void registerMemoryEviction(
-      WorkloadId id, Future<void> Function() callback) {
+  void registerMemoryEviction(WorkloadId id, Future<void> Function() callback) {
     _memoryEvictionCallbacks[id] = callback;
   }
 
@@ -277,16 +273,23 @@ class Scheduler {
       );
 
       // Resolve adaptive budget (battery constraint will be null if drainRate is null)
-      _resolvedBudget = EdgeVedaBudget.resolve(budget.adaptiveProfile!, _measuredBaseline!);
+      _resolvedBudget = EdgeVedaBudget.resolve(
+        budget.adaptiveProfile!,
+        _measuredBaseline!,
+      );
       _latencyResolved = true;
       // If battery data was already available, mark battery as resolved too
       if (drainRate != null) _batteryResolved = true;
 
-      debugPrint('[Scheduler] Warm-up complete. Measured baseline: $_measuredBaseline');
+      debugPrint(
+        '[Scheduler] Warm-up complete. Measured baseline: $_measuredBaseline',
+      );
       debugPrint('[Scheduler] Resolved budget: $_resolvedBudget');
       if (drainRate == null) {
-        debugPrint('[Scheduler] Battery data not yet available. '
-            'Will update battery constraint when drain tracker warms up.');
+        debugPrint(
+          '[Scheduler] Battery data not yet available. '
+          'Will update battery constraint when drain tracker warms up.',
+        );
       }
 
       _trace?.record(
@@ -323,10 +326,15 @@ class Scheduler {
       );
 
       // Re-resolve to add battery constraint
-      _resolvedBudget = EdgeVedaBudget.resolve(budget.adaptiveProfile!, _measuredBaseline!);
+      _resolvedBudget = EdgeVedaBudget.resolve(
+        budget.adaptiveProfile!,
+        _measuredBaseline!,
+      );
       _batteryResolved = true;
 
-      debugPrint('[Scheduler] Battery data available. Updated resolved budget: $_resolvedBudget');
+      debugPrint(
+        '[Scheduler] Battery data available. Updated resolved budget: $_resolvedBudget',
+      );
 
       _trace?.record(
         stage: 'budget_battery_resolved',
@@ -456,7 +464,8 @@ class Scheduler {
     }
 
     // 7. Log budget check
-    final totalViolations = actionableViolations.length + observeOnlyViolations.length;
+    final totalViolations =
+        actionableViolations.length + observeOnlyViolations.length;
     _trace?.record(
       stage: 'budget_check',
       value: totalViolations.toDouble(),
@@ -479,8 +488,10 @@ class Scheduler {
     double? drainRate,
   ) {
     // Sort workloads by priority: low first (degrade first)
-    final sortedWorkloads = _workloads.entries.toList()
-      ..sort((a, b) => a.value.priority.index.compareTo(b.value.priority.index));
+    final sortedWorkloads =
+        _workloads.entries.toList()..sort(
+          (a, b) => a.value.priority.index.compareTo(b.value.priority.index),
+        );
 
     bool degraded = false;
 
@@ -518,9 +529,10 @@ class Scheduler {
           extra: {
             'action': 'tool_degrade',
             'level': state.level.name,
-            'tools_available': state.level == QoSLevel.full
-                ? 'all'
-                : state.level == QoSLevel.reduced
+            'tools_available':
+                state.level == QoSLevel.full
+                    ? 'all'
+                    : state.level == QoSLevel.reduced
                     ? 'required_only'
                     : 'none',
           },
@@ -535,9 +547,10 @@ class Scheduler {
     // For each violation, emit a BudgetViolation event if mitigation
     // was insufficient or if we couldn't degrade further.
     for (final constraint in violations) {
-      final mitigation = degraded
-          ? 'Degraded lowest-priority workload'
-          : 'All workloads already at maximum degradation';
+      final mitigation =
+          degraded
+              ? 'Degraded lowest-priority workload'
+              : 'All workloads already at maximum degradation';
 
       // Determine current and budget values for the violation
       double currentValue;
@@ -646,8 +659,9 @@ class Scheduler {
         'workload': target.name,
         'ceiling_mb': ceiling,
         'rss_mb': rssMb.round(),
-        'overshoot_pct':
-            (((rssMb - ceiling) / ceiling) * 100).toStringAsFixed(1),
+        'overshoot_pct': (((rssMb - ceiling) / ceiling) * 100).toStringAsFixed(
+          1,
+        ),
       },
     );
 
@@ -658,8 +672,10 @@ class Scheduler {
     _workloads.remove(target);
     _memoryEvictionCallbacks.remove(target);
 
-    debugPrint('[Scheduler] Memory eviction: unloaded ${target.name} '
-        '(RSS ${rssMb.round()}MB > ceiling ${ceiling}MB)');
+    debugPrint(
+      '[Scheduler] Memory eviction: unloaded ${target.name} '
+      '(RSS ${rssMb.round()}MB > ceiling ${ceiling}MB)',
+    );
   }
 
   /// Attempt to restore workloads that have been degraded.
@@ -669,9 +685,10 @@ class Scheduler {
   /// degradation of that specific workload.
   void _attemptRestoration() {
     // Sort workloads by priority: high first (restore first)
-    final sortedWorkloads = _workloads.entries.toList()
-      ..sort(
-          (a, b) => b.value.priority.index.compareTo(a.value.priority.index));
+    final sortedWorkloads =
+        _workloads.entries.toList()..sort(
+          (a, b) => b.value.priority.index.compareTo(a.value.priority.index),
+        );
 
     for (final entry in sortedWorkloads) {
       final id = entry.key;
