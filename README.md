@@ -177,9 +177,9 @@ Flutter App (Dart)
     +-- DeviceProfile -------- iPhone model/RAM/chip detection via sysctl
     +-- MemoryEstimator ------ Calibrated model memory prediction
     |
-    +-- FFI Bindings --------- 50 C functions via DynamicLibrary.process()
+    +-- FFI Bindings --------- 50 C functions via DynamicLibrary.open() (dynamic framework)
          |
-    XCFramework (libedge_veda_full.a)
+    XCFramework (EdgeVedaCore.framework)
     +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
     +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
     +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)
@@ -201,7 +201,7 @@ Flutter App (Dart)
 ```yaml
 # pubspec.yaml
 dependencies:
-  edge_veda: ^2.3.0
+  edge_veda: ^2.4.0
 ```
 
 ### Text Generation
@@ -600,7 +600,7 @@ edge-veda/
 ./scripts/build-ios.sh --clean --release
 ```
 
-Compiles llama.cpp + whisper.cpp + Edge Veda C code for device (arm64) and simulator (arm64), merges static libraries into a single XCFramework.
+Compiles llama.cpp + whisper.cpp + stable-diffusion.cpp + Edge Veda C code for device (arm64) and simulator (arm64), links into dynamic frameworks, and packages as an XCFramework.
 
 ### Run Demo App
 
@@ -675,7 +675,7 @@ Contributions are welcome. Here's how to get started:
 - Dart: follow standard `dart format` conventions
 - C++: match existing style in `core/src/`
 - All FFI calls must run in isolates (never on main thread)
-- New C API functions must be added to the podspec symbol whitelist
+- New C API functions are automatically exported via the dynamic framework (no symbol whitelist needed)
 
 ---
 

@@ -61,6 +61,9 @@ enum WorkloadId {
 
   /// Image generation (ImageWorker via Stable Diffusion).
   image,
+
+  /// Voice pipeline (VoicePipeline orchestrator: STT + LLM + TTS).
+  voicePipeline,
 }
 
 /// Adaptive budget profile expressing intent as multipliers on measured device baseline.
