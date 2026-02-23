@@ -93,7 +93,7 @@ help:
 # macOS Build
 # ============================================================================
 build-macos:
-	$(call print_header,"Building C++ Core for macOS")
+	$(call print_header,Building C++ Core for macOS)
 	@mkdir -p $(BUILD_DIR)/macos
 	@cd $(BUILD_DIR)/macos && \
 		$(CMAKE) ../../$(CORE_DIR) \
@@ -104,7 +104,7 @@ build-macos:
 			-DUSE_METAL=ON \
 			-DBUILD_TESTING=ON
 	@cd $(BUILD_DIR)/macos && $(NINJA) -j $(NUM_JOBS)
-	$(call print_success,"macOS build complete: $(BUILD_DIR)/macos/")
+	$(call print_success,macOS build complete: $(BUILD_DIR)/macos/)
 
 # ============================================================================
 # iOS Build
@@ -112,7 +112,7 @@ build-macos:
 build-ios: build-ios-device build-ios-simulator create-xcframework
 
 build-ios-device:
-	$(call print_header,"Building C++ Core for iOS Device")
+	$(call print_header,Building C++ Core for iOS Device)
 	@mkdir -p $(BUILD_DIR)/ios-device
 	@cd $(BUILD_DIR)/ios-device && \
 		$(CMAKE) ../../$(CORE_DIR) \
@@ -121,13 +121,14 @@ build-ios-device:
 			-DPLATFORM=$(IOS_PLATFORM) \
 			-DDEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) \
 			-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
-			-DUSE_METAL=ON \
+			-DEDGE_VEDA_BUILD_SHARED=OFF \
+			-DEDGE_VEDA_BUILD_STATIC=ON \
 			-DBUILD_SHARED_LIBS=OFF
 	@cd $(BUILD_DIR)/ios-device && $(NINJA) -j $(NUM_JOBS)
-	$(call print_success,"iOS device build complete")
+	$(call print_success,iOS device build complete)
 
 build-ios-simulator:
-	$(call print_header,"Building C++ Core for iOS Simulator")
+	$(call print_header,Building C++ Core for iOS Simulator)
 	@mkdir -p $(BUILD_DIR)/ios-simulator
 	@cd $(BUILD_DIR)/ios-simulator && \
 		$(CMAKE) ../../$(CORE_DIR) \
@@ -136,31 +137,33 @@ build-ios-simulator:
 			-DPLATFORM=$(IOS_SIMULATOR_PLATFORM) \
 			-DDEPLOYMENT_TARGET=$(IOS_DEPLOYMENT_TARGET) \
 			-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
+			-DEDGE_VEDA_BUILD_SHARED=OFF \
+			-DEDGE_VEDA_BUILD_STATIC=ON \
 			-DBUILD_SHARED_LIBS=OFF
 	@cd $(BUILD_DIR)/ios-simulator && $(NINJA) -j $(NUM_JOBS)
-	$(call print_success,"iOS simulator build complete")
+	$(call print_success,iOS simulator build complete)
 
 create-xcframework:
-	$(call print_header,"Creating iOS XCFramework")
+	$(call print_header,Creating iOS XCFramework)
 	@mkdir -p $(BUILD_DIR)/ios
 	@if [ -d "$(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework" ]; then \
 		rm -rf $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework; \
 	fi
 	@xcodebuild -create-xcframework \
-		-library $(BUILD_DIR)/ios-device/lib$(PROJECT_NAME).a \
+		-library $(BUILD_DIR)/ios-device/libedge_veda.a \
 		-headers $(CORE_DIR)/include \
-		-library $(BUILD_DIR)/ios-simulator/lib$(PROJECT_NAME).a \
+		-library $(BUILD_DIR)/ios-simulator/libedge_veda.a \
 		-headers $(CORE_DIR)/include \
 		-output $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework
-	$(call print_success,"XCFramework created: $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework")
+	$(call print_success,XCFramework created: $(BUILD_DIR)/ios/$(PROJECT_NAME).xcframework)
 
 # ============================================================================
 # Android Build
 # ============================================================================
 build-android: check-android-ndk
-	$(call print_header,"Building C++ Core for Android (multi-ABI)")
+	$(call print_header,Building C++ Core for Android - multi-ABI)
 	@for abi in arm64-v8a armeabi-v7a x86_64 x86; do \
-		echo "$(COLOR_BOLD)Building for ABI: $$abi$(COLOR_RESET)"; \
+		echo "Building for ABI: $$abi"; \
 		mkdir -p $(BUILD_DIR)/android/$$abi; \
 		cd $(BUILD_DIR)/android/$$abi && \
 		$(CMAKE) ../../../$(CORE_DIR) \
@@ -177,17 +180,17 @@ build-android: check-android-ndk
 		cd ../../..; \
 	done
 	@$(MAKE) package-android-aar
-	$(call print_success,"Android build complete: $(BUILD_DIR)/android/edgeveda.aar")
+	$(call print_success,Android build complete: $(BUILD_DIR)/android/edgeveda.aar)
 
 package-android-aar:
-	$(call print_header,"Packaging Android AAR")
+	$(call print_header,Packaging Android AAR)
 	@mkdir -p $(BUILD_DIR)/android/aar/jni
 	@for abi in arm64-v8a armeabi-v7a x86_64 x86; do \
 		mkdir -p $(BUILD_DIR)/android/aar/jni/$$abi; \
 		cp $(BUILD_DIR)/android/$$abi/*.so $(BUILD_DIR)/android/aar/jni/$$abi/ 2>/dev/null || true; \
 	done
 	@cd $(BUILD_DIR)/android/aar && zip -r ../edgeveda.aar . > /dev/null
-	$(call print_success,"AAR packaged")
+	$(call print_success,AAR packaged)
 
 check-android-ndk:
 	@if [ -z "$(ANDROID_NDK)" ] || [ ! -d "$(ANDROID_NDK)" ]; then \
@@ -201,7 +204,7 @@ check-android-ndk:
 # WebAssembly Build
 # ============================================================================
 build-wasm: check-emscripten
-	$(call print_header,"Building WebAssembly module")
+	$(call print_header,Building WebAssembly module)
 	@mkdir -p $(BUILD_DIR)/wasm
 	@. $(EMSDK)/emsdk_env.sh && \
 		cd $(BUILD_DIR)/wasm && \
@@ -210,7 +213,7 @@ build-wasm: check-emscripten
 			-DBUILD_SHARED_LIBS=OFF \
 			-DUSE_WEBGPU=ON && \
 		emmake make -j $(NUM_JOBS)
-	$(call print_success,"WASM build complete: $(BUILD_DIR)/wasm/")
+	$(call print_success,WASM build complete: $(BUILD_DIR)/wasm/)
 
 check-emscripten:
 	@if [ -z "$(EMSDK)" ] || [ ! -d "$(EMSDK)" ]; then \
@@ -225,27 +228,27 @@ check-emscripten:
 # SDK Builds
 # ============================================================================
 build-flutter: build-macos
-	$(call print_header,"Building Flutter plugin")
+	$(call print_header,Building Flutter plugin)
 	@cd $(FLUTTER_DIR) && flutter pub get
 	@cd $(FLUTTER_DIR) && dart format .
 	@cd $(FLUTTER_DIR) && flutter analyze
-	$(call print_success,"Flutter plugin ready")
+	$(call print_success,Flutter plugin ready)
 
 build-swift: build-macos
-	$(call print_header,"Building Swift package")
+	$(call print_header,Building Swift package)
 	@cd $(SWIFT_DIR) && swift build -c release
-	$(call print_success,"Swift package built")
+	$(call print_success,Swift package built)
 
 build-kotlin: build-android
-	$(call print_header,"Building Kotlin SDK")
+	$(call print_header,Building Kotlin SDK)
 	@cd $(KOTLIN_DIR) && ./gradlew build || echo "Gradle not configured yet"
-	$(call print_success,"Kotlin SDK built")
+	$(call print_success,Kotlin SDK built)
 
 build-rn:
-	$(call print_header,"Building React Native module")
+	$(call print_header,Building React Native module)
 	@cd $(RN_DIR) && npm install
 	@cd $(RN_DIR) && npm run build || echo "Build script not configured yet"
-	$(call print_success,"React Native module built")
+	$(call print_success,React Native module built)
 
 # ============================================================================
 # Testing
@@ -253,7 +256,7 @@ build-rn:
 test: test-core test-flutter test-swift
 
 test-core:
-	$(call print_header,"Running C++ tests")
+	$(call print_header,Running C++ tests)
 	@if [ -d "$(BUILD_DIR)/macos" ]; then \
 		cd $(BUILD_DIR)/macos && ctest --output-on-failure; \
 	else \
@@ -261,19 +264,19 @@ test-core:
 	fi
 
 test-flutter:
-	$(call print_header,"Running Flutter tests")
+	$(call print_header,Running Flutter tests)
 	@cd $(FLUTTER_DIR) && flutter test || echo "No Flutter tests configured yet"
 
 test-swift:
-	$(call print_header,"Running Swift tests")
+	$(call print_header,Running Swift tests)
 	@cd $(SWIFT_DIR) && swift test || echo "No Swift tests configured yet"
 
 test-android:
-	$(call print_header,"Running Android tests")
+	$(call print_header,Running Android tests)
 	@cd $(KOTLIN_DIR) && ./gradlew test || echo "No Android tests configured yet"
 
 test-rn:
-	$(call print_header,"Running React Native tests")
+	$(call print_header,Running React Native tests)
 	@cd $(RN_DIR) && npm test || echo "No RN tests configured yet"
 
 # ============================================================================
@@ -282,22 +285,22 @@ test-rn:
 format: format-cpp format-dart format-swift format-kotlin
 
 format-cpp:
-	$(call print_header,"Formatting C++ code")
+	$(call print_header,Formatting C++ code)
 	@find $(CORE_DIR) -name "*.cpp" -o -name "*.h" -o -name "*.hpp" | \
 		xargs clang-format -i --style=file || \
 		echo "$(COLOR_YELLOW)clang-format not found, skipping$(COLOR_RESET)"
 
 format-dart:
-	$(call print_header,"Formatting Dart code")
+	$(call print_header,Formatting Dart code)
 	@cd $(FLUTTER_DIR) && dart format .
 
 format-swift:
-	$(call print_header,"Formatting Swift code")
+	$(call print_header,Formatting Swift code)
 	@swiftformat $(SWIFT_DIR) || \
 		echo "$(COLOR_YELLOW)swiftformat not found, skipping$(COLOR_RESET)"
 
 format-kotlin:
-	$(call print_header,"Formatting Kotlin code")
+	$(call print_header,Formatting Kotlin code)
 	@cd $(KOTLIN_DIR) && ./gradlew ktlintFormat || \
 		echo "$(COLOR_YELLOW)ktlint not configured, skipping$(COLOR_RESET)"
 
@@ -307,41 +310,41 @@ format-kotlin:
 check: check-cpp check-flutter
 
 check-cpp:
-	$(call print_header,"Running C++ static analysis")
+	$(call print_header,Running C++ static analysis)
 	@clang-tidy $(CORE_DIR)/src/*.cpp -- -I$(CORE_DIR)/include || \
 		echo "$(COLOR_YELLOW)clang-tidy not found, skipping$(COLOR_RESET)"
 
 check-flutter:
-	$(call print_header,"Running Flutter analysis")
+	$(call print_header,Running Flutter analysis)
 	@cd $(FLUTTER_DIR) && flutter analyze
 
 # ============================================================================
 # Cleanup
 # ============================================================================
 clean:
-	$(call print_header,"Cleaning build artifacts")
+	$(call print_header,Cleaning build artifacts)
 	@rm -rf $(BUILD_DIR)
 	@cd $(FLUTTER_DIR) && flutter clean || true
 	@cd $(SWIFT_DIR) && swift package clean || true
 	@cd $(KOTLIN_DIR) && ./gradlew clean || true
 	@cd $(RN_DIR) && rm -rf node_modules build || true
-	$(call print_success,"Clean complete")
+	$(call print_success,Clean complete)
 
 clean-all: clean
-	$(call print_header,"Deep cleaning (including dependencies)")
+	$(call print_header,Deep cleaning - including dependencies)
 	@cd $(FLUTTER_DIR) && rm -rf .dart_tool .packages || true
 	@cd $(RN_DIR) && rm -rf node_modules package-lock.json || true
-	$(call print_success,"Deep clean complete")
+	$(call print_success,Deep clean complete)
 
 # ============================================================================
 # Setup and Installation
 # ============================================================================
 setup:
-	$(call print_header,"Running project setup")
+	$(call print_header,Running project setup)
 	@./scripts/setup.sh
 
 install-deps:
-	$(call print_header,"Installing system dependencies")
+	$(call print_header,Installing system dependencies)
 	@if command -v brew >/dev/null 2>&1; then \
 		brew install cmake ninja ccache clang-format; \
 	elif command -v apt-get >/dev/null 2>&1; then \
