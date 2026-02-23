@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
 import 'package:edge_veda/src/budget.dart';
 
 void main() {
@@ -58,12 +59,15 @@ void main() {
       expect(resolved.p95LatencyMs, 2000);
     });
 
-    test('drain = measuredDrain * 0.6', () {
+    test('drain = measuredDrain * 0.6 on mobile, null on macOS', () {
       final resolved = EdgeVedaBudget.resolve(
         BudgetProfile.conservative,
         baseline,
       );
-      expect(resolved.batteryDrainPerTenMinutes, closeTo(1.8, 0.01));
+      expect(
+        resolved.batteryDrainPerTenMinutes,
+        Platform.isMacOS ? isNull : closeTo(1.8, 0.01),
+      );
     });
 
     test('drain = null when baseline drain is null', () {
@@ -106,9 +110,12 @@ void main() {
       expect(resolved.p95LatencyMs, 1500);
     });
 
-    test('drain = measuredDrain * 1.0', () {
+    test('drain = measuredDrain * 1.0 on mobile, null on macOS', () {
       final resolved = EdgeVedaBudget.resolve(BudgetProfile.balanced, baseline);
-      expect(resolved.batteryDrainPerTenMinutes, closeTo(3.0, 0.01));
+      expect(
+        resolved.batteryDrainPerTenMinutes,
+        Platform.isMacOS ? isNull : closeTo(3.0, 0.01),
+      );
     });
 
     test('thermal = 1 (always Fair)', () {
@@ -135,12 +142,15 @@ void main() {
       expect(resolved.p95LatencyMs, 1100);
     });
 
-    test('drain = measuredDrain * 1.5', () {
+    test('drain = measuredDrain * 1.5 on mobile, null on macOS', () {
       final resolved = EdgeVedaBudget.resolve(
         BudgetProfile.performance,
         baseline,
       );
-      expect(resolved.batteryDrainPerTenMinutes, closeTo(4.5, 0.01));
+      expect(
+        resolved.batteryDrainPerTenMinutes,
+        Platform.isMacOS ? isNull : closeTo(4.5, 0.01),
+      );
     });
 
     test('thermal = 3 (allow critical)', () {

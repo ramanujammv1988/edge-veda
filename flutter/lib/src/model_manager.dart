@@ -853,17 +853,17 @@ class ModelRegistry {
 
   // -- macOS Desktop --
 
-  /// SDXL Turbo Q8_0 - 1024x1024 high quality, 4-step generation (~6.7 GB)
+  /// SDXL Turbo FP16 - 1024x1024 high quality, 4-step generation (~6.7 GB)
   // ignore: constant_identifier_names
   static const ModelInfo sdxlTurbo = ModelInfo(
-    id: 'sdxl-turbo-q8',
-    name: 'SDXL Turbo Q8_0',
+    id: 'sdxl-turbo-fp16',
+    name: 'SDXL Turbo FP16',
     sizeBytes: 6800 * 1024 * 1024, // ~6.7 GB
     description: '1024×1024 high-quality 4-step image generation for macOS',
     downloadUrl:
         'https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors',
     format: 'safetensors',
-    quantization: 'Q8_0',
+    quantization: 'FP16',
     capabilities: ['imageGeneration'],
     family: 'stable-diffusion-xl',
   );

@@ -371,9 +371,18 @@ void ev_free(ev_context ctx) {
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // Memory guard callback is global; clear stale callbacks on context free.
-    memory_guard_set_callback(nullptr, nullptr);
-    memory_guard_set_limit(0);
+    {
+        std::lock_guard<std::mutex> global_lock(g_memory_contexts_mutex);
+        auto it = std::find(g_memory_contexts.begin(), g_memory_contexts.end(), ctx);
+        if (it != g_memory_contexts.end()) {
+            g_memory_contexts.erase(it);
+        }
+        
+        if (g_memory_contexts.empty()) {
+            memory_guard_set_callback(nullptr, nullptr);
+            memory_guard_set_limit(0);
+        }
+    }
 
     if (ctx->sampler) {
         llama_sampler_free(ctx->sampler);

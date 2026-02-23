@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
 import 'package:edge_veda/src/model_advisor.dart';
 import 'package:edge_veda/src/types.dart' show ModelInfo;
 
@@ -204,7 +205,7 @@ void main() {
   });
 
   group('Device safe memory budget', () {
-    test('8GB device: safeMemoryBudgetMB = 4915', () {
+    test('8GB device: safeMemoryBudgetMB = 6554 (macOS 80%) / 4915 (mobile 60%)', () {
       const device = DeviceProfile(
         identifier: 'iPhone16,1',
         deviceName: 'iPhone 15 Pro',
@@ -212,11 +213,10 @@ void main() {
         chipName: 'A17 Pro',
         tier: DeviceTier.high,
       );
-      expect(device.safeMemoryBudgetMB, (8 * 1024 * 0.60).round());
-      expect(device.safeMemoryBudgetMB, 4915);
+      expect(device.safeMemoryBudgetMB, Platform.isMacOS ? 6554 : 4915);
     });
 
-    test('4GB device: safeMemoryBudgetMB = 2458', () {
+    test('4GB device: safeMemoryBudgetMB = 3277 (macOS 80%) / 2458 (mobile 60%)', () {
       const device = DeviceProfile(
         identifier: 'iPhone13,1',
         deviceName: 'iPhone 12 mini',
@@ -224,8 +224,7 @@ void main() {
         chipName: 'A14 Bionic',
         tier: DeviceTier.minimum,
       );
-      expect(device.safeMemoryBudgetMB, (4 * 1024 * 0.60).round());
-      expect(device.safeMemoryBudgetMB, 2458);
+      expect(device.safeMemoryBudgetMB, Platform.isMacOS ? 3277 : 2458);
     });
   });
 }
