@@ -70,15 +70,17 @@ Sustained soak tests — not single-frame burst benchmarks.
 
 ## Retrieval-Augmented Generation (RAG)
 
-Two-model architecture: dedicated embedder + generator.
+Two-model architecture: dedicated embedder + generator. Hybrid search combines vector similarity with BM25 full-text search via Reciprocal Rank Fusion (RRF).
 
 | Metric | Value | Conditions |
 |--------|-------|------------|
 | **Generation speed** | 42–43 tok/s | Llama 3.2 1B Q4_K_M |
 | **Vector search** | <1 ms | HNSW index, cosine similarity |
-| **End-to-end retrieval** | 305–865 ms | Embed query + search + context injection |
+| **BM25 text search** | <1 ms | FtsIndex, pure Dart |
+| **Fusion** | Reciprocal Rank Fusion | k=60, normalized scores |
+| **End-to-end retrieval** | 305–865 ms | Embed query + hybrid search + context injection |
 | **Embedding model** | all-MiniLM-L6-v2 | 46 MB, 384 dimensions |
-| **Index type** | HNSW | Pure Dart, JSON-persistent |
+| **Index type** | HNSW + BM25 | Pure Dart, JSON-persistent |
 
 ## Function Calling
 
