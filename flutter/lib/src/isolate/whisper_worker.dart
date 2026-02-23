@@ -68,10 +68,7 @@ class WhisperWorker {
     final initPort = ReceivePort();
 
     // Spawn the worker isolate
-    _isolate = await Isolate.spawn(
-      _whisperWorkerEntryPoint,
-      initPort.sendPort,
-    );
+    _isolate = await Isolate.spawn(_whisperWorkerEntryPoint, initPort.sendPort);
 
     // Wait for worker to send its command port
     _commandPort = await initPort.first as SendPort;
@@ -116,11 +113,13 @@ class WhisperWorker {
       }
     });
 
-    _commandPort!.send(InitWhisperCommand(
-      modelPath: modelPath,
-      numThreads: numThreads,
-      useGpu: useGpu,
-    ));
+    _commandPort!.send(
+      InitWhisperCommand(
+        modelPath: modelPath,
+        numThreads: numThreads,
+        useGpu: useGpu,
+      ),
+    );
 
     try {
       // Whisper model loading can take 5-10 seconds
@@ -154,11 +153,13 @@ class WhisperWorker {
       }
     });
 
-    _commandPort!.send(TranscribeChunkCommand(
-      pcmSamples: pcmSamples,
-      language: language,
-      translate: translate,
-    ));
+    _commandPort!.send(
+      TranscribeChunkCommand(
+        pcmSamples: pcmSamples,
+        language: language,
+        translate: translate,
+      ),
+    );
 
     try {
       // Whisper transcription typically takes 1-5 seconds per chunk
@@ -255,10 +256,12 @@ void _whisperWorkerEntryPoint(SendPort mainSendPort) {
       });
     } else if (message is TranscribeChunkCommand) {
       if (nativeWhisperContext == null || bindings == null) {
-        responseSendPort.send(WhisperErrorResponse(
-          message: 'Whisper worker not initialized',
-          errorCode: -6, // EV_ERROR_CONTEXT_INVALID
-        ));
+        responseSendPort.send(
+          WhisperErrorResponse(
+            message: 'Whisper worker not initialized',
+            errorCode: -6, // EV_ERROR_CONTEXT_INVALID
+          ),
+        );
         return;
       }
       _handleTranscribeChunk(
@@ -287,7 +290,7 @@ void _handleInitWhisper(
   InitWhisperCommand cmd,
   SendPort responseSendPort,
   void Function(ffi.Pointer<EvWhisperContextImpl>, EdgeVedaNativeBindings)
-      onSuccess,
+  onSuccess,
 ) {
   final bindings = EdgeVedaNativeBindings.instance;
 
@@ -304,10 +307,12 @@ void _handleInitWhisper(
     final ctx = bindings.evWhisperInit(configPtr, errorPtr);
 
     if (ctx == ffi.nullptr) {
-      responseSendPort.send(WhisperInitErrorResponse(
-        message: 'Failed to initialize whisper context',
-        errorCode: errorPtr.value,
-      ));
+      responseSendPort.send(
+        WhisperInitErrorResponse(
+          message: 'Failed to initialize whisper context',
+          errorCode: errorPtr.value,
+        ),
+      );
       return;
     }
 
@@ -340,8 +345,7 @@ void _handleTranscribeChunk(
 
   // Allocate native memory for PCM samples
   final nativeSamples = calloc<ffi.Float>(nSamples);
-  final nativeSamplesTyped =
-      nativeSamples.asTypedList(nSamples);
+  final nativeSamplesTyped = nativeSamples.asTypedList(nSamples);
   nativeSamplesTyped.setAll(0, cmd.pcmSamples);
 
   // Set up whisper params
@@ -366,10 +370,12 @@ void _handleTranscribeChunk(
     );
 
     if (result != 0) {
-      responseSendPort.send(WhisperErrorResponse(
-        message: 'Whisper transcription failed: error code $result',
-        errorCode: result,
-      ));
+      responseSendPort.send(
+        WhisperErrorResponse(
+          message: 'Whisper transcription failed: error code $result',
+          errorCode: result,
+        ),
+      );
       return;
     }
 
@@ -380,11 +386,13 @@ void _handleTranscribeChunk(
 
     for (int i = 0; i < nSegments; i++) {
       final seg = segmentsPtr[i];
-      segments.add(WhisperSegment(
-        text: seg.text.toDartString(),
-        startMs: seg.startMs,
-        endMs: seg.endMs,
-      ));
+      segments.add(
+        WhisperSegment(
+          text: seg.text.toDartString(),
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+        ),
+      );
     }
 
     final processTimeMs = resultPtr.ref.processTimeMs;
@@ -392,10 +400,12 @@ void _handleTranscribeChunk(
     // Free the result (segments are owned by context, result struct zeroed)
     bindings.evWhisperFreeResult(resultPtr);
 
-    responseSendPort.send(WhisperTranscribeResponse(
-      segments: segments,
-      processTimeMs: processTimeMs,
-    ));
+    responseSendPort.send(
+      WhisperTranscribeResponse(
+        segments: segments,
+        processTimeMs: processTimeMs,
+      ),
+    );
   } finally {
     calloc.free(languagePtr);
     calloc.free(paramsPtr);

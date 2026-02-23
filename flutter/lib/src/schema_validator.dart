@@ -46,15 +46,13 @@ class SchemaValidationResult {
 
   /// Create a failed validation result.
   factory SchemaValidationResult.invalid(List<String> errors) =>
-      SchemaValidationResult._(
-        isValid: false,
-        errors: errors,
-      );
+      SchemaValidationResult._(isValid: false, errors: errors);
 
   @override
-  String toString() => isValid
-      ? 'SchemaValidationResult(valid)'
-      : 'SchemaValidationResult(invalid, ${errors.length} errors)';
+  String toString() =>
+      isValid
+          ? 'SchemaValidationResult(valid)'
+          : 'SchemaValidationResult(invalid, ${errors.length} errors)';
 }
 
 /// Validates JSON data against JSON Schema Draft 7 schemas.
@@ -99,13 +97,11 @@ class SchemaValidator {
           .toList(growable: false);
       return SchemaValidationResult.invalid(errorMessages);
     } on FormatException catch (e) {
-      return SchemaValidationResult.invalid(
-        ['Malformed JSON Schema: ${e.message}'],
-      );
+      return SchemaValidationResult.invalid([
+        'Malformed JSON Schema: ${e.message}',
+      ]);
     } catch (e) {
-      return SchemaValidationResult.invalid(
-        ['Schema validation error: $e'],
-      );
+      return SchemaValidationResult.invalid(['Schema validation error: $e']);
     }
   }
 
@@ -150,8 +146,7 @@ class SchemaValidator {
     final type = schema['type'];
 
     if (type == 'object' && data is Map<String, dynamic>) {
-      final properties =
-          schema['properties'] as Map<String, dynamic>?;
+      final properties = schema['properties'] as Map<String, dynamic>?;
 
       // If no properties defined, schema is permissive -- skip check
       if (properties == null) return;

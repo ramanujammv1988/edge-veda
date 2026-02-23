@@ -42,7 +42,8 @@ class RagConfig {
   const RagConfig({
     this.topK = 3,
     this.minScore = 0.0,
-    this.promptTemplate = 'Use the following context to answer the question.\n\nContext:\n{context}\n\nQuestion: {query}\n\nAnswer:',
+    this.promptTemplate =
+        'Use the following context to answer the question.\n\nContext:\n{context}\n\nQuestion: {query}\n\nAnswer:',
     this.maxContextLength = 2000,
   });
 }
@@ -62,10 +63,10 @@ class RagPipeline {
     required VectorIndex index,
     required FtsIndex ftsIndex,
     this.config = const RagConfig(),
-  })  : _embedder = edgeVeda,
-        _generator = edgeVeda,
-        _index = index,
-        _ftsIndex = ftsIndex;
+  }) : _embedder = edgeVeda,
+       _generator = edgeVeda,
+       _index = index,
+       _ftsIndex = ftsIndex;
 
   /// Create a RAG pipeline with separate embedding and generation models.
   ///
@@ -78,10 +79,10 @@ class RagPipeline {
     required VectorIndex index,
     required FtsIndex ftsIndex,
     this.config = const RagConfig(),
-  })  : _embedder = embedder,
-        _generator = generator,
-        _index = index,
-        _ftsIndex = ftsIndex;
+  }) : _embedder = embedder,
+       _generator = generator,
+       _index = index,
+       _ftsIndex = ftsIndex;
 
   /// The underlying vector index
   VectorIndex get index => _index;
@@ -96,14 +97,7 @@ class RagPipeline {
     Map<String, dynamic>? metadata,
   }) async {
     final result = await _embedder.embed(text);
-    _index.add(
-      id,
-      result.embedding,
-      metadata: {
-        'text': text,
-        ...?metadata,
-      },
-    );
+    _index.add(id, result.embedding, metadata: {'text': text, ...?metadata});
     _ftsIndex.add(id, text);
   }
 
@@ -123,15 +117,11 @@ class RagPipeline {
     GenerateOptions? options,
   }) async {
     // Step 1: Search the vector/FTS index (Hybrid search)
-    final results = await retrieve(
-      queryText,
-      k: config.topK,
-    );
+    final results = await retrieve(queryText, k: config.topK);
 
     // Step 3: Filter by minimum score and build context
-    final relevantDocs = results
-        .where((r) => r.score >= config.minScore)
-        .toList();
+    final relevantDocs =
+        results.where((r) => r.score >= config.minScore).toList();
 
     final contextParts = <String>[];
     int totalLength = 0;
@@ -165,15 +155,13 @@ class RagPipeline {
     CancelToken? cancelToken,
   }) async* {
     // Step 1: Search the vector/FTS index (Hybrid search)
-    final results = await retrieve(
-      queryText,
-      k: config.topK,
-    );
+    final results = await retrieve(queryText, k: config.topK);
 
     // Step 3: Build context
     final contextParts = <String>[];
     int totalLength = 0;
-    final matchedDocs = results.where((r) => r.score >= config.minScore).toList();
+    final matchedDocs =
+        results.where((r) => r.score >= config.minScore).toList();
     for (final doc in matchedDocs) {
       final text = doc.metadata['text'] as String? ?? '';
       if (totalLength + text.length > config.maxContextLength) break;
@@ -197,24 +185,18 @@ class RagPipeline {
   }
 
   /// Retrieve similar documents without generating (useful for debugging)
-  Future<List<SearchResult>> retrieve(
-    String queryText, {
-    int? k,
-  }) async {
+  Future<List<SearchResult>> retrieve(String queryText, {int? k}) async {
     final searchK = k ?? config.topK;
 
     // 1. Vector Search
     final queryEmbedding = await _embedder.embed(queryText);
-    final vectorResults = _index.query(
-      queryEmbedding.embedding,
-      k: searchK,
-    );
+    final vectorResults = _index.query(queryEmbedding.embedding, k: searchK);
 
     // 2. Text Search (BM25)
     final textScores = _ftsIndex.search(queryText);
-    final sortedTextResults = textScores.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
+    final sortedTextResults =
+        textScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
     final bestTextResults = sortedTextResults.take(searchK).toList();
 
     // 3. Reciprocal Rank Fusion (RRF)
@@ -232,8 +214,9 @@ class RagPipeline {
     }
 
     // Convert back to SearchResult, sorting by fused score
-    final sortedFused = fusedScores.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final sortedFused =
+        fusedScores.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
     // Normalize fused scores to [0.0 - 1.0] so they survive upstream thresholds
     double maxScore = sortedFused.isNotEmpty ? sortedFused.first.value : 0.0;
@@ -254,11 +237,13 @@ class RagPipeline {
         }
       }
 
-      finalResults.add(SearchResult(
-        id: id,
-        score: maxScore > 0 ? (rawScore / maxScore) : rawScore, // Normalize
-        metadata: metadata ?? {},
-      ));
+      finalResults.add(
+        SearchResult(
+          id: id,
+          score: maxScore > 0 ? (rawScore / maxScore) : rawScore, // Normalize
+          metadata: metadata ?? {},
+        ),
+      );
     }
 
     return finalResults.take(searchK).toList();

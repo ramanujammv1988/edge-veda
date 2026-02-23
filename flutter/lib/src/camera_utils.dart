@@ -46,10 +46,14 @@ class CameraUtils {
     }
 
     final rgb = Uint8List(width * height * 3);
-    for (int i = 0, j = 0; i < expectedLength && j < rgb.length; i += 4, j += 3) {
-      rgb[j] = bgra[i + 2];     // R (from B position in BGRA)
+    for (
+      int i = 0, j = 0;
+      i < expectedLength && j < rgb.length;
+      i += 4, j += 3
+    ) {
+      rgb[j] = bgra[i + 2]; // R (from B position in BGRA)
       rgb[j + 1] = bgra[i + 1]; // G
-      rgb[j + 2] = bgra[i];     // B (from R position in BGRA)
+      rgb[j + 2] = bgra[i]; // B (from R position in BGRA)
       // Alpha (bgra[i + 3]) is discarded
     }
     return rgb;
@@ -90,7 +94,9 @@ class CameraUtils {
 
         // YUV to RGB conversion (BT.601)
         final r = (yVal + 1.402 * (vVal - 128)).round().clamp(0, 255);
-        final g = (yVal - 0.344136 * (uVal - 128) - 0.714136 * (vVal - 128)).round().clamp(0, 255);
+        final g = (yVal - 0.344136 * (uVal - 128) - 0.714136 * (vVal - 128))
+            .round()
+            .clamp(0, 255);
         final b = (yVal + 1.772 * (uVal - 128)).round().clamp(0, 255);
 
         rgb[rgbIndex++] = r;

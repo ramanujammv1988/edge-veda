@@ -56,7 +56,8 @@ class ModelSelector {
         ];
 
   static Future<ModelSelection> bestVision([ModelManager? mm]) =>
-      _pickVision(_visionPriority, fallback: ModelRegistry.smolvlm2_500m, mm: mm);
+      _pickVision(_visionPriority,
+          fallback: ModelRegistry.smolvlm2_500m, mm: mm);
 
   // ── STT (Whisper) ──────────────────────────────────────────────────────────
 

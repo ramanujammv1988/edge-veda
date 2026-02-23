@@ -151,10 +151,12 @@ class ToolTemplate {
     buffer.writeln('# Tools');
     buffer.writeln();
     buffer.writeln(
-        'You may call one or more functions to assist with the user query.');
+      'You may call one or more functions to assist with the user query.',
+    );
     buffer.writeln();
     buffer.writeln(
-        'You are provided with function signatures within <tools></tools> XML tags:');
+      'You are provided with function signatures within <tools></tools> XML tags:',
+    );
     buffer.writeln('<tools>');
     for (final tool in tools) {
       buffer.writeln(jsonEncode(tool.toFunctionJson()));
@@ -162,10 +164,12 @@ class ToolTemplate {
     buffer.writeln('</tools>');
     buffer.writeln();
     buffer.writeln(
-        'For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:');
+      'For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:',
+    );
     buffer.writeln('<tool_call>');
     buffer.writeln(
-        '{"name": <function-name>, "arguments": <args-json-object>}');
+      '{"name": <function-name>, "arguments": <args-json-object>}',
+    );
     buffer.write('</tool_call>');
 
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
@@ -179,8 +183,7 @@ class ToolTemplate {
 
   /// Parse Qwen3/Hermes-style `<tool_call>` XML tags from model output.
   static List<ToolCall>? _parseQwen3ToolCalls(String output) {
-    final regex =
-        RegExp(r'<tool_call>\s*(.*?)\s*</tool_call>', dotAll: true);
+    final regex = RegExp(r'<tool_call>\s*(.*?)\s*</tool_call>', dotAll: true);
     final matches = regex.allMatches(output);
 
     if (matches.isEmpty) return null;
@@ -223,15 +226,19 @@ class ToolTemplate {
 
     final toolJsonList = tools.map((t) => t.toToolJson()).toList();
     buffer.writeln(
-        'You are a helpful assistant with access to the following tools:');
+      'You are a helpful assistant with access to the following tools:',
+    );
     buffer.writeln(jsonEncode(toolJsonList));
     buffer.writeln();
     buffer.writeln(
-        'If you decide to invoke any function(s), you MUST put it in the format of:');
+      'If you decide to invoke any function(s), you MUST put it in the format of:',
+    );
     buffer.writeln(
-        '{"name": function_name, "parameters": {"param_name": "value"}}');
+      '{"name": function_name, "parameters": {"param_name": "value"}}',
+    );
     buffer.write(
-        'You SHOULD NOT include any other text if you call a function.');
+      'You SHOULD NOT include any other text if you call a function.',
+    );
 
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
       buffer.writeln();

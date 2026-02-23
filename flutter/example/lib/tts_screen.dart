@@ -25,8 +25,7 @@ class TtsScreen extends StatefulWidget {
 class _TtsScreenState extends State<TtsScreen> {
   final TtsService _tts = TtsService();
   final TextEditingController _textController = TextEditingController(
-    text:
-        'The Edge Veda SDK enables on-device AI inference, bringing powerful '
+    text: 'The Edge Veda SDK enables on-device AI inference, bringing powerful '
         'language models directly to your iPhone. No cloud, no latency, '
         'complete privacy.',
   );
@@ -224,7 +223,10 @@ class _TtsScreenState extends State<TtsScreen> {
     final length = _highlightLength;
 
     List<TextSpan> spans;
-    if (start != null && length != null && start >= 0 && start + length <= fullText.length) {
+    if (start != null &&
+        length != null &&
+        start >= 0 &&
+        start + length <= fullText.length) {
       spans = [
         TextSpan(
           text: fullText.substring(0, start),
@@ -507,9 +509,7 @@ class _TtsScreenState extends State<TtsScreen> {
         ),
         child: Icon(
           icon,
-          color: onTap == null
-              ? AppTheme.textTertiary
-              : AppTheme.background,
+          color: onTap == null ? AppTheme.textTertiary : AppTheme.background,
           size: 32,
         ),
       ),

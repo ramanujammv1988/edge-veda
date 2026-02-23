@@ -122,7 +122,8 @@ class MeasuredBaseline {
   });
 
   @override
-  String toString() => 'MeasuredBaseline('
+  String toString() =>
+      'MeasuredBaseline('
       'p95=${measuredP95Ms.toStringAsFixed(0)}ms, '
       'drain=${measuredDrainPerTenMin?.toStringAsFixed(1) ?? "n/a"}%/10min, '
       'thermal=$currentThermalState, '
@@ -188,7 +189,10 @@ class EdgeVedaBudget {
   ///
   /// Called internally by [Scheduler] after warm-up. Not typically called
   /// by application code.
-  static EdgeVedaBudget resolve(BudgetProfile profile, MeasuredBaseline baseline) {
+  static EdgeVedaBudget resolve(
+    BudgetProfile profile,
+    MeasuredBaseline baseline,
+  ) {
     final int resolvedP95;
     double? resolvedDrain;
     final int resolvedThermal;
@@ -196,21 +200,25 @@ class EdgeVedaBudget {
     switch (profile) {
       case BudgetProfile.conservative:
         resolvedP95 = (baseline.measuredP95Ms * 2.0).round();
-        resolvedDrain = baseline.measuredDrainPerTenMin != null
-            ? baseline.measuredDrainPerTenMin! * 0.6
-            : null;
-        resolvedThermal = baseline.currentThermalState < 1 ? 1 : baseline.currentThermalState;
+        resolvedDrain =
+            baseline.measuredDrainPerTenMin != null
+                ? baseline.measuredDrainPerTenMin! * 0.6
+                : null;
+        resolvedThermal =
+            baseline.currentThermalState < 1 ? 1 : baseline.currentThermalState;
       case BudgetProfile.balanced:
         resolvedP95 = (baseline.measuredP95Ms * 1.5).round();
-        resolvedDrain = baseline.measuredDrainPerTenMin != null
-            ? baseline.measuredDrainPerTenMin! * 1.0
-            : null;
+        resolvedDrain =
+            baseline.measuredDrainPerTenMin != null
+                ? baseline.measuredDrainPerTenMin! * 1.0
+                : null;
         resolvedThermal = 1;
       case BudgetProfile.performance:
         resolvedP95 = (baseline.measuredP95Ms * 1.1).round();
-        resolvedDrain = baseline.measuredDrainPerTenMin != null
-            ? baseline.measuredDrainPerTenMin! * 1.5
-            : null;
+        resolvedDrain =
+            baseline.measuredDrainPerTenMin != null
+                ? baseline.measuredDrainPerTenMin! * 1.5
+                : null;
         resolvedThermal = 3;
     }
 
@@ -243,25 +251,31 @@ class EdgeVedaBudget {
   List<String> validate() {
     final warnings = <String>[];
     if (p95LatencyMs != null && p95LatencyMs! < 500) {
-      warnings.add('p95LatencyMs=$p95LatencyMs is likely unrealistic '
-          'for on-device LLM inference (typical: 1000-3000ms)');
+      warnings.add(
+        'p95LatencyMs=$p95LatencyMs is likely unrealistic '
+        'for on-device LLM inference (typical: 1000-3000ms)',
+      );
     }
-    if (batteryDrainPerTenMinutes != null &&
-        batteryDrainPerTenMinutes! < 0.5) {
-      warnings.add('batteryDrainPerTenMinutes=$batteryDrainPerTenMinutes '
-          'may be too restrictive for active inference');
+    if (batteryDrainPerTenMinutes != null && batteryDrainPerTenMinutes! < 0.5) {
+      warnings.add(
+        'batteryDrainPerTenMinutes=$batteryDrainPerTenMinutes '
+        'may be too restrictive for active inference',
+      );
     }
     if (memoryCeilingMb != null && memoryCeilingMb! < 2000) {
-      warnings.add('memoryCeilingMb=$memoryCeilingMb may be too low for VLM '
-          'workloads (typical RSS: 1500-2500MB including model + Metal '
-          'buffers + image tensors). Consider setting to null to skip memory '
-          'enforcement, or measure actual RSS after model load.');
+      warnings.add(
+        'memoryCeilingMb=$memoryCeilingMb may be too low for VLM '
+        'workloads (typical RSS: 1500-2500MB including model + Metal '
+        'buffers + image tensors). Consider setting to null to skip memory '
+        'enforcement, or measure actual RSS after model load.',
+      );
     }
     return warnings;
   }
 
   @override
-  String toString() => 'EdgeVedaBudget('
+  String toString() =>
+      'EdgeVedaBudget('
       'p95LatencyMs=$p95LatencyMs, '
       'batteryDrainPerTenMinutes=$batteryDrainPerTenMinutes, '
       'maxThermalLevel=$maxThermalLevel, '
@@ -306,7 +320,8 @@ class BudgetViolation {
   });
 
   @override
-  String toString() => 'BudgetViolation('
+  String toString() =>
+      'BudgetViolation('
       '${constraint.name}: current=$currentValue, '
       'budget=$budgetValue, '
       '${observeOnly ? 'observeOnly=$observeOnly, ' : ''}'

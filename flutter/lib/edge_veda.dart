@@ -75,37 +75,37 @@ library edge_veda;
 export 'src/edge_veda_impl.dart' show EdgeVeda;
 
 // Configuration and options
-export 'src/types.dart' show
-    EdgeVedaConfig,
-    GenerateOptions,
-    GenerateResponse,
-    TokenChunk,
-    DownloadProgress,
-    ModelInfo,
-    MemoryStats,
-    MemoryPressureEvent,
-    CancelToken;
+export 'src/types.dart'
+    show
+        EdgeVedaConfig,
+        GenerateOptions,
+        GenerateResponse,
+        TokenChunk,
+        DownloadProgress,
+        ModelInfo,
+        MemoryStats,
+        MemoryPressureEvent,
+        CancelToken;
 
 // Vision types
-export 'src/types.dart' show
-    VisionConfig,
-    VisionException;
+export 'src/types.dart' show VisionConfig, VisionException;
 
 // Camera utilities
 export 'src/camera_utils.dart' show CameraUtils;
 
 // Exceptions (all typed, per R4.1)
-export 'src/types.dart' show
-    EdgeVedaException,
-    EdgeVedaGenericException,
-    InitializationException,
-    ModelLoadException,
-    GenerationException,
-    DownloadException,
-    ChecksumException,
-    ModelValidationException,
-    MemoryException,
-    ConfigurationException;
+export 'src/types.dart'
+    show
+        EdgeVedaException,
+        EdgeVedaGenericException,
+        InitializationException,
+        ModelLoadException,
+        GenerationException,
+        DownloadException,
+        ChecksumException,
+        ModelValidationException,
+        MemoryException,
+        ConfigurationException;
 
 // Performance tracing
 export 'src/perf_trace.dart' show PerfTrace;
@@ -131,14 +131,15 @@ export 'src/chat_types.dart' show ChatMessage, ChatRole, SystemPromptPreset;
 export 'src/chat_template.dart' show ChatTemplateFormat, ChatTemplate;
 
 // Budget contracts and scheduler
-export 'src/budget.dart' show
-    EdgeVedaBudget,
-    BudgetViolation,
-    BudgetConstraint,
-    WorkloadPriority,
-    WorkloadId,
-    BudgetProfile,
-    MeasuredBaseline;
+export 'src/budget.dart'
+    show
+        EdgeVedaBudget,
+        BudgetViolation,
+        BudgetConstraint,
+        WorkloadPriority,
+        WorkloadId,
+        BudgetProfile,
+        MeasuredBaseline;
 
 export 'src/scheduler.dart' show Scheduler;
 
@@ -151,18 +152,20 @@ export 'src/isolate/whisper_worker_messages.dart'
     show WhisperSegment, WhisperTranscribeResponse;
 
 // Tool/function calling
-export 'src/tool_types.dart' show
-    ToolDefinition,
-    ToolCall,
-    ToolResult,
-    ToolPriority,
-    ToolCallParseException;
+export 'src/tool_types.dart'
+    show
+        ToolDefinition,
+        ToolCall,
+        ToolResult,
+        ToolPriority,
+        ToolCallParseException;
 
 export 'src/tool_registry.dart' show ToolRegistry;
 
 export 'src/tool_template.dart' show ToolTemplate;
 
-export 'src/schema_validator.dart' show SchemaValidator, SchemaValidationResult, SchemaValidationMode;
+export 'src/schema_validator.dart'
+    show SchemaValidator, SchemaValidationResult, SchemaValidationMode;
 
 export 'src/gbnf_builder.dart' show GbnfBuilder;
 
@@ -170,10 +173,8 @@ export 'src/gbnf_builder.dart' show GbnfBuilder;
 export 'src/json_recovery.dart' show JsonRecovery, JsonRecoveryResult;
 
 // Embeddings and confidence
-export 'src/types.dart' show
-    EmbeddingResult,
-    ConfidenceInfo,
-    EmbeddingException;
+export 'src/types.dart'
+    show EmbeddingResult, ConfidenceInfo, EmbeddingException;
 
 // Vector index
 export 'src/vector_index.dart' show VectorIndex, SearchResult;
@@ -183,39 +184,43 @@ export 'src/fts_index.dart' show FtsIndex;
 export 'src/rag_pipeline.dart' show RagPipeline, RagConfig;
 
 // Model advisor
-export 'src/model_advisor.dart' show
-    DeviceProfile,
-    DeviceTier,
-    MemoryEstimate,
-    MemoryEstimator,
-    ModelScore,
-    ModelRecommendation,
-    ModelAdvisor,
-    UseCase,
-    StorageCheck,
-    MemoryValidation;
+export 'src/model_advisor.dart'
+    show
+        DeviceProfile,
+        DeviceTier,
+        MemoryEstimate,
+        MemoryEstimator,
+        ModelScore,
+        ModelRecommendation,
+        ModelAdvisor,
+        UseCase,
+        StorageCheck,
+        MemoryValidation;
 
 // Image generation (Stable Diffusion)
-export 'src/types.dart' show
-    ImageGenerationConfig,
-    ImageProgress,
-    ImageResult,
-    ImageSampler,
-    ImageSchedule,
-    ImageGenerationException;
+export 'src/types.dart'
+    show
+        ImageGenerationConfig,
+        ImageProgress,
+        ImageResult,
+        ImageSampler,
+        ImageSchedule,
+        ImageGenerationException;
 
 // Image worker (persistent isolate)
 export 'src/isolate/image_worker.dart' show ImageWorker;
 
 // Text-to-Speech (TTS)
-export 'src/tts_service.dart' show TtsService, TtsVoice, TtsEvent, TtsEventType, TtsState;
+export 'src/tts_service.dart'
+    show TtsService, TtsVoice, TtsEvent, TtsEventType, TtsState;
 
 // Voice Pipeline (unified STT -> LLM -> TTS conversation)
-export 'src/voice_pipeline.dart' show
-    VoicePipeline,
-    VoicePipelineConfig,
-    VoicePipelineState,
-    VoicePipelineEvent,
-    StateChanged,
-    TranscriptUpdated,
-    PipelineError;
+export 'src/voice_pipeline.dart'
+    show
+        VoicePipeline,
+        VoicePipelineConfig,
+        VoicePipelineState,
+        VoicePipelineEvent,
+        StateChanged,
+        TranscriptUpdated,
+        PipelineError;

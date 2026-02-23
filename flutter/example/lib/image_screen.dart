@@ -106,7 +106,8 @@ class _ImageScreenState extends State<ImageScreen> {
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0;
-      _downloadStatusText = 'Downloading ${model.name} (${_formatBytes(model.sizeBytes)})...';
+      _downloadStatusText =
+          'Downloading ${model.name} (${_formatBytes(model.sizeBytes)})...';
     });
 
     _downloadSubscription = _modelManager.downloadProgress.listen((progress) {
@@ -524,8 +525,8 @@ class _ImageScreenState extends State<ImageScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
-                          borderSide:
-                              const BorderSide(color: AppTheme.accent, width: 1),
+                          borderSide: const BorderSide(
+                              color: AppTheme.accent, width: 1),
                         ),
                       ),
                       maxLines: 2,
@@ -925,7 +926,8 @@ class _ImageScreenState extends State<ImageScreen> {
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }

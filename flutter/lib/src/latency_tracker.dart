@@ -27,10 +27,7 @@ class LatencyTracker {
 
   /// Creates a latency tracker with configurable window size and warm-up
   /// threshold.
-  LatencyTracker({
-    this.windowSize = 100,
-    this.minSamplesForEnforcement = 20,
-  });
+  LatencyTracker({this.windowSize = 100, this.minSamplesForEnforcement = 20});
 
   /// Whether enough samples have been collected for statistically
   /// meaningful percentile enforcement.
@@ -69,8 +66,10 @@ class LatencyTracker {
   /// Uses ceiling interpolation: index = ceil(p * (length - 1)).
   double? percentile(double p) {
     if (_sorted.isEmpty) return null;
-    final index =
-        (p * (_sorted.length - 1)).ceil().clamp(0, _sorted.length - 1);
+    final index = (p * (_sorted.length - 1)).ceil().clamp(
+      0,
+      _sorted.length - 1,
+    );
     return _sorted[index];
   }
 
@@ -101,9 +100,7 @@ class BatteryDrainTracker {
   final List<({DateTime time, double level})> _samples = [];
 
   /// Creates a battery drain tracker with configurable window duration.
-  BatteryDrainTracker({
-    this.windowDuration = const Duration(minutes: 10),
-  });
+  BatteryDrainTracker({this.windowDuration = const Duration(minutes: 10)});
 
   /// Add a battery level sample (0.0 to 1.0).
   ///

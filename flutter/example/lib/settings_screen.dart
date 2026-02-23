@@ -520,8 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final categories = <String, List<ModelInfo>>{
       'Chat / LLM':
           ModelRegistry.getAllModels().where(_isForThisPlatform).toList(),
-      'Vision': ModelRegistry
-          .getVisionModels()
+      'Vision': ModelRegistry.getVisionModels()
           .where((m) => !m.capabilities!.contains('vision-projector'))
           .where(_isForThisPlatform)
           .toList(),
@@ -813,20 +812,27 @@ class _ModelRowState extends State<_ModelRow> {
   IconData _modelIcon() {
     final id = widget.model.id;
     final family = widget.model.family ?? '';
-    if (id.contains('mmproj')) { return Icons.extension; }
-    if (family == 'whisper') { return Icons.mic; }
+    if (id.contains('mmproj')) {
+      return Icons.extension;
+    }
+    if (family == 'whisper') {
+      return Icons.mic;
+    }
     if (family == 'stable-diffusion' ||
         family == 'stable-diffusion-xl' ||
-        family == 'flux') { return Icons.image; }
+        family == 'flux') {
+      return Icons.image;
+    }
     if (family == 'minilm' ||
         family == 'nomic-embed' ||
-        family == 'mxbai-embed') { return Icons.hub; }
-    if (family == 'smolvlm' ||
-        family == 'llava' ||
-        family == 'qwen2vl') { return Icons.visibility; }
+        family == 'mxbai-embed') {
+      return Icons.hub;
+    }
+    if (family == 'smolvlm' || family == 'llava' || family == 'qwen2vl') {
+      return Icons.visibility;
+    }
     return Icons.smart_toy;
   }
-
 
   Future<void> _startDownload() async {
     setState(() => _isDownloading = true);

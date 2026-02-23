@@ -54,16 +54,16 @@ class EdgeVedaConfig {
   });
 
   Map<String, dynamic> toJson() => {
-        'modelPath': modelPath,
-        'numThreads': numThreads,
-        'contextLength': contextLength,
-        'useGpu': useGpu,
-        'maxMemoryMb': maxMemoryMb,
-        'verbose': verbose,
-        'flashAttn': flashAttn,
-        'kvCacheTypeK': kvCacheTypeK,
-        'kvCacheTypeV': kvCacheTypeV,
-      };
+    'modelPath': modelPath,
+    'numThreads': numThreads,
+    'contextLength': contextLength,
+    'useGpu': useGpu,
+    'maxMemoryMb': maxMemoryMb,
+    'verbose': verbose,
+    'flashAttn': flashAttn,
+    'kvCacheTypeK': kvCacheTypeK,
+    'kvCacheTypeV': kvCacheTypeV,
+  };
 
   @override
   String toString() => 'EdgeVedaConfig(${toJson()})';
@@ -161,19 +161,19 @@ class GenerateOptions {
   }
 
   Map<String, dynamic> toJson() => {
-        'systemPrompt': systemPrompt,
-        'maxTokens': maxTokens,
-        'temperature': temperature,
-        'topP': topP,
-        'topK': topK,
-        'repeatPenalty': repeatPenalty,
-        'stopSequences': stopSequences,
-        'jsonMode': jsonMode,
-        'stream': stream,
-        'grammarStr': grammarStr,
-        'grammarRoot': grammarRoot,
-        'confidenceThreshold': confidenceThreshold,
-      };
+    'systemPrompt': systemPrompt,
+    'maxTokens': maxTokens,
+    'temperature': temperature,
+    'topP': topP,
+    'topK': topK,
+    'repeatPenalty': repeatPenalty,
+    'stopSequences': stopSequences,
+    'jsonMode': jsonMode,
+    'stream': stream,
+    'grammarStr': grammarStr,
+    'grammarRoot': grammarRoot,
+    'confidenceThreshold': confidenceThreshold,
+  };
 
   @override
   String toString() => 'GenerateOptions(${toJson()})';
@@ -218,15 +218,15 @@ class GenerateResponse {
   });
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'promptTokens': promptTokens,
-        'completionTokens': completionTokens,
-        'totalTokens': totalTokens,
-        'latencyMs': latencyMs,
-        'tokensPerSecond': tokensPerSecond,
-        'avgConfidence': avgConfidence,
-        'needsCloudHandoff': needsCloudHandoff,
-      };
+    'text': text,
+    'promptTokens': promptTokens,
+    'completionTokens': completionTokens,
+    'totalTokens': totalTokens,
+    'latencyMs': latencyMs,
+    'tokensPerSecond': tokensPerSecond,
+    'avgConfidence': avgConfidence,
+    'needsCloudHandoff': needsCloudHandoff,
+  };
 
   @override
   String toString() => 'GenerateResponse(${toJson()})';
@@ -259,7 +259,10 @@ class TokenChunk {
 
   @override
   String toString() {
-    final confStr = confidence != null ? ', confidence: ${confidence!.toStringAsFixed(3)}' : '';
+    final confStr =
+        confidence != null
+            ? ', confidence: ${confidence!.toStringAsFixed(3)}'
+            : '';
     return 'TokenChunk(token: "$token", index: $index, isFinal: $isFinal$confStr)';
   }
 }
@@ -273,8 +276,7 @@ class DownloadProgress {
   final int downloadedBytes;
 
   /// Download progress as percentage (0.0 - 1.0)
-  double get progress =>
-      totalBytes > 0 ? downloadedBytes / totalBytes : 0.0;
+  double get progress => totalBytes > 0 ? downloadedBytes / totalBytes : 0.0;
 
   /// Download progress as percentage (0 - 100)
   int get progressPercent => (progress * 100).round();
@@ -377,19 +379,19 @@ class ModelInfo {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'sizeBytes': sizeBytes,
-        'description': description,
-        'downloadUrl': downloadUrl,
-        'checksum': checksum,
-        'format': format,
-        'quantization': quantization,
-        'parametersB': parametersB,
-        'maxContextLength': maxContextLength,
-        'capabilities': capabilities,
-        'family': family,
-      };
+    'id': id,
+    'name': name,
+    'sizeBytes': sizeBytes,
+    'description': description,
+    'downloadUrl': downloadUrl,
+    'checksum': checksum,
+    'format': format,
+    'quantization': quantization,
+    'parametersB': parametersB,
+    'maxContextLength': maxContextLength,
+    'capabilities': capabilities,
+    'family': family,
+  };
 
   @override
   String toString() => 'ModelInfo($name, ${_formatSize()})';
@@ -422,7 +424,11 @@ abstract class EdgeVedaException implements Exception {
 
 /// Thrown when SDK initialization fails
 class InitializationException extends EdgeVedaException {
-  const InitializationException(super.message, {super.details, super.originalError});
+  const InitializationException(
+    super.message, {
+    super.details,
+    super.originalError,
+  });
 }
 
 /// Thrown when model loading fails
@@ -432,7 +438,11 @@ class ModelLoadException extends EdgeVedaException {
 
 /// Thrown when text generation fails
 class GenerationException extends EdgeVedaException {
-  const GenerationException(super.message, {super.details, super.originalError});
+  const GenerationException(
+    super.message, {
+    super.details,
+    super.originalError,
+  });
 }
 
 /// Thrown when model download fails
@@ -452,7 +462,11 @@ class MemoryException extends EdgeVedaException {
 
 /// Thrown when invalid configuration is provided
 class ConfigurationException extends EdgeVedaException {
-  const ConfigurationException(super.message, {super.details, super.originalError});
+  const ConfigurationException(
+    super.message, {
+    super.details,
+    super.originalError,
+  });
 }
 
 /// Thrown when vision inference fails
@@ -462,7 +476,11 @@ class VisionException extends EdgeVedaException {
 
 /// Thrown when model file fails validation (checksum mismatch, corrupted file)
 class ModelValidationException extends EdgeVedaException {
-  const ModelValidationException(super.message, {super.details, super.originalError});
+  const ModelValidationException(
+    super.message, {
+    super.details,
+    super.originalError,
+  });
 }
 
 /// Memory pressure event from native layer
@@ -530,14 +548,14 @@ class MemoryStats {
   });
 
   Map<String, dynamic> toJson() => {
-        'currentBytes': currentBytes,
-        'peakBytes': peakBytes,
-        'limitBytes': limitBytes,
-        'modelBytes': modelBytes,
-        'contextBytes': contextBytes,
-        'usagePercent': usagePercent,
-        'isHighPressure': isHighPressure,
-      };
+    'currentBytes': currentBytes,
+    'peakBytes': peakBytes,
+    'limitBytes': limitBytes,
+    'modelBytes': modelBytes,
+    'contextBytes': contextBytes,
+    'usagePercent': usagePercent,
+    'isHighPressure': isHighPressure,
+  };
 
   @override
   String toString() {
@@ -633,7 +651,10 @@ enum NativeErrorCode {
         return ModelLoadException('Failed to load model', details: details);
 
       case NativeErrorCode.backendInitFailed:
-        return InitializationException('Failed to initialize backend', details: details);
+        return InitializationException(
+          'Failed to initialize backend',
+          details: details,
+        );
 
       case NativeErrorCode.inferenceFailed:
         return GenerationException('Inference failed', details: details);
@@ -642,13 +663,22 @@ enum NativeErrorCode {
         return InitializationException('Invalid context', details: details);
 
       case NativeErrorCode.streamEnded:
-        return GenerationException('Stream ended unexpectedly', details: details);
+        return GenerationException(
+          'Stream ended unexpectedly',
+          details: details,
+        );
 
       case NativeErrorCode.notImplemented:
-        return ConfigurationException('Feature not implemented', details: details);
+        return ConfigurationException(
+          'Feature not implemented',
+          details: details,
+        );
 
       case NativeErrorCode.unsupportedBackend:
-        return InitializationException('Backend not supported', details: details);
+        return InitializationException(
+          'Backend not supported',
+          details: details,
+        );
 
       case NativeErrorCode.unknown:
         return EdgeVedaGenericException('Unknown error', details: details);
@@ -658,7 +688,11 @@ enum NativeErrorCode {
 
 /// Generic exception for unknown native errors
 class EdgeVedaGenericException extends EdgeVedaException {
-  const EdgeVedaGenericException(super.message, {super.details, super.originalError});
+  const EdgeVedaGenericException(
+    super.message, {
+    super.details,
+    super.originalError,
+  });
 }
 
 /// Configuration for initializing vision inference
@@ -694,13 +728,13 @@ class VisionConfig {
   });
 
   Map<String, dynamic> toJson() => {
-        'modelPath': modelPath,
-        'mmprojPath': mmprojPath,
-        'numThreads': numThreads,
-        'contextSize': contextSize,
-        'useGpu': useGpu,
-        'maxMemoryMb': maxMemoryMb,
-      };
+    'modelPath': modelPath,
+    'mmprojPath': mmprojPath,
+    'numThreads': numThreads,
+    'contextSize': contextSize,
+    'useGpu': useGpu,
+    'maxMemoryMb': maxMemoryMb,
+  };
 
   @override
   String toString() => 'VisionConfig(${toJson()})';
@@ -752,7 +786,6 @@ class CancelToken {
   }
 }
 
-
 /// Result of a text embedding operation
 class EmbeddingResult {
   /// The embedding vector (L2-normalized)
@@ -764,13 +797,11 @@ class EmbeddingResult {
   /// Number of tokens in the input text
   final int tokenCount;
 
-  const EmbeddingResult({
-    required this.embedding,
-    required this.tokenCount,
-  });
+  const EmbeddingResult({required this.embedding, required this.tokenCount});
 
   @override
-  String toString() => 'EmbeddingResult(dims: $dimensions, tokens: $tokenCount)';
+  String toString() =>
+      'EmbeddingResult(dims: $dimensions, tokens: $tokenCount)';
 }
 
 /// Confidence information for a generated token or response
@@ -799,7 +830,7 @@ class ConfidenceInfo {
 
   @override
   String toString() =>
-    'ConfidenceInfo(confidence: ${confidence.toStringAsFixed(3)}, avg: ${avgConfidence.toStringAsFixed(3)}, handoff: $needsCloudHandoff)';
+      'ConfidenceInfo(confidence: ${confidence.toStringAsFixed(3)}, avg: ${avgConfidence.toStringAsFixed(3)}, handoff: $needsCloudHandoff)';
 }
 
 /// Exception thrown when embedding operation fails
@@ -945,5 +976,9 @@ class ImageResult {
 
 /// Exception thrown when image generation fails
 class ImageGenerationException extends EdgeVedaException {
-  const ImageGenerationException(super.message, {super.details, super.originalError});
+  const ImageGenerationException(
+    super.message, {
+    super.details,
+    super.originalError,
+  });
 }

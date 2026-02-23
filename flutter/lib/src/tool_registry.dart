@@ -33,15 +33,14 @@ class ToolRegistry {
   /// Throws [ConfigurationException] if:
   /// - [tools] contains more than [maxTools] entries (default 5)
   /// - [tools] contains duplicate tool names
-  ToolRegistry(
-    List<ToolDefinition> tools, {
-    int maxTools = 5,
-  })  : _maxTools = maxTools,
-        _tools = List.unmodifiable(tools) {
+  ToolRegistry(List<ToolDefinition> tools, {int maxTools = 5})
+    : _maxTools = maxTools,
+      _tools = List.unmodifiable(tools) {
     if (tools.length > maxTools) {
       throw ConfigurationException(
         'Too many tools: ${tools.length} exceeds maximum of $maxTools',
-        details: 'Small models perform best with $maxTools or fewer tools. '
+        details:
+            'Small models perform best with $maxTools or fewer tools. '
             'Remove optional tools or increase maxTools if needed.',
       );
     }
@@ -62,13 +61,13 @@ class ToolRegistry {
 
   /// Tools with [ToolPriority.required] priority.
   List<ToolDefinition> get requiredTools => List.unmodifiable(
-        _tools.where((t) => t.priority == ToolPriority.required),
-      );
+    _tools.where((t) => t.priority == ToolPriority.required),
+  );
 
   /// Tools with [ToolPriority.optional] priority.
   List<ToolDefinition> get optionalTools => List.unmodifiable(
-        _tools.where((t) => t.priority == ToolPriority.optional),
-      );
+    _tools.where((t) => t.priority == ToolPriority.optional),
+  );
 
   /// Maximum number of tools allowed in this registry.
   int get maxTools => _maxTools;
@@ -102,6 +101,5 @@ class ToolRegistry {
   }
 
   @override
-  String toString() =>
-      'ToolRegistry(${_tools.length} tools, max=$_maxTools)';
+  String toString() => 'ToolRegistry(${_tools.length} tools, max=$_maxTools)';
 }

@@ -41,27 +41,28 @@ import 'isolate/image_worker.dart';
 import 'isolate/image_worker_messages.dart';
 import 'isolate/worker_isolate.dart';
 import 'scheduler.dart';
-import 'types.dart' show
-    EdgeVedaConfig,
-    EdgeVedaException,
-    GenerateOptions,
-    GenerateResponse,
-    MemoryStats,
-    NativeErrorCode,
-    InitializationException,
-    ModelLoadException,
-    GenerationException,
-    ConfigurationException,
-    TokenChunk,
-    CancelToken,
-    VisionConfig,
-    VisionException,
-    EmbeddingResult,
-    EmbeddingException,
-    ImageGenerationConfig,
-    ImageGenerationException,
-    ImageProgress,
-    ImageResult;
+import 'types.dart'
+    show
+        EdgeVedaConfig,
+        EdgeVedaException,
+        GenerateOptions,
+        GenerateResponse,
+        MemoryStats,
+        NativeErrorCode,
+        InitializationException,
+        ModelLoadException,
+        GenerationException,
+        ConfigurationException,
+        TokenChunk,
+        CancelToken,
+        VisionConfig,
+        VisionException,
+        EmbeddingResult,
+        EmbeddingException,
+        ImageGenerationConfig,
+        ImageGenerationException,
+        ImageProgress,
+        ImageResult;
 
 /// Main Edge Veda SDK class for on-device AI inference
 ///
@@ -171,7 +172,8 @@ class EdgeVeda {
         try {
           // Populate config
           configPtr.ref.modelPath = modelPathPtr;
-          configPtr.ref.backend = useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+          configPtr.ref.backend =
+              useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
           configPtr.ref.numThreads = numThreads;
           configPtr.ref.contextSize = contextSize;
           configPtr.ref.batchSize = 512;
@@ -190,7 +192,8 @@ class EdgeVeda {
           if (ctx == ffi.nullptr) {
             final errorCode = NativeErrorCode.fromCode(errorPtr.value);
             final exception = errorCode.toException('Init validation failed');
-            throw exception ?? const InitializationException('Unknown init error');
+            throw exception ??
+                const InitializationException('Unknown init error');
           }
           // Immediately free - we just tested it works
           bindings.evFree(ctx);
@@ -335,7 +338,8 @@ class EdgeVeda {
       try {
         // Populate config
         configPtr.ref.modelPath = modelPathPtr;
-        configPtr.ref.backend = useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+        configPtr.ref.backend =
+            useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
         configPtr.ref.numThreads = numThreads;
         configPtr.ref.contextSize = contextSize;
         configPtr.ref.batchSize = 512;
@@ -379,11 +383,17 @@ class EdgeVeda {
         try {
           final promptPtr = prompt.toNativeUtf8();
           try {
-            final result = bindings.evGenerate(ctx, promptPtr, paramsPtr, outputPtr);
+            final result = bindings.evGenerate(
+              ctx,
+              promptPtr,
+              paramsPtr,
+              outputPtr,
+            );
             if (result != 0) {
               final errorCode = NativeErrorCode.fromCode(result);
               final exception = errorCode.toException('Generation failed');
-              throw exception ?? const GenerationException('Unknown generation error');
+              throw exception ??
+                  const GenerationException('Unknown generation error');
             }
 
             // Read output and free C++-allocated string
@@ -497,7 +507,9 @@ class EdgeVeda {
         throw GenerationException('Worker spawn failed: $e');
       }
 
-      debugPrint('EdgeVeda: [3/4] Loading model in worker (this takes 30-60 seconds)...');
+      debugPrint(
+        'EdgeVeda: [3/4] Loading model in worker (this takes 30-60 seconds)...',
+      );
       try {
         await _worker!.init(
           modelPath: _config!.modelPath,
@@ -532,7 +544,9 @@ class EdgeVeda {
 
     try {
       // Start the stream
-      debugPrint('EdgeVeda: Starting stream with prompt: "${prompt.substring(0, prompt.length > 50 ? 50 : prompt.length)}..."');
+      debugPrint(
+        'EdgeVeda: Starting stream with prompt: "${prompt.substring(0, prompt.length > 50 ? 50 : prompt.length)}..."',
+      );
       await _worker!.startStream(
         prompt: prompt,
         maxTokens: options.maxTokens,
@@ -557,11 +571,7 @@ class EdgeVeda {
 
         if (response.isFinal) {
           // Stream ended - yield final empty chunk to signal completion
-          yield TokenChunk(
-            token: '',
-            index: tokenIndex,
-            isFinal: true,
-          );
+          yield TokenChunk(token: '', index: tokenIndex, isFinal: true);
           break;
         }
 
@@ -626,7 +636,8 @@ class EdgeVeda {
 
       try {
         configPtr.ref.modelPath = modelPathPtr;
-        configPtr.ref.backend = useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+        configPtr.ref.backend =
+            useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
         configPtr.ref.numThreads = numThreads;
         configPtr.ref.contextSize = contextSize;
         configPtr.ref.batchSize = 512;
@@ -645,7 +656,8 @@ class EdgeVeda {
         if (ctx == ffi.nullptr) {
           final errorCode = NativeErrorCode.fromCode(errorPtr.value);
           final exception = errorCode.toException('Embedding init failed');
-          throw exception ?? const ModelLoadException('Failed to load model for embedding');
+          throw exception ??
+              const ModelLoadException('Failed to load model for embedding');
         }
 
         try {
@@ -656,8 +668,10 @@ class EdgeVeda {
           try {
             final err = bindings.evEmbed(ctx, textPtr, result);
             if (err != 0) {
-              throw const EmbeddingException('Embedding failed',
-                  details: 'Error code: \$err');
+              throw const EmbeddingException(
+                'Embedding failed',
+                details: 'Error code: \$err',
+              );
             }
 
             // Copy embedding to Dart list
@@ -756,8 +770,10 @@ class EdgeVeda {
             try {
               final err = bindings.evEmbed(ctx, textPtr, result);
               if (err != 0) {
-                throw EmbeddingException('Embedding failed',
-                    details: 'Error code: $err');
+                throw EmbeddingException(
+                  'Embedding failed',
+                  details: 'Error code: $err',
+                );
               }
               final dims = result.ref.dimensions;
               final tokenCount = result.ref.tokenCount;
@@ -767,10 +783,9 @@ class EdgeVeda {
                 (i) => floatPtr[i].toDouble(),
               );
               bindings.evFreeEmbeddings(result);
-              results.add(EmbeddingResult(
-                embedding: embedding,
-                tokenCount: tokenCount,
-              ));
+              results.add(
+                EmbeddingResult(embedding: embedding, tokenCount: tokenCount),
+              );
             } finally {
               calloc.free(textPtr);
               calloc.free(result);
@@ -804,7 +819,9 @@ class EdgeVeda {
   void _resetImageIdleTimer() {
     _imageIdleTimer?.cancel();
     _imageIdleTimer = Timer(_imageIdleTimeout, () {
-      debugPrint('EdgeVeda: Image model idle for 60s, auto-disposing to free memory');
+      debugPrint(
+        'EdgeVeda: Image model idle for 60s, auto-disposing to free memory',
+      );
       disposeImageGeneration();
     });
   }
@@ -844,7 +861,9 @@ class EdgeVeda {
   /// ```
   Future<void> initVision(VisionConfig config) async {
     if (_isVisionInitialized) {
-      throw const VisionException('Vision already initialized. Call disposeVision() first.');
+      throw const VisionException(
+        'Vision already initialized. Call disposeVision() first.',
+      );
     }
 
     // Validate config
@@ -943,7 +962,9 @@ class EdgeVeda {
     GenerateOptions? options,
   }) async {
     if (!_isVisionInitialized || _visionConfig == null) {
-      throw const VisionException('Vision not initialized. Call initVision() first.');
+      throw const VisionException(
+        'Vision not initialized. Call initVision() first.',
+      );
     }
 
     // Validate input
@@ -999,7 +1020,9 @@ class EdgeVeda {
 
         // Allocate native memory for image bytes
         final nativeBytes = calloc<ffi.UnsignedChar>(imageBytes.length);
-        final nativeBytesTyped = nativeBytes.cast<ffi.Uint8>().asTypedList(imageBytes.length);
+        final nativeBytesTyped = nativeBytes.cast<ffi.Uint8>().asTypedList(
+          imageBytes.length,
+        );
         nativeBytesTyped.setAll(0, imageBytes);
 
         // Set up generation params
@@ -1023,7 +1046,13 @@ class EdgeVeda {
 
         try {
           final result = bindings.evVisionDescribe(
-            ctx, nativeBytes, width, height, promptPtr, paramsPtr, outputPtr,
+            ctx,
+            nativeBytes,
+            width,
+            height,
+            promptPtr,
+            paramsPtr,
+            outputPtr,
           );
           if (result != 0) {
             throw VisionException('Vision describe failed: error code $result');
@@ -1124,10 +1153,14 @@ class EdgeVeda {
 
     // Register image workload with Scheduler for budget enforcement.
     // Priority is low -- text/vision are more important than image generation.
-    _scheduler?.registerWorkload(WorkloadId.image,
-        priority: WorkloadPriority.low);
+    _scheduler?.registerWorkload(
+      WorkloadId.image,
+      priority: WorkloadPriority.low,
+    );
     _scheduler?.registerMemoryEviction(
-        WorkloadId.image, () => disposeImageGeneration());
+      WorkloadId.image,
+      () => disposeImageGeneration(),
+    );
     debugPrint('EdgeVeda: Image workload registered with Scheduler');
 
     _resetImageIdleTimer();
@@ -1201,23 +1234,29 @@ class EdgeVeda {
 
     await for (final response in stream) {
       if (response is ImageProgressResponse && onProgress != null) {
-        onProgress(ImageProgress(
-          step: response.step,
-          totalSteps: response.totalSteps,
-          elapsedSeconds: response.elapsedSeconds,
-        ));
+        onProgress(
+          ImageProgress(
+            step: response.step,
+            totalSteps: response.totalSteps,
+            elapsedSeconds: response.elapsedSeconds,
+          ),
+        );
       } else if (response is ImageCompleteResponse) {
         completeResponse = response;
       }
     }
 
     if (completeResponse == null) {
-      throw const ImageGenerationException('Image generation produced no result');
+      throw const ImageGenerationException(
+        'Image generation produced no result',
+      );
     }
 
     // Report generation latency to Scheduler for budget enforcement
     _scheduler?.reportLatency(
-        WorkloadId.image, completeResponse.generationTimeMs);
+      WorkloadId.image,
+      completeResponse.generationTimeMs,
+    );
 
     // Reset idle timer -- generation just completed
     _resetImageIdleTimer();
@@ -1284,23 +1323,29 @@ class EdgeVeda {
 
     await for (final response in stream) {
       if (response is ImageProgressResponse && onProgress != null) {
-        onProgress(ImageProgress(
-          step: response.step,
-          totalSteps: response.totalSteps,
-          elapsedSeconds: response.elapsedSeconds,
-        ));
+        onProgress(
+          ImageProgress(
+            step: response.step,
+            totalSteps: response.totalSteps,
+            elapsedSeconds: response.elapsedSeconds,
+          ),
+        );
       } else if (response is ImageCompleteResponse) {
         completeResponse = response;
       }
     }
 
     if (completeResponse == null) {
-      throw const ImageGenerationException('Image generation produced no result');
+      throw const ImageGenerationException(
+        'Image generation produced no result',
+      );
     }
 
     // Report generation latency to Scheduler for budget enforcement
     _scheduler?.reportLatency(
-        WorkloadId.image, completeResponse.generationTimeMs);
+      WorkloadId.image,
+      completeResponse.generationTimeMs,
+    );
 
     // Reset idle timer -- generation just completed
     _resetImageIdleTimer();

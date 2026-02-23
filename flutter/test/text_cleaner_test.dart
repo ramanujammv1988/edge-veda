@@ -3,18 +3,23 @@ import 'package:edge_veda/src/text_cleaner.dart';
 
 void main() {
   group('Llama 3 header blocks', () {
-    test('strips full assistant header block completely (no orphaned text)', () {
-      expect(
-        TextCleaner.cleanResponseText(
-            '<|start_header_id|>assistant<|end_header_id|>'),
-        '',
-      );
-    });
+    test(
+      'strips full assistant header block completely (no orphaned text)',
+      () {
+        expect(
+          TextCleaner.cleanResponseText(
+            '<|start_header_id|>assistant<|end_header_id|>',
+          ),
+          '',
+        );
+      },
+    );
 
     test('strips user role header block', () {
       expect(
         TextCleaner.cleanResponseText(
-            '<|start_header_id|>user<|end_header_id|>'),
+          '<|start_header_id|>user<|end_header_id|>',
+        ),
         '',
       );
     });
@@ -22,22 +27,23 @@ void main() {
     test('strips system role header block', () {
       expect(
         TextCleaner.cleanResponseText(
-            '<|start_header_id|>system<|end_header_id|>'),
+          '<|start_header_id|>system<|end_header_id|>',
+        ),
         '',
       );
     });
 
     test('strips empty role header block', () {
       expect(
-        TextCleaner.cleanResponseText(
-            '<|start_header_id|><|end_header_id|>'),
+        TextCleaner.cleanResponseText('<|start_header_id|><|end_header_id|>'),
         '',
       );
     });
 
     test('preserves text between header blocks', () {
       final result = TextCleaner.cleanResponseText(
-          'Hello<|start_header_id|>assistant<|end_header_id|>World');
+        'Hello<|start_header_id|>assistant<|end_header_id|>World',
+      );
       expect(result, 'HelloWorld');
     });
   });
@@ -51,31 +57,19 @@ void main() {
     });
 
     test('strips <|im_end|>', () {
-      expect(
-        TextCleaner.cleanResponseText('Hello<|im_end|>'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('Hello<|im_end|>'), 'Hello');
     });
 
     test('strips <|im_start|>', () {
-      expect(
-        TextCleaner.cleanResponseText('<|im_start|>Hello'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('<|im_start|>Hello'), 'Hello');
     });
 
     test('strips <|begin_of_text|>', () {
-      expect(
-        TextCleaner.cleanResponseText('<|begin_of_text|>Hello'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('<|begin_of_text|>Hello'), 'Hello');
     });
 
     test('strips <|end_of_text|>', () {
-      expect(
-        TextCleaner.cleanResponseText('Hello<|end_of_text|>'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('Hello<|end_of_text|>'), 'Hello');
     });
 
     test('strips <|finetune_right_pad|>', () {
@@ -92,14 +86,15 @@ void main() {
       );
     });
 
-    test('strips multi-digit reserved token <|reserved_special_token_123|>',
-        () {
-      expect(
-        TextCleaner.cleanResponseText(
-            'Hello<|reserved_special_token_123|>'),
-        'Hello',
-      );
-    });
+    test(
+      'strips multi-digit reserved token <|reserved_special_token_123|>',
+      () {
+        expect(
+          TextCleaner.cleanResponseText('Hello<|reserved_special_token_123|>'),
+          'Hello',
+        );
+      },
+    );
   });
 
   group('ChatML role headers', () {
@@ -111,10 +106,7 @@ void main() {
     });
 
     test('strips <|im_start|>user with trailing newline', () {
-      expect(
-        TextCleaner.cleanResponseText('<|im_start|>user\nHello'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('<|im_start|>user\nHello'), 'Hello');
     });
 
     test('strips <|im_start|>system with trailing newline', () {
@@ -125,10 +117,7 @@ void main() {
     });
 
     test('strips <|im_start|> alone', () {
-      expect(
-        TextCleaner.cleanResponseText('<|im_start|>Hello'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('<|im_start|>Hello'), 'Hello');
     });
   });
 
@@ -141,10 +130,7 @@ void main() {
     });
 
     test('strips <end_of_turn>', () {
-      expect(
-        TextCleaner.cleanResponseText('Hello<end_of_turn>'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('Hello<end_of_turn>'), 'Hello');
     });
 
     test('strips <start_of_turn>model with newline', () {
@@ -194,8 +180,7 @@ void main() {
 
     test('only special tokens returns empty', () {
       expect(
-        TextCleaner.cleanResponseText(
-            '<|eot_id|><|im_end|><|begin_of_text|>'),
+        TextCleaner.cleanResponseText('<|eot_id|><|im_end|><|begin_of_text|>'),
         '',
       );
     });
@@ -208,10 +193,7 @@ void main() {
     });
 
     test('case insensitive: <|EOT_ID|> stripped', () {
-      expect(
-        TextCleaner.cleanResponseText('Hello<|EOT_ID|>'),
-        'Hello',
-      );
+      expect(TextCleaner.cleanResponseText('Hello<|EOT_ID|>'), 'Hello');
     });
   });
 }

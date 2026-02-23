@@ -111,13 +111,13 @@ class ToolDefinition {
   /// }
   /// ```
   Map<String, dynamic> toFunctionJson() => {
-        'type': 'function',
-        'function': {
-          'name': name,
-          'description': description,
-          'parameters': parameters,
-        },
-      };
+    'type': 'function',
+    'function': {
+      'name': name,
+      'description': description,
+      'parameters': parameters,
+    },
+  };
 
   /// Serialize to Gemma3/FunctionGemma tool calling format.
   ///
@@ -130,10 +130,10 @@ class ToolDefinition {
   /// }
   /// ```
   Map<String, dynamic> toToolJson() => {
-        'name': name,
-        'description': description,
-        'parameters': parameters,
-      };
+    'name': name,
+    'description': description,
+    'parameters': parameters,
+  };
 
   /// Serialize to JSON string (Hermes format) for prompt injection.
   String toFunctionJsonString() => jsonEncode(toFunctionJson());
@@ -159,10 +159,8 @@ class ToolCall {
   final Map<String, dynamic> arguments;
 
   /// Create a tool call with an auto-generated ID.
-  ToolCall({
-    required this.name,
-    required this.arguments,
-  }) : id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+  ToolCall({required this.name, required this.arguments})
+    : id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
   /// Create a tool call with an explicit ID (for deserialization).
   ToolCall.withId({
@@ -172,8 +170,7 @@ class ToolCall {
   });
 
   @override
-  String toString() =>
-      'ToolCall($id, $name, ${jsonEncode(arguments)})';
+  String toString() => 'ToolCall($id, $name, ${jsonEncode(arguments)})';
 }
 
 /// Result of executing a tool call, provided by the developer.
@@ -192,30 +189,25 @@ class ToolResult {
   /// Whether this result represents a failure.
   bool get isError => error != null;
 
-  const ToolResult._({
-    required this.toolCallId,
-    this.data,
-    this.error,
-  });
+  const ToolResult._({required this.toolCallId, this.data, this.error});
 
   /// Create a successful tool result.
   factory ToolResult.success({
     required String toolCallId,
     required Map<String, dynamic> data,
-  }) =>
-      ToolResult._(toolCallId: toolCallId, data: data);
+  }) => ToolResult._(toolCallId: toolCallId, data: data);
 
   /// Create a failed tool result.
   factory ToolResult.failure({
     required String toolCallId,
     required String error,
-  }) =>
-      ToolResult._(toolCallId: toolCallId, error: error);
+  }) => ToolResult._(toolCallId: toolCallId, error: error);
 
   @override
-  String toString() => isError
-      ? 'ToolResult.failure($toolCallId, $error)'
-      : 'ToolResult.success($toolCallId, ${jsonEncode(data)})';
+  String toString() =>
+      isError
+          ? 'ToolResult.failure($toolCallId, $error)'
+          : 'ToolResult.success($toolCallId, ${jsonEncode(data)})';
 }
 
 /// Thrown when model output cannot be parsed as a valid tool call.
@@ -233,9 +225,10 @@ class ToolCallParseException extends EdgeVedaException {
 
   @override
   String toString() {
-    final truncated = rawOutput.length > 100
-        ? '${rawOutput.substring(0, 100)}...'
-        : rawOutput;
+    final truncated =
+        rawOutput.length > 100
+            ? '${rawOutput.substring(0, 100)}...'
+            : rawOutput;
     return 'ToolCallParseException: $message (raw: "$truncated")';
   }
 }

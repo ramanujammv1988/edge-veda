@@ -562,14 +562,16 @@ typedef EvConfigDefaultNative = Void Function(Pointer<EvConfig> config);
 typedef EvConfigDefaultDart = void Function(Pointer<EvConfig> config);
 
 // Context management
-typedef EvInitNative = Pointer<EvContextImpl> Function(
-  Pointer<EvConfig> config,
-  Pointer<Int32> error,
-);
-typedef EvInitDart = Pointer<EvContextImpl> Function(
-  Pointer<EvConfig> config,
-  Pointer<Int32> error,
-);
+typedef EvInitNative =
+    Pointer<EvContextImpl> Function(
+      Pointer<EvConfig> config,
+      Pointer<Int32> error,
+    );
+typedef EvInitDart =
+    Pointer<EvContextImpl> Function(
+      Pointer<EvConfig> config,
+      Pointer<Int32> error,
+    );
 
 typedef EvFreeNative = Void Function(Pointer<EvContextImpl> ctx);
 typedef EvFreeDart = void Function(Pointer<EvContextImpl> ctx);
@@ -578,67 +580,58 @@ typedef EvIsValidNative = Bool Function(Pointer<EvContextImpl> ctx);
 typedef EvIsValidDart = bool Function(Pointer<EvContextImpl> ctx);
 
 // Generation parameters
-typedef EvGenerationParamsDefaultNative = Void Function(
-  Pointer<EvGenerationParams> params,
-);
-typedef EvGenerationParamsDefaultDart = void Function(
-  Pointer<EvGenerationParams> params,
-);
+typedef EvGenerationParamsDefaultNative =
+    Void Function(Pointer<EvGenerationParams> params);
+typedef EvGenerationParamsDefaultDart =
+    void Function(Pointer<EvGenerationParams> params);
 
 // Single-shot generation
-typedef EvGenerateNative = Int32 Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<Utf8> prompt,
-  Pointer<EvGenerationParams> params,
-  Pointer<Pointer<Utf8>> output,
-);
-typedef EvGenerateDart = int Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<Utf8> prompt,
-  Pointer<EvGenerationParams> params,
-  Pointer<Pointer<Utf8>> output,
-);
+typedef EvGenerateNative =
+    Int32 Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<Utf8> prompt,
+      Pointer<EvGenerationParams> params,
+      Pointer<Pointer<Utf8>> output,
+    );
+typedef EvGenerateDart =
+    int Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<Utf8> prompt,
+      Pointer<EvGenerationParams> params,
+      Pointer<Pointer<Utf8>> output,
+    );
 
 typedef EvFreeStringNative = Void Function(Pointer<Utf8> str);
 typedef EvFreeStringDart = void Function(Pointer<Utf8> str);
 
 // Memory management
-typedef EvGetMemoryUsageNative = Int32 Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<EvMemoryStats> stats,
-);
-typedef EvGetMemoryUsageDart = int Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<EvMemoryStats> stats,
-);
+typedef EvGetMemoryUsageNative =
+    Int32 Function(Pointer<EvContextImpl> ctx, Pointer<EvMemoryStats> stats);
+typedef EvGetMemoryUsageDart =
+    int Function(Pointer<EvContextImpl> ctx, Pointer<EvMemoryStats> stats);
 
-typedef EvSetMemoryLimitNative = Int32 Function(
-  Pointer<EvContextImpl> ctx,
-  Size limitBytes,
-);
-typedef EvSetMemoryLimitDart = int Function(
-  Pointer<EvContextImpl> ctx,
-  int limitBytes,
-);
+typedef EvSetMemoryLimitNative =
+    Int32 Function(Pointer<EvContextImpl> ctx, Size limitBytes);
+typedef EvSetMemoryLimitDart =
+    int Function(Pointer<EvContextImpl> ctx, int limitBytes);
 
 /// Memory pressure callback function type
 /// void (*ev_memory_pressure_callback)(void* user_data, size_t current_bytes, size_t limit_bytes)
-typedef EvMemoryPressureCallbackNative = Void Function(
-  Pointer<Void> userData,
-  Size currentBytes,
-  Size limitBytes,
-);
+typedef EvMemoryPressureCallbackNative =
+    Void Function(Pointer<Void> userData, Size currentBytes, Size limitBytes);
 
-typedef EvSetMemoryPressureCallbackNative = Int32 Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<NativeFunction<EvMemoryPressureCallbackNative>> callback,
-  Pointer<Void> userData,
-);
-typedef EvSetMemoryPressureCallbackDart = int Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<NativeFunction<EvMemoryPressureCallbackNative>> callback,
-  Pointer<Void> userData,
-);
+typedef EvSetMemoryPressureCallbackNative =
+    Int32 Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<NativeFunction<EvMemoryPressureCallbackNative>> callback,
+      Pointer<Void> userData,
+    );
+typedef EvSetMemoryPressureCallbackDart =
+    int Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<NativeFunction<EvMemoryPressureCallbackNative>> callback,
+      Pointer<Void> userData,
+    );
 
 typedef EvMemoryCleanupNative = Int32 Function(Pointer<EvContextImpl> ctx);
 typedef EvMemoryCleanupDart = int Function(Pointer<EvContextImpl> ctx);
@@ -647,7 +640,8 @@ typedef EvMemoryCleanupDart = int Function(Pointer<EvContextImpl> ctx);
 typedef EvSetVerboseNative = Void Function(Bool enable);
 typedef EvSetVerboseDart = void Function(bool enable);
 
-typedef EvGetLastErrorNative = Pointer<Utf8> Function(Pointer<EvContextImpl> ctx);
+typedef EvGetLastErrorNative =
+    Pointer<Utf8> Function(Pointer<EvContextImpl> ctx);
 typedef EvGetLastErrorDart = Pointer<Utf8> Function(Pointer<EvContextImpl> ctx);
 
 typedef EvResetNative = Int32 Function(Pointer<EvContextImpl> ctx);
@@ -658,28 +652,26 @@ typedef EvResetDart = int Function(Pointer<EvContextImpl> ctx);
 // =============================================================================
 
 /// ev_stream ev_generate_stream(ev_context ctx, const char* prompt, const ev_generation_params* params, ev_error_t* error)
-typedef EvGenerateStreamNative = Pointer<EvStreamImpl> Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<Utf8> prompt,
-  Pointer<EvGenerationParams> params,
-  Pointer<Int32> error,
-);
-typedef EvGenerateStreamDart = Pointer<EvStreamImpl> Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<Utf8> prompt,
-  Pointer<EvGenerationParams> params,
-  Pointer<Int32> error,
-);
+typedef EvGenerateStreamNative =
+    Pointer<EvStreamImpl> Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<Utf8> prompt,
+      Pointer<EvGenerationParams> params,
+      Pointer<Int32> error,
+    );
+typedef EvGenerateStreamDart =
+    Pointer<EvStreamImpl> Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<Utf8> prompt,
+      Pointer<EvGenerationParams> params,
+      Pointer<Int32> error,
+    );
 
 /// char* ev_stream_next(ev_stream stream, ev_error_t* error)
-typedef EvStreamNextNative = Pointer<Utf8> Function(
-  Pointer<EvStreamImpl> stream,
-  Pointer<Int32> error,
-);
-typedef EvStreamNextDart = Pointer<Utf8> Function(
-  Pointer<EvStreamImpl> stream,
-  Pointer<Int32> error,
-);
+typedef EvStreamNextNative =
+    Pointer<Utf8> Function(Pointer<EvStreamImpl> stream, Pointer<Int32> error);
+typedef EvStreamNextDart =
+    Pointer<Utf8> Function(Pointer<EvStreamImpl> stream, Pointer<Int32> error);
 
 /// bool ev_stream_has_next(ev_stream stream)
 typedef EvStreamHasNextNative = Bool Function(Pointer<EvStreamImpl> stream);
@@ -698,42 +690,44 @@ typedef EvStreamFreeDart = void Function(Pointer<EvStreamImpl> stream);
 // =============================================================================
 
 /// void ev_vision_config_default(ev_vision_config* config)
-typedef EvVisionConfigDefaultNative = Void Function(
-  Pointer<EvVisionConfig> config,
-);
-typedef EvVisionConfigDefaultDart = void Function(
-  Pointer<EvVisionConfig> config,
-);
+typedef EvVisionConfigDefaultNative =
+    Void Function(Pointer<EvVisionConfig> config);
+typedef EvVisionConfigDefaultDart =
+    void Function(Pointer<EvVisionConfig> config);
 
 /// ev_vision_context ev_vision_init(const ev_vision_config* config, ev_error_t* error)
-typedef EvVisionInitNative = Pointer<EvVisionContextImpl> Function(
-  Pointer<EvVisionConfig> config,
-  Pointer<Int32> error,
-);
-typedef EvVisionInitDart = Pointer<EvVisionContextImpl> Function(
-  Pointer<EvVisionConfig> config,
-  Pointer<Int32> error,
-);
+typedef EvVisionInitNative =
+    Pointer<EvVisionContextImpl> Function(
+      Pointer<EvVisionConfig> config,
+      Pointer<Int32> error,
+    );
+typedef EvVisionInitDart =
+    Pointer<EvVisionContextImpl> Function(
+      Pointer<EvVisionConfig> config,
+      Pointer<Int32> error,
+    );
 
 /// ev_error_t ev_vision_describe(ev_vision_context ctx, const unsigned char* image_bytes, int width, int height, const char* prompt, const ev_generation_params* params, char** output)
-typedef EvVisionDescribeNative = Int32 Function(
-  Pointer<EvVisionContextImpl> ctx,
-  Pointer<UnsignedChar> imageBytes,
-  Int32 width,
-  Int32 height,
-  Pointer<Utf8> prompt,
-  Pointer<EvGenerationParams> params,
-  Pointer<Pointer<Utf8>> output,
-);
-typedef EvVisionDescribeDart = int Function(
-  Pointer<EvVisionContextImpl> ctx,
-  Pointer<UnsignedChar> imageBytes,
-  int width,
-  int height,
-  Pointer<Utf8> prompt,
-  Pointer<EvGenerationParams> params,
-  Pointer<Pointer<Utf8>> output,
-);
+typedef EvVisionDescribeNative =
+    Int32 Function(
+      Pointer<EvVisionContextImpl> ctx,
+      Pointer<UnsignedChar> imageBytes,
+      Int32 width,
+      Int32 height,
+      Pointer<Utf8> prompt,
+      Pointer<EvGenerationParams> params,
+      Pointer<Pointer<Utf8>> output,
+    );
+typedef EvVisionDescribeDart =
+    int Function(
+      Pointer<EvVisionContextImpl> ctx,
+      Pointer<UnsignedChar> imageBytes,
+      int width,
+      int height,
+      Pointer<Utf8> prompt,
+      Pointer<EvGenerationParams> params,
+      Pointer<Pointer<Utf8>> output,
+    );
 
 /// void ev_vision_free(ev_vision_context ctx)
 typedef EvVisionFreeNative = Void Function(Pointer<EvVisionContextImpl> ctx);
@@ -744,67 +738,70 @@ typedef EvVisionIsValidNative = Bool Function(Pointer<EvVisionContextImpl> ctx);
 typedef EvVisionIsValidDart = bool Function(Pointer<EvVisionContextImpl> ctx);
 
 /// ev_error_t ev_vision_get_last_timings(ev_vision_context ctx, ev_timings_data* timings)
-typedef EvVisionGetLastTimingsNative = Int32 Function(
-  Pointer<EvVisionContextImpl> ctx,
-  Pointer<EvTimingsData> timings,
-);
-typedef EvVisionGetLastTimingsDart = int Function(
-  Pointer<EvVisionContextImpl> ctx,
-  Pointer<EvTimingsData> timings,
-);
+typedef EvVisionGetLastTimingsNative =
+    Int32 Function(
+      Pointer<EvVisionContextImpl> ctx,
+      Pointer<EvTimingsData> timings,
+    );
+typedef EvVisionGetLastTimingsDart =
+    int Function(
+      Pointer<EvVisionContextImpl> ctx,
+      Pointer<EvTimingsData> timings,
+    );
 
 // =============================================================================
 // Whisper Function Types (matching edge_veda.h Whisper API)
 // =============================================================================
 
 /// void ev_whisper_config_default(ev_whisper_config* config)
-typedef EvWhisperConfigDefaultNative = Void Function(
-  Pointer<EvWhisperConfig> config,
-);
-typedef EvWhisperConfigDefaultDart = void Function(
-  Pointer<EvWhisperConfig> config,
-);
+typedef EvWhisperConfigDefaultNative =
+    Void Function(Pointer<EvWhisperConfig> config);
+typedef EvWhisperConfigDefaultDart =
+    void Function(Pointer<EvWhisperConfig> config);
 
 /// ev_whisper_context ev_whisper_init(const ev_whisper_config* config, ev_error_t* error)
-typedef EvWhisperInitNative = Pointer<EvWhisperContextImpl> Function(
-  Pointer<EvWhisperConfig> config,
-  Pointer<Int32> error,
-);
-typedef EvWhisperInitDart = Pointer<EvWhisperContextImpl> Function(
-  Pointer<EvWhisperConfig> config,
-  Pointer<Int32> error,
-);
+typedef EvWhisperInitNative =
+    Pointer<EvWhisperContextImpl> Function(
+      Pointer<EvWhisperConfig> config,
+      Pointer<Int32> error,
+    );
+typedef EvWhisperInitDart =
+    Pointer<EvWhisperContextImpl> Function(
+      Pointer<EvWhisperConfig> config,
+      Pointer<Int32> error,
+    );
 
 /// ev_error_t ev_whisper_transcribe(ev_whisper_context ctx, const float* pcm_samples, int n_samples, const ev_whisper_params* params, ev_whisper_result* result)
-typedef EvWhisperTranscribeNative = Int32 Function(
-  Pointer<EvWhisperContextImpl> ctx,
-  Pointer<Float> pcmSamples,
-  Int32 nSamples,
-  Pointer<EvWhisperParams> params,
-  Pointer<EvWhisperResult> result,
-);
-typedef EvWhisperTranscribeDart = int Function(
-  Pointer<EvWhisperContextImpl> ctx,
-  Pointer<Float> pcmSamples,
-  int nSamples,
-  Pointer<EvWhisperParams> params,
-  Pointer<EvWhisperResult> result,
-);
+typedef EvWhisperTranscribeNative =
+    Int32 Function(
+      Pointer<EvWhisperContextImpl> ctx,
+      Pointer<Float> pcmSamples,
+      Int32 nSamples,
+      Pointer<EvWhisperParams> params,
+      Pointer<EvWhisperResult> result,
+    );
+typedef EvWhisperTranscribeDart =
+    int Function(
+      Pointer<EvWhisperContextImpl> ctx,
+      Pointer<Float> pcmSamples,
+      int nSamples,
+      Pointer<EvWhisperParams> params,
+      Pointer<EvWhisperResult> result,
+    );
 
 /// void ev_whisper_free_result(ev_whisper_result* result)
-typedef EvWhisperFreeResultNative = Void Function(
-  Pointer<EvWhisperResult> result,
-);
-typedef EvWhisperFreeResultDart = void Function(
-  Pointer<EvWhisperResult> result,
-);
+typedef EvWhisperFreeResultNative =
+    Void Function(Pointer<EvWhisperResult> result);
+typedef EvWhisperFreeResultDart =
+    void Function(Pointer<EvWhisperResult> result);
 
 /// void ev_whisper_free(ev_whisper_context ctx)
 typedef EvWhisperFreeNative = Void Function(Pointer<EvWhisperContextImpl> ctx);
 typedef EvWhisperFreeDart = void Function(Pointer<EvWhisperContextImpl> ctx);
 
 /// bool ev_whisper_is_valid(ev_whisper_context ctx)
-typedef EvWhisperIsValidNative = Bool Function(Pointer<EvWhisperContextImpl> ctx);
+typedef EvWhisperIsValidNative =
+    Bool Function(Pointer<EvWhisperContextImpl> ctx);
 typedef EvWhisperIsValidDart = bool Function(Pointer<EvWhisperContextImpl> ctx);
 
 // =============================================================================
@@ -812,54 +809,49 @@ typedef EvWhisperIsValidDart = bool Function(Pointer<EvWhisperContextImpl> ctx);
 // =============================================================================
 
 /// ev_error_t ev_embed(ev_context ctx, const char* text, ev_embed_result* result)
-typedef EvEmbedNative = Int32 Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<Utf8> text,
-  Pointer<EvEmbedResult> result,
-);
-typedef EvEmbedDart = int Function(
-  Pointer<EvContextImpl> ctx,
-  Pointer<Utf8> text,
-  Pointer<EvEmbedResult> result,
-);
+typedef EvEmbedNative =
+    Int32 Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<Utf8> text,
+      Pointer<EvEmbedResult> result,
+    );
+typedef EvEmbedDart =
+    int Function(
+      Pointer<EvContextImpl> ctx,
+      Pointer<Utf8> text,
+      Pointer<EvEmbedResult> result,
+    );
 
 /// void ev_free_embeddings(ev_embed_result* result)
-typedef EvFreeEmbeddingsNative = Void Function(
-  Pointer<EvEmbedResult> result,
-);
-typedef EvFreeEmbeddingsDart = void Function(
-  Pointer<EvEmbedResult> result,
-);
+typedef EvFreeEmbeddingsNative = Void Function(Pointer<EvEmbedResult> result);
+typedef EvFreeEmbeddingsDart = void Function(Pointer<EvEmbedResult> result);
 
 // =============================================================================
 // Image Generation Function Types (matching edge_veda.h Image Generation API)
 // =============================================================================
 
 /// void ev_image_config_default(ev_image_config* config)
-typedef EvImageConfigDefaultNative = Void Function(
-  Pointer<EvImageConfig> config,
-);
-typedef EvImageConfigDefaultDart = void Function(
-  Pointer<EvImageConfig> config,
-);
+typedef EvImageConfigDefaultNative =
+    Void Function(Pointer<EvImageConfig> config);
+typedef EvImageConfigDefaultDart = void Function(Pointer<EvImageConfig> config);
 
 /// void ev_image_gen_params_default(ev_image_gen_params* params)
-typedef EvImageGenParamsDefaultNative = Void Function(
-  Pointer<EvImageGenParams> params,
-);
-typedef EvImageGenParamsDefaultDart = void Function(
-  Pointer<EvImageGenParams> params,
-);
+typedef EvImageGenParamsDefaultNative =
+    Void Function(Pointer<EvImageGenParams> params);
+typedef EvImageGenParamsDefaultDart =
+    void Function(Pointer<EvImageGenParams> params);
 
 /// ev_image_context ev_image_init(const ev_image_config* config, ev_error_t* error)
-typedef EvImageInitNative = Pointer<EvImageContextImpl> Function(
-  Pointer<EvImageConfig> config,
-  Pointer<Int32> error,
-);
-typedef EvImageInitDart = Pointer<EvImageContextImpl> Function(
-  Pointer<EvImageConfig> config,
-  Pointer<Int32> error,
-);
+typedef EvImageInitNative =
+    Pointer<EvImageContextImpl> Function(
+      Pointer<EvImageConfig> config,
+      Pointer<Int32> error,
+    );
+typedef EvImageInitDart =
+    Pointer<EvImageContextImpl> Function(
+      Pointer<EvImageConfig> config,
+      Pointer<Int32> error,
+    );
 
 /// void ev_image_free(ev_image_context ctx)
 typedef EvImageFreeNative = Void Function(Pointer<EvImageContextImpl> ctx);
@@ -870,58 +862,58 @@ typedef EvImageIsValidNative = Bool Function(Pointer<EvImageContextImpl> ctx);
 typedef EvImageIsValidDart = bool Function(Pointer<EvImageContextImpl> ctx);
 
 /// Progress callback: void (*ev_image_progress_cb)(int step, int total_steps, float elapsed_s, void* user_data)
-typedef EvImageProgressCbNative = Void Function(
-  Int32 step,
-  Int32 totalSteps,
-  Float elapsedS,
-  Pointer<Void> userData,
-);
+typedef EvImageProgressCbNative =
+    Void Function(
+      Int32 step,
+      Int32 totalSteps,
+      Float elapsedS,
+      Pointer<Void> userData,
+    );
 
 /// void ev_image_set_progress_callback(ev_image_context ctx, ev_image_progress_cb cb, void* user_data)
-typedef EvImageSetProgressCallbackNative = Void Function(
-  Pointer<EvImageContextImpl> ctx,
-  Pointer<NativeFunction<EvImageProgressCbNative>> cb,
-  Pointer<Void> userData,
-);
-typedef EvImageSetProgressCallbackDart = void Function(
-  Pointer<EvImageContextImpl> ctx,
-  Pointer<NativeFunction<EvImageProgressCbNative>> cb,
-  Pointer<Void> userData,
-);
+typedef EvImageSetProgressCallbackNative =
+    Void Function(
+      Pointer<EvImageContextImpl> ctx,
+      Pointer<NativeFunction<EvImageProgressCbNative>> cb,
+      Pointer<Void> userData,
+    );
+typedef EvImageSetProgressCallbackDart =
+    void Function(
+      Pointer<EvImageContextImpl> ctx,
+      Pointer<NativeFunction<EvImageProgressCbNative>> cb,
+      Pointer<Void> userData,
+    );
 
 /// ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_params* params, ev_image_result* result)
-typedef EvImageGenerateNative = Int32 Function(
-  Pointer<EvImageContextImpl> ctx,
-  Pointer<EvImageGenParams> params,
-  Pointer<EvImageResult> result,
-);
-typedef EvImageGenerateDart = int Function(
-  Pointer<EvImageContextImpl> ctx,
-  Pointer<EvImageGenParams> params,
-  Pointer<EvImageResult> result,
-);
+typedef EvImageGenerateNative =
+    Int32 Function(
+      Pointer<EvImageContextImpl> ctx,
+      Pointer<EvImageGenParams> params,
+      Pointer<EvImageResult> result,
+    );
+typedef EvImageGenerateDart =
+    int Function(
+      Pointer<EvImageContextImpl> ctx,
+      Pointer<EvImageGenParams> params,
+      Pointer<EvImageResult> result,
+    );
 
 /// void ev_image_free_result(ev_image_result* result)
-typedef EvImageFreeResultNative = Void Function(
-  Pointer<EvImageResult> result,
-);
-typedef EvImageFreeResultDart = void Function(
-  Pointer<EvImageResult> result,
-);
+typedef EvImageFreeResultNative = Void Function(Pointer<EvImageResult> result);
+typedef EvImageFreeResultDart = void Function(Pointer<EvImageResult> result);
 
 // =============================================================================
 // Streaming Token Info Function Types (matching edge_veda.h confidence scoring)
 // =============================================================================
 
 /// ev_error_t ev_stream_get_token_info(ev_stream stream, ev_stream_token_info* info)
-typedef EvStreamGetTokenInfoNative = Int32 Function(
-  Pointer<EvStreamImpl> stream,
-  Pointer<EvStreamTokenInfo> info,
-);
-typedef EvStreamGetTokenInfoDart = int Function(
-  Pointer<EvStreamImpl> stream,
-  Pointer<EvStreamTokenInfo> info,
-);
+typedef EvStreamGetTokenInfoNative =
+    Int32 Function(
+      Pointer<EvStreamImpl> stream,
+      Pointer<EvStreamTokenInfo> info,
+    );
+typedef EvStreamGetTokenInfoDart =
+    int Function(Pointer<EvStreamImpl> stream, Pointer<EvStreamTokenInfo> info);
 
 // =============================================================================
 // Native Library Bindings
@@ -1173,25 +1165,30 @@ class EdgeVedaNativeBindings {
     evVersion = _dylib.lookupFunction<EvVersionNative, EvVersionDart>(
       'ev_version',
     );
-    evErrorString = _dylib.lookupFunction<EvErrorStringNative, EvErrorStringDart>(
-      'ev_error_string',
-    );
+    evErrorString = _dylib
+        .lookupFunction<EvErrorStringNative, EvErrorStringDart>(
+          'ev_error_string',
+        );
 
     // Backend detection
-    evDetectBackend = _dylib.lookupFunction<EvDetectBackendNative, EvDetectBackendDart>(
-      'ev_detect_backend',
-    );
-    evIsBackendAvailable = _dylib.lookupFunction<EvIsBackendAvailableNative, EvIsBackendAvailableDart>(
-      'ev_is_backend_available',
-    );
-    evBackendName = _dylib.lookupFunction<EvBackendNameNative, EvBackendNameDart>(
-      'ev_backend_name',
-    );
+    evDetectBackend = _dylib
+        .lookupFunction<EvDetectBackendNative, EvDetectBackendDart>(
+          'ev_detect_backend',
+        );
+    evIsBackendAvailable = _dylib
+        .lookupFunction<EvIsBackendAvailableNative, EvIsBackendAvailableDart>(
+          'ev_is_backend_available',
+        );
+    evBackendName = _dylib
+        .lookupFunction<EvBackendNameNative, EvBackendNameDart>(
+          'ev_backend_name',
+        );
 
     // Configuration
-    evConfigDefault = _dylib.lookupFunction<EvConfigDefaultNative, EvConfigDefaultDart>(
-      'ev_config_default',
-    );
+    evConfigDefault = _dylib
+        .lookupFunction<EvConfigDefaultNative, EvConfigDefaultDart>(
+          'ev_config_default',
+        );
 
     // Context management
     evInit = _dylib.lookupFunction<EvInitNative, EvInitDart>('ev_init');
@@ -1215,63 +1212,72 @@ class EdgeVedaNativeBindings {
     );
 
     // Memory management
-    evGetMemoryUsage = _dylib.lookupFunction<EvGetMemoryUsageNative, EvGetMemoryUsageDart>(
-      'ev_get_memory_usage',
-    );
-    evSetMemoryLimit = _dylib.lookupFunction<EvSetMemoryLimitNative, EvSetMemoryLimitDart>(
-      'ev_set_memory_limit',
-    );
+    evGetMemoryUsage = _dylib
+        .lookupFunction<EvGetMemoryUsageNative, EvGetMemoryUsageDart>(
+          'ev_get_memory_usage',
+        );
+    evSetMemoryLimit = _dylib
+        .lookupFunction<EvSetMemoryLimitNative, EvSetMemoryLimitDart>(
+          'ev_set_memory_limit',
+        );
     evSetMemoryPressureCallback = _dylib.lookupFunction<
       EvSetMemoryPressureCallbackNative,
       EvSetMemoryPressureCallbackDart
     >('ev_set_memory_pressure_callback');
-    evMemoryCleanup = _dylib.lookupFunction<EvMemoryCleanupNative, EvMemoryCleanupDart>(
-      'ev_memory_cleanup',
-    );
+    evMemoryCleanup = _dylib
+        .lookupFunction<EvMemoryCleanupNative, EvMemoryCleanupDart>(
+          'ev_memory_cleanup',
+        );
 
     // Utility functions
     evSetVerbose = _dylib.lookupFunction<EvSetVerboseNative, EvSetVerboseDart>(
       'ev_set_verbose',
     );
-    evGetLastError = _dylib.lookupFunction<EvGetLastErrorNative, EvGetLastErrorDart>(
-      'ev_get_last_error',
-    );
+    evGetLastError = _dylib
+        .lookupFunction<EvGetLastErrorNative, EvGetLastErrorDart>(
+          'ev_get_last_error',
+        );
     evReset = _dylib.lookupFunction<EvResetNative, EvResetDart>('ev_reset');
 
     // Streaming generation
-    evGenerateStream = _dylib.lookupFunction<EvGenerateStreamNative, EvGenerateStreamDart>(
-      'ev_generate_stream',
-    );
+    evGenerateStream = _dylib
+        .lookupFunction<EvGenerateStreamNative, EvGenerateStreamDart>(
+          'ev_generate_stream',
+        );
     evStreamNext = _dylib.lookupFunction<EvStreamNextNative, EvStreamNextDart>(
       'ev_stream_next',
     );
-    evStreamHasNext = _dylib.lookupFunction<EvStreamHasNextNative, EvStreamHasNextDart>(
-      'ev_stream_has_next',
-    );
-    evStreamCancel = _dylib.lookupFunction<EvStreamCancelNative, EvStreamCancelDart>(
-      'ev_stream_cancel',
-    );
+    evStreamHasNext = _dylib
+        .lookupFunction<EvStreamHasNextNative, EvStreamHasNextDart>(
+          'ev_stream_has_next',
+        );
+    evStreamCancel = _dylib
+        .lookupFunction<EvStreamCancelNative, EvStreamCancelDart>(
+          'ev_stream_cancel',
+        );
     evStreamFree = _dylib.lookupFunction<EvStreamFreeNative, EvStreamFreeDart>(
       'ev_stream_free',
     );
 
     // Vision functions
-    evVisionConfigDefault = _dylib.lookupFunction<
-      EvVisionConfigDefaultNative,
-      EvVisionConfigDefaultDart
-    >('ev_vision_config_default');
+    evVisionConfigDefault = _dylib
+        .lookupFunction<EvVisionConfigDefaultNative, EvVisionConfigDefaultDart>(
+          'ev_vision_config_default',
+        );
     evVisionInit = _dylib.lookupFunction<EvVisionInitNative, EvVisionInitDart>(
       'ev_vision_init',
     );
-    evVisionDescribe = _dylib.lookupFunction<EvVisionDescribeNative, EvVisionDescribeDart>(
-      'ev_vision_describe',
-    );
+    evVisionDescribe = _dylib
+        .lookupFunction<EvVisionDescribeNative, EvVisionDescribeDart>(
+          'ev_vision_describe',
+        );
     evVisionFree = _dylib.lookupFunction<EvVisionFreeNative, EvVisionFreeDart>(
       'ev_vision_free',
     );
-    evVisionIsValid = _dylib.lookupFunction<EvVisionIsValidNative, EvVisionIsValidDart>(
-      'ev_vision_is_valid',
-    );
+    evVisionIsValid = _dylib
+        .lookupFunction<EvVisionIsValidNative, EvVisionIsValidDart>(
+          'ev_vision_is_valid',
+        );
     evVisionGetLastTimings = _dylib.lookupFunction<
       EvVisionGetLastTimingsNative,
       EvVisionGetLastTimingsDart
@@ -1282,41 +1288,45 @@ class EdgeVedaNativeBindings {
       EvWhisperConfigDefaultNative,
       EvWhisperConfigDefaultDart
     >('ev_whisper_config_default');
-    evWhisperInit = _dylib.lookupFunction<EvWhisperInitNative, EvWhisperInitDart>(
-      'ev_whisper_init',
-    );
-    evWhisperTranscribe = _dylib.lookupFunction<
-      EvWhisperTranscribeNative,
-      EvWhisperTranscribeDart
-    >('ev_whisper_transcribe');
-    evWhisperFreeResult = _dylib.lookupFunction<
-      EvWhisperFreeResultNative,
-      EvWhisperFreeResultDart
-    >('ev_whisper_free_result');
-    evWhisperFree = _dylib.lookupFunction<EvWhisperFreeNative, EvWhisperFreeDart>(
-      'ev_whisper_free',
-    );
-    evWhisperIsValid = _dylib.lookupFunction<EvWhisperIsValidNative, EvWhisperIsValidDart>(
-      'ev_whisper_is_valid',
-    );
+    evWhisperInit = _dylib
+        .lookupFunction<EvWhisperInitNative, EvWhisperInitDart>(
+          'ev_whisper_init',
+        );
+    evWhisperTranscribe = _dylib
+        .lookupFunction<EvWhisperTranscribeNative, EvWhisperTranscribeDart>(
+          'ev_whisper_transcribe',
+        );
+    evWhisperFreeResult = _dylib
+        .lookupFunction<EvWhisperFreeResultNative, EvWhisperFreeResultDart>(
+          'ev_whisper_free_result',
+        );
+    evWhisperFree = _dylib
+        .lookupFunction<EvWhisperFreeNative, EvWhisperFreeDart>(
+          'ev_whisper_free',
+        );
+    evWhisperIsValid = _dylib
+        .lookupFunction<EvWhisperIsValidNative, EvWhisperIsValidDart>(
+          'ev_whisper_is_valid',
+        );
 
     // Embedding functions
     evEmbed = _dylib.lookupFunction<EvEmbedNative, EvEmbedDart>('ev_embed');
-    evFreeEmbeddings = _dylib.lookupFunction<EvFreeEmbeddingsNative, EvFreeEmbeddingsDart>(
-      'ev_free_embeddings',
-    );
+    evFreeEmbeddings = _dylib
+        .lookupFunction<EvFreeEmbeddingsNative, EvFreeEmbeddingsDart>(
+          'ev_free_embeddings',
+        );
 
     // Streaming confidence
-    evStreamGetTokenInfo = _dylib.lookupFunction<
-      EvStreamGetTokenInfoNative,
-      EvStreamGetTokenInfoDart
-    >('ev_stream_get_token_info');
+    evStreamGetTokenInfo = _dylib
+        .lookupFunction<EvStreamGetTokenInfoNative, EvStreamGetTokenInfoDart>(
+          'ev_stream_get_token_info',
+        );
 
     // Image generation functions
-    evImageConfigDefault = _dylib.lookupFunction<
-      EvImageConfigDefaultNative,
-      EvImageConfigDefaultDart
-    >('ev_image_config_default');
+    evImageConfigDefault = _dylib
+        .lookupFunction<EvImageConfigDefaultNative, EvImageConfigDefaultDart>(
+          'ev_image_config_default',
+        );
     evImageGenParamsDefault = _dylib.lookupFunction<
       EvImageGenParamsDefaultNative,
       EvImageGenParamsDefaultDart
@@ -1327,18 +1337,21 @@ class EdgeVedaNativeBindings {
     evImageFree = _dylib.lookupFunction<EvImageFreeNative, EvImageFreeDart>(
       'ev_image_free',
     );
-    evImageIsValid = _dylib.lookupFunction<EvImageIsValidNative, EvImageIsValidDart>(
-      'ev_image_is_valid',
-    );
+    evImageIsValid = _dylib
+        .lookupFunction<EvImageIsValidNative, EvImageIsValidDart>(
+          'ev_image_is_valid',
+        );
     evImageSetProgressCallback = _dylib.lookupFunction<
       EvImageSetProgressCallbackNative,
       EvImageSetProgressCallbackDart
     >('ev_image_set_progress_callback');
-    evImageGenerate = _dylib.lookupFunction<EvImageGenerateNative, EvImageGenerateDart>(
-      'ev_image_generate',
-    );
-    evImageFreeResult = _dylib.lookupFunction<EvImageFreeResultNative, EvImageFreeResultDart>(
-      'ev_image_free_result',
-    );
+    evImageGenerate = _dylib
+        .lookupFunction<EvImageGenerateNative, EvImageGenerateDart>(
+          'ev_image_generate',
+        );
+    evImageFreeResult = _dylib
+        .lookupFunction<EvImageFreeResultNative, EvImageFreeResultDart>(
+          'ev_image_free_result',
+        );
   }
 }

@@ -18,20 +18,22 @@ import 'edge_veda_impl.dart';
 
 // ── FFI Typedefs ──────────────────────────────────────────────────────────
 
-typedef _SysctlByNameC = ffi.Int Function(
-  ffi.Pointer<ffi.Char>,
-  ffi.Pointer<ffi.Void>,
-  ffi.Pointer<ffi.Size>,
-  ffi.Pointer<ffi.Void>,
-  ffi.Size,
-);
-typedef _SysctlByNameDart = int Function(
-  ffi.Pointer<ffi.Char>,
-  ffi.Pointer<ffi.Void>,
-  ffi.Pointer<ffi.Size>,
-  ffi.Pointer<ffi.Void>,
-  int,
-);
+typedef _SysctlByNameC =
+    ffi.Int Function(
+      ffi.Pointer<ffi.Char>,
+      ffi.Pointer<ffi.Void>,
+      ffi.Pointer<ffi.Size>,
+      ffi.Pointer<ffi.Void>,
+      ffi.Size,
+    );
+typedef _SysctlByNameDart =
+    int Function(
+      ffi.Pointer<ffi.Char>,
+      ffi.Pointer<ffi.Void>,
+      ffi.Pointer<ffi.Size>,
+      ffi.Pointer<ffi.Void>,
+      int,
+    );
 
 // ── Enums ─────────────────────────────────────────────────────────────────
 
@@ -45,15 +47,7 @@ enum DeviceTier {
 }
 
 /// Use case for model recommendation
-enum UseCase {
-  chat,
-  reasoning,
-  toolCalling,
-  vision,
-  stt,
-  embedding,
-  fast,
-}
+enum UseCase { chat, reasoning, toolCalling, vision, stt, embedding, fast }
 
 // ── DeviceProfile ─────────────────────────────────────────────────────────
 
@@ -87,7 +81,8 @@ class DeviceProfile {
   });
 
   /// Safe memory budget in MB (iOS: 60%, macOS: 80% due to Unified Memory limits)
-  int get safeMemoryBudgetMB => (totalRamGB * 1024 * (Platform.isMacOS ? 0.80 : 0.60)).round();
+  int get safeMemoryBudgetMB =>
+      (totalRamGB * 1024 * (Platform.isMacOS ? 0.80 : 0.60)).round();
 
   // ── Detection (sync, cached) ──
 
@@ -119,11 +114,20 @@ class DeviceProfile {
           ramGB = _readInt64('hw.memsize') / (1024 * 1024 * 1024);
         } catch (_) {}
       }
-      
+
       // Compute accurate tier for Macs since base RAM varies
       var tier = entry.$4;
       if (identifier.startsWith('Mac') || identifier.startsWith('iMac')) {
-        tier = ramGB < 6 ? DeviceTier.minimum : ramGB < 8 ? DeviceTier.low : ramGB < 10 ? DeviceTier.medium : ramGB < 16 ? DeviceTier.high : DeviceTier.ultra;
+        tier =
+            ramGB < 6
+                ? DeviceTier.minimum
+                : ramGB < 8
+                ? DeviceTier.low
+                : ramGB < 10
+                ? DeviceTier.medium
+                : ramGB < 16
+                ? DeviceTier.high
+                : DeviceTier.ultra;
       }
 
       _cached = DeviceProfile(
@@ -144,15 +148,16 @@ class DeviceProfile {
       ramGB = 4;
     }
 
-    final tier = ramGB < 6
-        ? DeviceTier.minimum
-        : ramGB < 8
+    final tier =
+        ramGB < 6
+            ? DeviceTier.minimum
+            : ramGB < 8
             ? DeviceTier.low
             : ramGB < 10
-                ? DeviceTier.medium
-                : ramGB < 16
-                    ? DeviceTier.high
-                    : DeviceTier.ultra;
+            ? DeviceTier.medium
+            : ramGB < 16
+            ? DeviceTier.high
+            : DeviceTier.ultra;
 
     bool isMac = identifier.startsWith('Mac') || identifier.startsWith('iMac');
     String chipName = isMac ? 'Apple Silicon' : 'Unknown';
@@ -259,10 +264,30 @@ class DeviceProfile {
     'iMac21,2': ('iMac M1', 8, 'M1', DeviceTier.high),
 
     // Mac M1 Pro/Max (2021)
-    'MacBookPro18,1': ('MacBook Pro 16" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
-    'MacBookPro18,2': ('MacBook Pro 16" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
-    'MacBookPro18,3': ('MacBook Pro 14" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
-    'MacBookPro18,4': ('MacBook Pro 14" M1 Pro/Max', 16, 'M1 Pro/Max/Ultra', DeviceTier.ultra),
+    'MacBookPro18,1': (
+      'MacBook Pro 16" M1 Pro/Max',
+      16,
+      'M1 Pro/Max/Ultra',
+      DeviceTier.ultra,
+    ),
+    'MacBookPro18,2': (
+      'MacBook Pro 16" M1 Pro/Max',
+      16,
+      'M1 Pro/Max/Ultra',
+      DeviceTier.ultra,
+    ),
+    'MacBookPro18,3': (
+      'MacBook Pro 14" M1 Pro/Max',
+      16,
+      'M1 Pro/Max/Ultra',
+      DeviceTier.ultra,
+    ),
+    'MacBookPro18,4': (
+      'MacBook Pro 14" M1 Pro/Max',
+      16,
+      'M1 Pro/Max/Ultra',
+      DeviceTier.ultra,
+    ),
 
     // Mac M2 series (2022)
     'Mac14,2': ('MacBook Air M2', 8, 'M2', DeviceTier.high),
@@ -272,8 +297,13 @@ class DeviceProfile {
     'Mac14,7': ('MacBook Pro M2', 8, 'M2', DeviceTier.high),
     'Mac14,8': ('Mac Studio M2', 32, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
     'Mac14,9': ('MacBook Pro M2 Pro', 16, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
-    'Mac14,10': ('MacBook Pro M2 Max', 32, 'M2 Pro/Max/Ultra', DeviceTier.ultra),
-    
+    'Mac14,10': (
+      'MacBook Pro M2 Max',
+      32,
+      'M2 Pro/Max/Ultra',
+      DeviceTier.ultra,
+    ),
+
     // Mac M3 series (2023)
     'Mac15,3': ('MacBook Pro M3', 8, 'M3', DeviceTier.high),
     'Mac15,4': ('iMac M3', 8, 'M3', DeviceTier.high),
@@ -281,10 +311,15 @@ class DeviceProfile {
     'Mac15,6': ('MacBook Pro M3 Pro', 18, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
     'Mac15,7': ('MacBook Pro M3 Max', 36, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
     'Mac15,8': ('MacBook Pro M3 Max', 36, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
-    'Mac15,10': ('MacBook Pro M3 Max', 36, 'M3 Pro/Max/Ultra', DeviceTier.ultra),
+    'Mac15,10': (
+      'MacBook Pro M3 Max',
+      36,
+      'M3 Pro/Max/Ultra',
+      DeviceTier.ultra,
+    ),
     'Mac15,12': ('MacBook Air M3', 8, 'M3', DeviceTier.high),
     'Mac15,13': ('MacBook Air M3', 8, 'M3', DeviceTier.high),
-    
+
     // Mac M4 series (2024)
     'Mac16,1': ('MacBook Pro M4', 16, 'M4', DeviceTier.ultra),
     'Mac16,2': ('MacBook Pro M4', 16, 'M4', DeviceTier.ultra),
@@ -369,11 +404,12 @@ class MemoryEstimator {
 
     // KV cache quantization factor
     final kvQuantFactor = model.quantization == 'F16' ? 2.0 : 1.0;
-    final kvCacheMB = ((model.parametersB ?? 1.0) *
-            4.0 *
-            (contextLength / 2048) *
-            kvQuantFactor)
-        .round();
+    final kvCacheMB =
+        ((model.parametersB ?? 1.0) *
+                4.0 *
+                (contextLength / 2048) *
+                kvQuantFactor)
+            .round();
 
     final metalBuffersMB = ((model.parametersB ?? 1.0) * 80).round();
     const runtimeOverheadMB = 150;
@@ -599,28 +635,28 @@ class ModelAdvisor {
       contextLength: targetCtx,
     );
     final memRatio = estimate.memoryRatio;
-    final fitScore = memRatio <= 0.50
-        ? 100
-        : memRatio <= 0.70
+    final fitScore =
+        memRatio <= 0.50
+            ? 100
+            : memRatio <= 0.70
             ? 85
             : memRatio <= 0.85
-                ? 60
-                : memRatio <= 1.00
-                    ? 30
-                    : 0;
+            ? 60
+            : memRatio <= 1.00
+            ? 30
+            : 0;
 
     // ── Quality Score ──
     final baseQuality = _familyBaseScores[model.family] ?? 50;
     final paramBonus =
-        min(15, (log(max(model.parametersB ?? 0.1, 0.1)) / log(2)) * 5)
-            .round();
+        min(15, (log(max(model.parametersB ?? 0.1, 0.1)) / log(2)) * 5).round();
     final quantPenalty = model.quantization == 'Q4_K_M' ? -3 : 0;
-    final taskBonus = (model.capabilities ?? [])
-            .contains(_requiredCapability(useCase))
-        ? 10
-        : 0;
-    final qualityScore =
-        (baseQuality + paramBonus + quantPenalty + taskBonus).clamp(0, 100);
+    final taskBonus =
+        (model.capabilities ?? []).contains(_requiredCapability(useCase))
+            ? 10
+            : 0;
+    final qualityScore = (baseQuality + paramBonus + quantPenalty + taskBonus)
+        .clamp(0, 100);
 
     // ── Speed Score ──
     final baseTokPerSec = 160.0 / max(model.parametersB ?? 1.0, 0.1);
@@ -631,21 +667,23 @@ class ModelAdvisor {
 
     // ── Context Score ──
     final maxCtx = model.maxContextLength ?? 2048;
-    final contextScore = maxCtx >= targetCtx * 2
-        ? 100
-        : maxCtx >= targetCtx
+    final contextScore =
+        maxCtx >= targetCtx * 2
+            ? 100
+            : maxCtx >= targetCtx
             ? 80
             : maxCtx >= targetCtx ~/ 2
-                ? 50
-                : 20;
+            ? 50
+            : 20;
 
     // ── Final Score ──
     final w = _weights[useCase]!;
-    final finalScore = (qualityScore * w.q +
-            speedScore * w.s +
-            fitScore * w.f +
-            contextScore * w.c)
-        .round();
+    final finalScore =
+        (qualityScore * w.q +
+                speedScore * w.s +
+                fitScore * w.f +
+                contextScore * w.c)
+            .round();
 
     // ── Warning ──
     String? warning;
@@ -682,7 +720,8 @@ class ModelAdvisor {
     List<ModelInfo>? models,
   }) {
     // Collect all unique models (exclude mmproj)
-    final allModels = models ??
+    final allModels =
+        models ??
         <ModelInfo>{
           ...ModelRegistry.getAllModels(),
           ...ModelRegistry.getVisionModels(),
@@ -760,7 +799,8 @@ class ModelAdvisor {
     if (!sufficient) {
       final freeMB = (freeBytes / (1024 * 1024)).round();
       final requiredMB = (model.sizeBytes / (1024 * 1024)).round();
-      warning = 'Insufficient storage: ${freeMB}MB free, '
+      warning =
+          'Insufficient storage: ${freeMB}MB free, '
           '${requiredMB}MB required for ${model.name}';
     } else if (freeBytes < requiredWithBuffer * 2) {
       // Warn if space is tight (less than 2x required)
@@ -785,7 +825,8 @@ class ModelAdvisor {
   /// Requires an initialized [EdgeVeda] instance. If no worker is active,
   /// returns healthy status (model not yet loaded = no pressure).
   static Future<MemoryValidation> validateMemoryAfterLoad(
-      EdgeVeda edgeVeda) async {
+    EdgeVeda edgeVeda,
+  ) async {
     final stats = await edgeVeda.getMemoryStats();
 
     if (stats.currentBytes == 0) {
@@ -806,12 +847,14 @@ class ModelAdvisor {
 
     if (stats.isCritical) {
       status = 'Critical';
-      warning = 'Memory usage critical: ${currentMB}MB / ${limitMB}MB '
+      warning =
+          'Memory usage critical: ${currentMB}MB / ${limitMB}MB '
           '(${(percent * 100).toStringAsFixed(0)}%). '
           'Risk of jetsam termination. Consider reducing context size or using a smaller model.';
     } else if (stats.isHighPressure) {
       status = 'Warning';
-      warning = 'High memory pressure: ${currentMB}MB / ${limitMB}MB '
+      warning =
+          'High memory pressure: ${currentMB}MB / ${limitMB}MB '
           '(${(percent * 100).toStringAsFixed(0)}%). '
           'May experience jetsam under heavy usage.';
     } else if (percent > 0.6) {

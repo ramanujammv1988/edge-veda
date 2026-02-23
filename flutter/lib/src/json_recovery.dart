@@ -82,8 +82,7 @@ class JsonRecovery {
 
     // Strip leading text before the JSON
     if (startIndex > 0) {
-      repairs.add(
-          'Stripped $startIndex leading characters before JSON');
+      repairs.add('Stripped $startIndex leading characters before JSON');
       text = text.substring(startIndex);
     }
 
@@ -93,8 +92,7 @@ class JsonRecovery {
     final lastCloser = text.lastIndexOf(closer);
     if (lastCloser > 0 && lastCloser < text.length - 1) {
       final trailingCount = text.length - lastCloser - 1;
-      repairs.add(
-          'Stripped $trailingCount trailing characters after JSON');
+      repairs.add('Stripped $trailingCount trailing characters after JSON');
       text = text.substring(0, lastCloser + 1);
     }
 
@@ -114,8 +112,7 @@ class JsonRecovery {
   }
 
   /// Close unterminated string literals by appending a closing quote.
-  static String _closeUnterminatedStrings(
-      String text, List<String> repairs) {
+  static String _closeUnterminatedStrings(String text, List<String> repairs) {
     var inString = false;
     var escaped = false;
 
@@ -142,8 +139,7 @@ class JsonRecovery {
   }
 
   /// Count open brackets/braces and append missing closers.
-  static String _closeUnclosedBrackets(
-      String text, List<String> repairs) {
+  static String _closeUnclosedBrackets(String text, List<String> repairs) {
     var braceCount = 0; // { vs }
     var bracketCount = 0; // [ vs ]
     var inString = false;

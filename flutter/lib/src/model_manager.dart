@@ -237,17 +237,20 @@ class ModelManager {
           // Calculate download speed and ETA
           final elapsed = DateTime.now().difference(startTime).inMilliseconds;
           final speed = elapsed > 0 ? (downloadedBytes / elapsed) * 1000 : 0.0;
-          final remaining = speed > 0
-              ? ((totalBytes - downloadedBytes) / speed).round()
-              : null;
+          final remaining =
+              speed > 0
+                  ? ((totalBytes - downloadedBytes) / speed).round()
+                  : null;
 
           // Emit progress update (0-100%)
-          _progressController.add(DownloadProgress(
-            totalBytes: totalBytes,
-            downloadedBytes: downloadedBytes,
-            speedBytesPerSecond: speed,
-            estimatedSecondsRemaining: remaining,
-          ));
+          _progressController.add(
+            DownloadProgress(
+              totalBytes: totalBytes,
+              downloadedBytes: downloadedBytes,
+              speedBytesPerSecond: speed,
+              estimatedSecondsRemaining: remaining,
+            ),
+          );
         }
       }
 
@@ -271,12 +274,14 @@ class ModelManager {
       await tempFile.rename(modelPath);
 
       // Emit final 100% progress after successful rename
-      _progressController.add(DownloadProgress(
-        totalBytes: totalBytes,
-        downloadedBytes: totalBytes,
-        speedBytesPerSecond: 0,
-        estimatedSecondsRemaining: 0,
-      ));
+      _progressController.add(
+        DownloadProgress(
+          totalBytes: totalBytes,
+          downloadedBytes: totalBytes,
+          speedBytesPerSecond: 0,
+          estimatedSecondsRemaining: 0,
+        ),
+      );
 
       // Save metadata
       await _saveModelMetadata(model);
@@ -343,7 +348,9 @@ class ModelManager {
   ///
   /// Returns true if the file exists and its SHA-256 hash matches the expected checksum.
   Future<bool> verifyModelChecksum(
-      String filePath, String expectedChecksum) async {
+    String filePath,
+    String expectedChecksum,
+  ) async {
     return _verifyChecksum(filePath, expectedChecksum);
   }
 
@@ -421,8 +428,9 @@ class ModelManager {
   /// Save model metadata to disk
   Future<void> _saveModelMetadata(ModelInfo model) async {
     final modelsDir = await getModelsDirectory();
-    final metadataFile =
-        File(path.join(modelsDir.path, '${model.id}_$_metadataFileName'));
+    final metadataFile = File(
+      path.join(modelsDir.path, '${model.id}_$_metadataFileName'),
+    );
 
     final metadata = {
       'model': model.toJson(),
@@ -435,8 +443,9 @@ class ModelManager {
   /// Delete model metadata
   Future<void> _deleteModelMetadata(String modelId) async {
     final modelsDir = await getModelsDirectory();
-    final metadataFile =
-        File(path.join(modelsDir.path, '${modelId}_$_metadataFileName'));
+    final metadataFile = File(
+      path.join(modelsDir.path, '${modelId}_$_metadataFileName'),
+    );
 
     if (await metadataFile.exists()) {
       await metadataFile.delete();
@@ -446,8 +455,9 @@ class ModelManager {
   /// Get model metadata if available
   Future<ModelInfo?> getModelMetadata(String modelId) async {
     final modelsDir = await getModelsDirectory();
-    final metadataFile =
-        File(path.join(modelsDir.path, '${modelId}_$_metadataFileName'));
+    final metadataFile = File(
+      path.join(modelsDir.path, '${modelId}_$_metadataFileName'),
+    );
 
     if (!await metadataFile.exists()) {
       return null;
@@ -635,7 +645,8 @@ class ModelRegistry {
     id: 'llava-1.6-mistral-7b-q4',
     name: 'LLaVA 1.6 Mistral 7B',
     sizeBytes: 4370 * 1024 * 1024, // ~4.8 GB
-    description: 'State-of-the-art 7B vision-language model for detailed image understanding',
+    description:
+        'State-of-the-art 7B vision-language model for detailed image understanding',
     downloadUrl:
         'https://huggingface.co/cjpais/llava-1.6-mistral-7b-gguf/resolve/main/llava-1.6-mistral-7b.Q4_K_M.gguf',
     format: 'GGUF',
@@ -813,7 +824,13 @@ class ModelRegistry {
 
   /// Get all available whisper STT models
   static List<ModelInfo> getWhisperModels() {
-    return [whisperTinyEn, whisperBaseEn, whisperSmall, whisperMedium, whisperLargeV3];
+    return [
+      whisperTinyEn,
+      whisperBaseEn,
+      whisperSmall,
+      whisperMedium,
+      whisperLargeV3,
+    ];
   }
 
   // === Image Generation Models ===

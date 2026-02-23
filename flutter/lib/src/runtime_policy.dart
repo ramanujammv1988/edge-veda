@@ -135,17 +135,17 @@ class RuntimePolicy {
     // Normalize unavailable values: treat as no-pressure
     final thermal = thermalState < 0 ? 0 : thermalState;
     final battery = batteryLevel < 0 ? 1.0 : batteryLevel;
-    final availMem = availableMemoryBytes <= 0
-        ? availableMemoryMinBytes + 1 // above threshold = no pressure
-        : availableMemoryBytes;
+    final availMem =
+        availableMemoryBytes <= 0
+            ? availableMemoryMinBytes +
+                1 // above threshold = no pressure
+            : availableMemoryBytes;
 
     // --- Determine the level demanded by current pressure ---
     QoSLevel demandedLevel;
     if (thermal >= 3 || availMem < 50 * 1024 * 1024) {
       demandedLevel = QoSLevel.paused;
-    } else if (thermal >= 2 ||
-        availMem < 100 * 1024 * 1024 ||
-        battery < 0.05) {
+    } else if (thermal >= 2 || availMem < 100 * 1024 * 1024 || battery < 0.05) {
       demandedLevel = QoSLevel.minimal;
     } else if (thermal >= 1 ||
         availMem < availableMemoryMinBytes ||
@@ -234,25 +234,21 @@ class RuntimePolicy {
   static QoSKnobs knobsForLevel(QoSLevel level) {
     return switch (level) {
       QoSLevel.full => const QoSKnobs(
-          maxFps: 2,
-          resolution: 640,
-          maxTokens: 100,
-        ),
+        maxFps: 2,
+        resolution: 640,
+        maxTokens: 100,
+      ),
       QoSLevel.reduced => const QoSKnobs(
-          maxFps: 1,
-          resolution: 480,
-          maxTokens: 75,
-        ),
+        maxFps: 1,
+        resolution: 480,
+        maxTokens: 75,
+      ),
       QoSLevel.minimal => const QoSKnobs(
-          maxFps: 1,
-          resolution: 320,
-          maxTokens: 50,
-        ),
-      QoSLevel.paused => const QoSKnobs(
-          maxFps: 0,
-          resolution: 0,
-          maxTokens: 0,
-        ),
+        maxFps: 1,
+        resolution: 320,
+        maxTokens: 50,
+      ),
+      QoSLevel.paused => const QoSKnobs(maxFps: 0, resolution: 0, maxTokens: 0),
     };
   }
 }
