@@ -203,7 +203,16 @@ class _VisionScreenState extends State<VisionScreen>
         rgb,
         width,
         height,
-        prompt: 'Describe what you see in this image in one sentence.',
+        prompt: ChatTemplate.format(
+          template: ChatTemplateFormat.generic,
+          messages: [
+            ChatMessage(
+              role: ChatRole.user,
+              content: 'Describe what you see in this image in one sentence.',
+              timestamp: DateTime.now(),
+            ),
+          ],
+        ),
         maxTokens: 100,
       );
       sw.stop();
@@ -384,7 +393,16 @@ class _VisionScreenState extends State<VisionScreen>
         frame.rgb,
         frame.width,
         frame.height,
-        prompt: 'Describe what you see in this image in one sentence.',
+        prompt: ChatTemplate.format(
+          template: ChatTemplateFormat.generic,
+          messages: [
+            ChatMessage(
+              role: ChatRole.user,
+              content: 'Describe what you see in this image in one sentence.',
+              timestamp: DateTime.now(),
+            ),
+          ],
+        ),
         maxTokens: 100,
       );
       sw.stop();

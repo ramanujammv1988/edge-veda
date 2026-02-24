@@ -13,6 +13,7 @@ import 'app_theme.dart';
 import 'device_status_info.dart';
 import 'image_screen.dart';
 import 'model_selection_modal.dart';
+import 'model_selector.dart';
 import 'settings_screen.dart';
 import 'soak_test_service.dart';
 import 'stt_screen.dart';
@@ -385,8 +386,9 @@ Answer:
     });
 
     try {
-      const model = ModelRegistry.llama32_1b;
-      final isDownloaded = await _modelManager.isModelDownloaded(model.id);
+      final selection = await ModelSelector.bestLlm(_modelManager);
+      final model = selection.model;
+      final isDownloaded = !selection.needsDownload;
 
       if (!isDownloaded) {
         await _refreshInternetStatus();
