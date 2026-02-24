@@ -205,26 +205,32 @@ void main() {
   });
 
   group('Device safe memory budget', () {
-    test('8GB device: safeMemoryBudgetMB = 6554 (macOS 80%) / 4915 (mobile 60%)', () {
-      const device = DeviceProfile(
-        identifier: 'iPhone16,1',
-        deviceName: 'iPhone 15 Pro',
-        totalRamGB: 8,
-        chipName: 'A17 Pro',
-        tier: DeviceTier.high,
-      );
-      expect(device.safeMemoryBudgetMB, Platform.isMacOS ? 6554 : 4915);
-    });
+    test(
+      '8GB device: safeMemoryBudgetMB = 6554 (macOS 80%) / 4915 (mobile 60%)',
+      () {
+        const device = DeviceProfile(
+          identifier: 'iPhone16,1',
+          deviceName: 'iPhone 15 Pro',
+          totalRamGB: 8,
+          chipName: 'A17 Pro',
+          tier: DeviceTier.high,
+        );
+        expect(device.safeMemoryBudgetMB, Platform.isMacOS ? 6554 : 4915);
+      },
+    );
 
-    test('4GB device: safeMemoryBudgetMB = 3277 (macOS 80%) / 2458 (mobile 60%)', () {
-      const device = DeviceProfile(
-        identifier: 'iPhone13,1',
-        deviceName: 'iPhone 12 mini',
-        totalRamGB: 4,
-        chipName: 'A14 Bionic',
-        tier: DeviceTier.minimum,
-      );
-      expect(device.safeMemoryBudgetMB, Platform.isMacOS ? 3277 : 2458);
-    });
+    test(
+      '4GB device: safeMemoryBudgetMB = 3277 (macOS 80%) / 2458 (mobile 60%)',
+      () {
+        const device = DeviceProfile(
+          identifier: 'iPhone13,1',
+          deviceName: 'iPhone 12 mini',
+          totalRamGB: 4,
+          chipName: 'A14 Bionic',
+          tier: DeviceTier.minimum,
+        );
+        expect(device.safeMemoryBudgetMB, Platform.isMacOS ? 3277 : 2458);
+      },
+    );
   });
 }
