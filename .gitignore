@@ -191,6 +191,8 @@ tools/EXPERIMENTS.md
 
 # Internal / Planning
 .claude/
+.claude.json
+claude.json
 .planning/
 prd.txt
 report.pdf
