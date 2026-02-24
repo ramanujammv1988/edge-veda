@@ -143,6 +143,11 @@ struct ev_stream_impl {
     }
 };
 
+// Reference count of active contexts for memory guard callback lifetime.
+// When the last context is freed, the memory guard callback is cleared.
+static std::mutex g_memory_contexts_mutex;
+static int g_memory_context_count = 0;
+
 /* ============================================================================
  * Version Information
  * ========================================================================= */
@@ -355,6 +360,12 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
         memory_guard_set_limit(static_cast<uint64_t>(ctx->memory_limit));
     }
 
+    // Track active context for memory guard callback lifetime
+    {
+        std::lock_guard<std::mutex> global_lock(g_memory_contexts_mutex);
+        ++g_memory_context_count;
+    }
+
     if (error) *error = EV_SUCCESS;
     return ctx;
 #else
@@ -373,12 +384,10 @@ void ev_free(ev_context ctx) {
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     {
         std::lock_guard<std::mutex> global_lock(g_memory_contexts_mutex);
-        auto it = std::find(g_memory_contexts.begin(), g_memory_contexts.end(), ctx);
-        if (it != g_memory_contexts.end()) {
-            g_memory_contexts.erase(it);
+        if (g_memory_context_count > 0) {
+            --g_memory_context_count;
         }
-        
-        if (g_memory_contexts.empty()) {
+        if (g_memory_context_count == 0) {
             memory_guard_set_callback(nullptr, nullptr);
             memory_guard_set_limit(0);
         }
