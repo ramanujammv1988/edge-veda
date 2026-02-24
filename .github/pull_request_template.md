@@ -1,9 +1,18 @@
-## Describe your changes
+## Summary
 
-## Issue ticket number and link
+<!-- What changed and why? -->
 
-## Checklist before requesting a review
-- [ ] I have performed a self-review of my code.
-- [ ] I have added sufficient tests or verified that existing ones pass.
-- [ ] If it is a core feature, I have added thorough tests.
-- [ ] Do we need to update the documentation? Yes / No
+## Evidence Tier
+
+<!-- Smoke / Standard / Core (see CONTRIBUTING.md) -->
+
+## Test Plan
+
+<!-- How to verify this works? -->
+
+## Checklist
+
+- [ ] `flutter test` passes
+- [ ] `dart analyze` has no issues
+- [ ] `dart format` applied
+- [ ] No breaking API changes (or documented)
