@@ -11,7 +11,7 @@
 
 If you discover a security vulnerability in Edge Veda, please report it responsibly. **Do not open a public GitHub issue.**
 
-**Email:** [security@edgeveda.dev](mailto:security@edgeveda.dev)
+**Email:** [ramanujammv88@gmail.com](mailto:ramanujammv88@gmail.com)
 
 ### What to Include
 
