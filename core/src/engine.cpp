@@ -8,6 +8,7 @@
 
 #include "edge_veda.h"
 #include "backend_lifecycle.h"
+#include <cassert>
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
@@ -65,12 +66,15 @@ struct ev_context_impl {
 
     // Thread safety
     std::mutex mutex;
+    std::atomic<int> active_stream_count{0};   // Non-ended streams (issue #25)
 
     // llama.cpp handles
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     llama_model* model = nullptr;
     llama_context* llama_ctx = nullptr;
+    llama_context* embed_ctx = nullptr;
     llama_sampler* sampler = nullptr;
+    char model_desc[256] = {0};               // Per-context model description (issue #26)
 #endif
 
     // Constructor
@@ -93,6 +97,7 @@ struct ev_stream_impl {
     std::string prompt;                // Original prompt
     ev_generation_params params;       // Generation parameters
     bool ended;                        // Stream completion flag
+    std::atomic<bool> deactivated{false}; // True once active_stream_count decremented
     std::atomic<bool> cancelled{false}; // Thread-safe cancel flag
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
@@ -140,6 +145,14 @@ struct ev_stream_impl {
 
     void request_cancel() {
         cancelled.store(true, std::memory_order_release);
+    }
+
+    // End this stream and decrement the parent context's active count exactly once.
+    void mark_ended() {
+        ended = true;
+        if (!deactivated.exchange(true, std::memory_order_acq_rel)) {
+            ctx->active_stream_count.fetch_sub(1, std::memory_order_release);
+        }
     }
 };
 
@@ -379,6 +392,11 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
 void ev_free(ev_context ctx) {
     if (!ctx) return;
 
+    // Debug-only: catch API misuse during development.
+    // ev_free() is void — can't return error, assert is appropriate here.
+    assert(ctx->active_stream_count.load(std::memory_order_acquire) == 0 &&
+           "ev_free() called with active streams — free all streams first.");
+
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
@@ -400,6 +418,10 @@ void ev_free(ev_context ctx) {
     if (ctx->llama_ctx) {
         llama_free(ctx->llama_ctx);
         ctx->llama_ctx = nullptr;
+    }
+    if (ctx->embed_ctx) {
+        llama_free(ctx->embed_ctx);
+        ctx->embed_ctx = nullptr;
     }
     if (ctx->model) {
         llama_model_free(ctx->model);
@@ -549,6 +571,15 @@ ev_error_t ev_generate(
     }
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
+
+    // Guard: ev_generate() clears KV cache, which would corrupt an active stream.
+    // Not triggerable from Dart (generate() routes through generateStream()),
+    // but protects direct C API consumers (Swift, Kotlin, etc.).
+    if (ctx->active_stream_count.load(std::memory_order_acquire) != 0) {
+        ctx->last_error = "ev_generate() called while a stream is active — "
+                          "end or cancel active streams first";
+        return EV_ERROR_CONTEXT_INVALID;
+    }
 
     ev_generation_params gen_params;
     if (params) {
@@ -700,6 +731,9 @@ ev_stream ev_generate_stream(
     }
 #endif
 
+    // Atomic increment — no mutex needed, pairs with decrement when stream ends.
+    ctx->active_stream_count.fetch_add(1, std::memory_order_release);
+
     if (error) *error = EV_SUCCESS;
     return stream;
 }
@@ -710,11 +744,12 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
         return nullptr;
     }
 
+    // Lock ordering: stream->mutex THEN ctx->mutex (see edge_veda.h).
     std::lock_guard<std::mutex> lock(stream->mutex);
 
     // Check cancellation FIRST (before any work)
     if (stream->check_cancelled()) {
-        stream->ended = true;
+        stream->mark_ended();
         if (error) *error = EV_ERROR_STREAM_ENDED;
         return nullptr;
     }
@@ -744,7 +779,7 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
             llama_batch batch = llama_batch_get_one(
                 stream->prompt_tokens.data() + i, n_eval);
             if (llama_decode(ctx->llama_ctx, batch) != 0) {
-                stream->ended = true;
+                stream->mark_ended();
                 if (error) *error = EV_ERROR_INFERENCE_FAILED;
                 return nullptr;
             }
@@ -757,14 +792,14 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
     // Check max tokens limit
     int generated_count = stream->n_cur - static_cast<int>(stream->prompt_tokens.size());
     if (generated_count >= stream->params.max_tokens) {
-        stream->ended = true;
+        stream->mark_ended();
         if (error) *error = EV_SUCCESS;  // Natural end, not an error
         return nullptr;
     }
 
     // Check cancellation again before expensive sampling
     if (stream->check_cancelled()) {
-        stream->ended = true;
+        stream->mark_ended();
         if (error) *error = EV_ERROR_STREAM_ENDED;
         return nullptr;
     }
@@ -775,7 +810,7 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
     // Check for EOS
     const llama_vocab* vocab = llama_model_get_vocab(ctx->model);
     if (llama_vocab_is_eog(vocab, new_token)) {
-        stream->ended = true;
+        stream->mark_ended();
         if (error) *error = EV_SUCCESS;  // Natural end
         return nullptr;
     }
@@ -840,7 +875,7 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
     // Decode next token to update KV cache
     llama_batch batch = llama_batch_get_one(&new_token, 1);
     if (llama_decode(ctx->llama_ctx, batch) != 0) {
-        stream->ended = true;
+        stream->mark_ended();
         if (error) *error = EV_ERROR_INFERENCE_FAILED;
         return nullptr;
     }
@@ -859,7 +894,7 @@ char* ev_stream_next(ev_stream stream, ev_error_t* error) {
     if (error) *error = EV_SUCCESS;
     return result;
 #else
-    stream->ended = true;
+    stream->mark_ended();
     if (error) *error = EV_ERROR_NOT_IMPLEMENTED;
     return nullptr;
 #endif
@@ -879,6 +914,10 @@ void ev_stream_cancel(ev_stream stream) {
 
 void ev_stream_free(ev_stream stream) {
     if (!stream) return;
+    // Safety net: decrement count if stream was freed without ending.
+    if (stream->ctx && !stream->deactivated.exchange(true, std::memory_order_acq_rel)) {
+        stream->ctx->active_stream_count.fetch_sub(1, std::memory_order_release);
+    }
     // Destructor handles sampler cleanup
     delete stream;
 }
@@ -927,6 +966,10 @@ ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats) {
     if (ctx->llama_ctx) {
         // Context memory usage
         stats->context_bytes = llama_state_get_size(ctx->llama_ctx);
+    }
+    if (ctx->embed_ctx) {
+        // Include persistent embedding context in memory accounting.
+        stats->context_bytes += llama_state_get_size(ctx->embed_ctx);
     }
 #endif
 
@@ -991,6 +1034,9 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
     if (ctx->llama_ctx) {
         llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
     }
+    if (ctx->embed_ctx) {
+        llama_memory_clear(llama_get_memory(ctx->embed_ctx), true);
+    }
 #endif
 
     // Trigger platform memory cleanup
@@ -1023,54 +1069,53 @@ ev_error_t ev_embed(
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
-    // Create a SEPARATE embedding context
-    llama_context_params emb_params = llama_context_default_params();
-    emb_params.embeddings = true;
-    emb_params.n_ctx = 512;
-    emb_params.n_batch = 512;
-    emb_params.n_threads = ctx->config.num_threads > 0
-        ? static_cast<uint32_t>(ctx->config.num_threads) : 4;
-    emb_params.n_threads_batch = emb_params.n_threads;
-    emb_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+    // Lazy-init and persist embedding context to avoid per-call setup overhead.
+    if (!ctx->embed_ctx) {
+        llama_context_params emb_params = llama_context_default_params();
+        emb_params.embeddings = true;
+        emb_params.n_ctx = 512;
+        emb_params.n_batch = 512;
+        emb_params.n_threads = ctx->config.num_threads > 0
+            ? static_cast<uint32_t>(ctx->config.num_threads) : 4;
+        emb_params.n_threads_batch = emb_params.n_threads;
+        emb_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
 
-    llama_context* emb_ctx = llama_init_from_model(ctx->model, emb_params);
-    if (!emb_ctx) {
-        ctx->last_error = "Failed to create embedding context";
-        return EV_ERROR_BACKEND_INIT_FAILED;
+        ctx->embed_ctx = llama_init_from_model(ctx->model, emb_params);
+        if (!ctx->embed_ctx) {
+            ctx->last_error = "Failed to create embedding context";
+            return EV_ERROR_BACKEND_INIT_FAILED;
+        }
+
+        // Configure once for bidirectional embedding encoding.
+        llama_set_embeddings(ctx->embed_ctx, true);
+        llama_set_causal_attn(ctx->embed_ctx, false);
     }
 
-    // Enable embedding mode and non-causal attention for bidirectional encoding
-    llama_set_embeddings(emb_ctx, true);
-    llama_set_causal_attn(emb_ctx, false);
-
     // Clear KV cache
-    llama_memory_clear(llama_get_memory(emb_ctx), true);
+    llama_memory_clear(llama_get_memory(ctx->embed_ctx), true);
 
     // Tokenize input text
     std::vector<llama_token> tokens = tokenize_prompt(ctx->model, text, true);
     if (tokens.empty()) {
         ctx->last_error = "Failed to tokenize text for embedding";
-        llama_free(emb_ctx);
         return EV_ERROR_INFERENCE_FAILED;
     }
 
     // Create batch and decode
     llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
-    if (llama_decode(emb_ctx, batch) != 0) {
+    if (llama_decode(ctx->embed_ctx, batch) != 0) {
         ctx->last_error = "Failed to decode for embedding";
-        llama_free(emb_ctx);
         return EV_ERROR_INFERENCE_FAILED;
     }
 
     // Get pooled embeddings
-    const float* emb = llama_get_embeddings_seq(emb_ctx, 0);
+    const float* emb = llama_get_embeddings_seq(ctx->embed_ctx, 0);
     if (!emb) {
         // Fallback: try last token embeddings
-        emb = llama_get_embeddings_ith(emb_ctx, -1);
+        emb = llama_get_embeddings_ith(ctx->embed_ctx, -1);
     }
     if (!emb) {
         ctx->last_error = "Failed to retrieve embeddings";
-        llama_free(emb_ctx);
         return EV_ERROR_INFERENCE_FAILED;
     }
 
@@ -1080,7 +1125,6 @@ ev_error_t ev_embed(
     // Allocate result buffer
     result->embeddings = (float*)malloc(sizeof(float) * n_embd);
     if (!result->embeddings) {
-        llama_free(emb_ctx);
         return EV_ERROR_OUT_OF_MEMORY;
     }
 
@@ -1096,9 +1140,6 @@ ev_error_t ev_embed(
 
     result->dimensions = n_embd;
     result->token_count = static_cast<int>(tokens.size());
-
-    // Free embedding context
-    llama_free(emb_ctx);
 
     return EV_SUCCESS;
 }
@@ -1128,9 +1169,6 @@ void ev_free_embeddings(ev_embed_result* result) {
  * Model Information
  * ========================================================================= */
 
-// Static buffer for model description (used by ev_get_model_info)
-static char g_model_desc[256] = {0};
-
 ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
     if (!ctx || !info) {
         return EV_ERROR_INVALID_PARAM;
@@ -1144,9 +1182,9 @@ ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
     std::memset(info, 0, sizeof(ev_model_info));
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    // Model description
-    llama_model_desc(ctx->model, g_model_desc, sizeof(g_model_desc));
-    info->name = g_model_desc;
+    // Model description — stored per-context to avoid static buffer race (issue #26)
+    llama_model_desc(ctx->model, ctx->model_desc, sizeof(ctx->model_desc));
+    info->name = ctx->model_desc;
 
     // Architecture (most GGUF models are llama-based)
     info->architecture = "llama";
@@ -1214,6 +1252,9 @@ ev_error_t ev_reset(ev_context ctx) {
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
+    if (ctx->embed_ctx) {
+        llama_memory_clear(llama_get_memory(ctx->embed_ctx), true);
+    }
     return EV_SUCCESS;
 #else
     return EV_ERROR_NOT_IMPLEMENTED;
