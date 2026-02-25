@@ -104,6 +104,8 @@ struct ev_stream_impl {
     ev_context ctx;                    // Parent context (shared, NOT owned)
     std::string prompt;                // Original prompt
     ev_generation_params params;       // Generation parameters
+    char* grammar_str_owned = nullptr;   // Owned copy of grammar string (fixes #33)
+    char* grammar_root_owned = nullptr;  // Owned copy of grammar root (fixes #33)
     bool ended;                        // Stream completion flag
     std::atomic<bool> deactivated{false}; // True once active_stream_count decremented
     std::atomic<bool> cancelled{false}; // Thread-safe cancel flag
@@ -130,9 +132,17 @@ struct ev_stream_impl {
         , ended(false)
         , cancelled(false) {
         if (prms) {
-            // Note: grammar_str and grammar_root are borrowed pointers from the caller.
-            // They must remain valid for the lifetime of the stream.
             params = *prms;
+            // Deep-copy grammar strings so the stream owns them (fixes #33).
+            // Callers may free originals before the stream completes.
+            if (params.grammar_str) {
+                grammar_str_owned = strdup(params.grammar_str);
+                params.grammar_str = grammar_str_owned;
+            }
+            if (params.grammar_root) {
+                grammar_root_owned = strdup(params.grammar_root);
+                params.grammar_root = grammar_root_owned;
+            }
         } else {
             ev_generation_params_default(&params);
         }
@@ -145,6 +155,9 @@ struct ev_stream_impl {
             sampler = nullptr;
         }
 #endif
+        // Free owned grammar string copies (fixes #33)
+        free(grammar_str_owned);
+        free(grammar_root_owned);
     }
 
     bool check_cancelled() {
