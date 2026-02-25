@@ -137,11 +137,15 @@ struct ev_stream_impl {
             // Callers may free originals before the stream completes.
             if (params.grammar_str) {
                 grammar_str_owned = strdup(params.grammar_str);
-                params.grammar_str = grammar_str_owned;
+                if (grammar_str_owned) {
+                    params.grammar_str = grammar_str_owned;
+                }
             }
             if (params.grammar_root) {
                 grammar_root_owned = strdup(params.grammar_root);
-                params.grammar_root = grammar_root_owned;
+                if (grammar_root_owned) {
+                    params.grammar_root = grammar_root_owned;
+                }
             }
         } else {
             ev_generation_params_default(&params);
@@ -737,6 +741,16 @@ ev_stream ev_generate_stream(
 
     ev_stream stream = new (std::nothrow) ev_stream_impl(ctx, prompt, params);
     if (!stream) {
+        if (error) *error = EV_ERROR_OUT_OF_MEMORY;
+        return nullptr;
+    }
+
+    // Guard against strdup() OOM in grammar string deep-copy (issue #33).
+    // If the caller provided grammar strings but strdup() failed, reject
+    // the stream rather than silently dropping grammar constraints.
+    if ((stream->params.grammar_str && !stream->grammar_str_owned) ||
+        (stream->params.grammar_root && !stream->grammar_root_owned)) {
+        delete stream;
         if (error) *error = EV_ERROR_OUT_OF_MEMORY;
         return nullptr;
     }
