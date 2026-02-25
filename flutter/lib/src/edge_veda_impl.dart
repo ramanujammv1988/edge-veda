@@ -1,26 +1,27 @@
 /// Main implementation of Edge Veda SDK using background isolates
 ///
-/// All FFI calls run in background isolates via Isolate.run() to prevent
-/// blocking the UI thread. This is critical because FFI calls are synchronous
-/// and would freeze the UI during inference (Pitfall 3 - Critical).
+/// All FFI calls run in background isolates to prevent blocking the UI thread.
+/// This is critical because FFI calls are synchronous and would freeze the UI
+/// during inference.
 ///
 /// Key design decisions:
 /// - No Pointer storage on main isolate (pointers can't transfer between isolates)
-/// - Each Isolate.run() re-loads DynamicLibrary, creates context, performs op, frees context
 /// - Only primitive data (String, int, etc.) crosses isolate boundaries
-/// - Streaming uses long-lived worker isolate (StreamingWorker) for persistent context
+/// - [generate] and [generateStream] both use a persistent [StreamingWorker]
+///   isolate that keeps the model loaded across calls (no per-call reload)
+/// - [embed], [embedBatch], and [describeImage] use per-request Isolate.run()
+///   (model loaded and freed each call)
 ///
 /// ## Memory pressure handling
 ///
-/// Due to the per-request Isolate.run() architecture, real-time memory
-/// pressure callbacks from C++ are not supported. Instead, use:
-/// - [EdgeVeda.getMemoryStats] to poll current memory usage
-/// - [EdgeVeda.isMemoryPressure] to check if usage exceeds threshold
+/// Use [EdgeVeda.getMemoryStats] to poll current memory usage and
+/// [EdgeVeda.isMemoryPressure] to check if usage exceeds threshold.
 ///
-/// ## Streaming
+/// ## Text generation
 ///
-/// Use [generateStream] for token-by-token generation with a long-lived worker
-/// isolate that maintains native context across multiple ev_stream_next calls.
+/// Both [generate] and [generateStream] route through the persistent
+/// [StreamingWorker]. The model is loaded once on first call and reused
+/// until [dispose] is called.
 library;
 
 import 'dart:async';
@@ -289,8 +290,9 @@ class EdgeVeda {
 
   /// Generate text from a prompt
   ///
-  /// Runs the entire generation in a background isolate to keep UI responsive.
-  /// Creates a fresh native context, performs generation, and returns result.
+  /// Routes through the persistent [StreamingWorker] (same as [generateStream])
+  /// to avoid reloading the model on every call. Collects all tokens and returns
+  /// the complete response.
   Future<GenerateResponse> generate(
     String prompt, {
     GenerateOptions? options,
@@ -307,121 +309,23 @@ class EdgeVeda {
     // Validate generation options (safe on main isolate - no FFI)
     _validateOptions(options);
 
-    // Capture all config values as primitives for isolate transfer
-    final modelPath = _config!.modelPath;
-    final numThreads = _config!.numThreads;
-    final contextSize = _config!.contextLength;
-    final useGpu = _config!.useGpu;
-    final flashAttn = _config!.flashAttn;
-    final kvCacheTypeK = _config!.kvCacheTypeK;
-    final kvCacheTypeV = _config!.kvCacheTypeV;
-
-    // Capture generation options as primitives
-    final maxTokens = options.maxTokens;
-    final temperature = options.temperature;
-    final topP = options.topP;
-    final topK = options.topK;
-    final repeatPenalty = options.repeatPenalty;
-
     final startTime = DateTime.now();
+    final buffer = StringBuffer();
+    var completionTokens = 0;
 
-    // Run entire generate in background isolate
-    final Future<String> generateFuture = Isolate.run<String>(() {
-      final bindings = EdgeVedaNativeBindings.instance;
-
-      // Allocate config struct
-      final configPtr = calloc<EvConfig>();
-      final modelPathPtr = modelPath.toNativeUtf8();
-      final errorPtr = calloc<ffi.Int32>();
-
-      ffi.Pointer<EvContextImpl>? ctx;
-      try {
-        // Populate config
-        configPtr.ref.modelPath = modelPathPtr;
-        configPtr.ref.backend =
-            useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
-        configPtr.ref.numThreads = numThreads;
-        configPtr.ref.contextSize = contextSize;
-        configPtr.ref.batchSize = 512;
-        configPtr.ref.memoryLimitBytes = 0;
-        configPtr.ref.autoUnloadOnMemoryPressure = true;
-        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
-        configPtr.ref.useMmap = true;
-        configPtr.ref.useMlock = false;
-        configPtr.ref.seed = -1;
-        configPtr.ref.flashAttn = flashAttn;
-        configPtr.ref.kvCacheTypeK = kvCacheTypeK;
-        configPtr.ref.kvCacheTypeV = kvCacheTypeV;
-        configPtr.ref.reserved = ffi.nullptr;
-
-        ctx = bindings.evInit(configPtr, errorPtr);
-        if (ctx == ffi.nullptr) {
-          final errorCode = NativeErrorCode.fromCode(errorPtr.value);
-          final exception = errorCode.toException('Generation init failed');
-          throw exception ?? const GenerationException('Unknown init error');
+    // Collect all tokens from the persistent streaming worker
+    Future<void> consume() async {
+      await for (final chunk in generateStream(prompt, options: options)) {
+        if (!chunk.isFinal && chunk.token.isNotEmpty) {
+          buffer.write(chunk.token);
+          completionTokens = chunk.index + 1;
         }
-
-        // Allocate generation params
-        final paramsPtr = calloc<EvGenerationParams>();
-        paramsPtr.ref.maxTokens = maxTokens;
-        paramsPtr.ref.temperature = temperature;
-        paramsPtr.ref.topP = topP;
-        paramsPtr.ref.topK = topK;
-        paramsPtr.ref.repeatPenalty = repeatPenalty;
-        paramsPtr.ref.frequencyPenalty = 0.0;
-        paramsPtr.ref.presencePenalty = 0.0;
-        paramsPtr.ref.stopSequences = ffi.nullptr;
-        paramsPtr.ref.numStopSequences = 0;
-        paramsPtr.ref.grammarStr = ffi.nullptr;
-        paramsPtr.ref.grammarRoot = ffi.nullptr;
-        paramsPtr.ref.confidenceThreshold = 0.0;
-        paramsPtr.ref.reserved = ffi.nullptr;
-
-        // Allocate output pointer
-        final outputPtr = calloc<ffi.Pointer<Utf8>>();
-
-        try {
-          final promptPtr = prompt.toNativeUtf8();
-          try {
-            final result = bindings.evGenerate(
-              ctx,
-              promptPtr,
-              paramsPtr,
-              outputPtr,
-            );
-            if (result != 0) {
-              final errorCode = NativeErrorCode.fromCode(result);
-              final exception = errorCode.toException('Generation failed');
-              throw exception ??
-                  const GenerationException('Unknown generation error');
-            }
-
-            // Read output and free C++-allocated string
-            final output = outputPtr.value.toDartString();
-            bindings.evFreeString(outputPtr.value);
-            return output;
-          } finally {
-            calloc.free(promptPtr);
-          }
-        } finally {
-          calloc.free(paramsPtr);
-          calloc.free(outputPtr);
-        }
-      } finally {
-        if (ctx != null && ctx != ffi.nullptr) {
-          bindings.evFree(ctx);
-        }
-        calloc.free(modelPathPtr);
-        calloc.free(configPtr);
-        calloc.free(errorPtr);
       }
-    });
+    }
 
-    // Apply timeout if specified
-    String generatedText;
     try {
       if (timeout != null) {
-        generatedText = await generateFuture.timeout(
+        await consume().timeout(
           timeout,
           onTimeout: () {
             throw GenerationException(
@@ -430,7 +334,7 @@ class EdgeVeda {
           },
         );
       } else {
-        generatedText = await generateFuture;
+        await consume();
       }
     } on EdgeVedaException {
       rethrow;
@@ -445,9 +349,9 @@ class EdgeVeda {
     final latencyMs = DateTime.now().difference(startTime).inMilliseconds;
 
     return GenerateResponse(
-      text: generatedText,
-      promptTokens: 0, // TODO: Get from native if needed
-      completionTokens: 0, // TODO: Get from native if needed
+      text: buffer.toString(),
+      promptTokens: 0,
+      completionTokens: completionTokens,
       latencyMs: latencyMs,
     );
   }
