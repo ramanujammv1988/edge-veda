@@ -70,6 +70,7 @@ struct ev_context_impl {
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     llama_model* model = nullptr;
     llama_context* llama_ctx = nullptr;
+    llama_context* embed_ctx = nullptr;
     llama_sampler* sampler = nullptr;
 #endif
 
@@ -400,6 +401,10 @@ void ev_free(ev_context ctx) {
     if (ctx->llama_ctx) {
         llama_free(ctx->llama_ctx);
         ctx->llama_ctx = nullptr;
+    }
+    if (ctx->embed_ctx) {
+        llama_free(ctx->embed_ctx);
+        ctx->embed_ctx = nullptr;
     }
     if (ctx->model) {
         llama_model_free(ctx->model);
@@ -1023,54 +1028,53 @@ ev_error_t ev_embed(
 
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
-    // Create a SEPARATE embedding context
-    llama_context_params emb_params = llama_context_default_params();
-    emb_params.embeddings = true;
-    emb_params.n_ctx = 512;
-    emb_params.n_batch = 512;
-    emb_params.n_threads = ctx->config.num_threads > 0
-        ? static_cast<uint32_t>(ctx->config.num_threads) : 4;
-    emb_params.n_threads_batch = emb_params.n_threads;
-    emb_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+    // Lazy-init and persist embedding context to avoid per-call setup overhead.
+    if (!ctx->embed_ctx) {
+        llama_context_params emb_params = llama_context_default_params();
+        emb_params.embeddings = true;
+        emb_params.n_ctx = 512;
+        emb_params.n_batch = 512;
+        emb_params.n_threads = ctx->config.num_threads > 0
+            ? static_cast<uint32_t>(ctx->config.num_threads) : 4;
+        emb_params.n_threads_batch = emb_params.n_threads;
+        emb_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
 
-    llama_context* emb_ctx = llama_init_from_model(ctx->model, emb_params);
-    if (!emb_ctx) {
-        ctx->last_error = "Failed to create embedding context";
-        return EV_ERROR_BACKEND_INIT_FAILED;
+        ctx->embed_ctx = llama_init_from_model(ctx->model, emb_params);
+        if (!ctx->embed_ctx) {
+            ctx->last_error = "Failed to create embedding context";
+            return EV_ERROR_BACKEND_INIT_FAILED;
+        }
+
+        // Configure once for bidirectional embedding encoding.
+        llama_set_embeddings(ctx->embed_ctx, true);
+        llama_set_causal_attn(ctx->embed_ctx, false);
     }
 
-    // Enable embedding mode and non-causal attention for bidirectional encoding
-    llama_set_embeddings(emb_ctx, true);
-    llama_set_causal_attn(emb_ctx, false);
-
     // Clear KV cache
-    llama_memory_clear(llama_get_memory(emb_ctx), true);
+    llama_memory_clear(llama_get_memory(ctx->embed_ctx), true);
 
     // Tokenize input text
     std::vector<llama_token> tokens = tokenize_prompt(ctx->model, text, true);
     if (tokens.empty()) {
         ctx->last_error = "Failed to tokenize text for embedding";
-        llama_free(emb_ctx);
         return EV_ERROR_INFERENCE_FAILED;
     }
 
     // Create batch and decode
     llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
-    if (llama_decode(emb_ctx, batch) != 0) {
+    if (llama_decode(ctx->embed_ctx, batch) != 0) {
         ctx->last_error = "Failed to decode for embedding";
-        llama_free(emb_ctx);
         return EV_ERROR_INFERENCE_FAILED;
     }
 
     // Get pooled embeddings
-    const float* emb = llama_get_embeddings_seq(emb_ctx, 0);
+    const float* emb = llama_get_embeddings_seq(ctx->embed_ctx, 0);
     if (!emb) {
         // Fallback: try last token embeddings
-        emb = llama_get_embeddings_ith(emb_ctx, -1);
+        emb = llama_get_embeddings_ith(ctx->embed_ctx, -1);
     }
     if (!emb) {
         ctx->last_error = "Failed to retrieve embeddings";
-        llama_free(emb_ctx);
         return EV_ERROR_INFERENCE_FAILED;
     }
 
@@ -1080,7 +1084,6 @@ ev_error_t ev_embed(
     // Allocate result buffer
     result->embeddings = (float*)malloc(sizeof(float) * n_embd);
     if (!result->embeddings) {
-        llama_free(emb_ctx);
         return EV_ERROR_OUT_OF_MEMORY;
     }
 
@@ -1096,9 +1099,6 @@ ev_error_t ev_embed(
 
     result->dimensions = n_embd;
     result->token_count = static_cast<int>(tokens.size());
-
-    // Free embedding context
-    llama_free(emb_ctx);
 
     return EV_SUCCESS;
 }
