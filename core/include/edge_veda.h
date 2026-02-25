@@ -327,8 +327,9 @@ typedef struct ev_stream_impl* ev_stream;
  * to retrieve tokens as they are generated.
  *
  * The returned stream borrows the context — the context must outlive
- * the stream. Only one stream should be active per context at a time;
- * creating a second stream invalidates the first stream's KV cache state.
+ * the stream. Only one stream may be active per context. If a stream is
+ * already active (not yet freed), this function returns NULL and sets
+ * *error to EV_ERROR_CONTEXT_INVALID.
  *
  * @param ctx Context handle
  * @param prompt Input prompt text
@@ -370,6 +371,10 @@ EV_API void ev_stream_cancel(ev_stream stream);
 
 /**
  * @brief Free stream handle and release resources
+ *
+ * Safe to call after ev_free(ctx) — gracefully skips the context
+ * reference if the context has already been freed.
+ *
  * @param stream Stream handle to free
  */
 EV_API void ev_stream_free(ev_stream stream);
