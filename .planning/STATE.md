@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-04)
 Phase: 24 (Voice Pipeline — Unified STT -> LLM -> TTS Orchestration)
 Plan: 24-02 complete (2/3 plans done)
 Status: **In Progress**
-Last activity: 2026-02-20 - Completed 24-02: VoicePipeline conversation loop with LLM streaming, TTS, interruption
+Last activity: 2026-02-24 - Completed quick task 13: GitHub community standards improvements
 
 Progress: [###################_] ~97% (Phase 16: 6/6, Phase 17: 3/3, Phase 18: 2/3, Phase 19: 3/3, Phase 20: 2/2, Phase 21: 3/4, Phase 22: 3/3, Phase 23: 3/4, Phase 24: 2/3 complete)
 
@@ -532,6 +532,7 @@ v1.1:
 | 9 | Add TTS via iOS AVSpeechSynthesizer + demo screen | 2026-02-20 | a29d60b, adea67e | [8-add-tts-via-ios-avspeechsynthesizer-plat](./quick/8-add-tts-via-ios-avspeechsynthesizer-plat/) |
 | 10 | Refactor VoicePipeline to stop-mic pattern (no calibration, no barge-in, sendNow, audio-reactive orb) | 2026-02-20 | 6713076, 7a47571 | [9-refactor-voicepipeline-adopt-stop-mic-pa](./quick/9-refactor-voicepipeline-adopt-stop-mic-pa/) |
 | 11 | Dynamic XCFramework + vendored_frameworks + ffi ^2.0.0 (eliminate use_modular_headers! requirement) | 2026-02-22 | 8793398, e4f030c, 4c6fc68 | [10-dynamic-xcframework-ffi-constraint-fix](./quick/10-dynamic-xcframework-ffi-constraint-fix/) |
+| 13 | GitHub community standards improvements (description, topics, SECURITY.md, YAML issue templates, discussions) | 2026-02-24 | 1c06ca8 | [13-github-community-standards-improvements](./quick/13-github-community-standards-improvements/) |
 
 ### Blockers/Concerns
 
