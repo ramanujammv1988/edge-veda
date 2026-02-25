@@ -109,10 +109,11 @@ jobs:
             core/build/*.dylib
           retention-days: 7
 
-  # iOS Build
+  # iOS Build (non-blocking: XCFramework requires local submodules + Xcode Metal — see issue #32)
   ios-build:
     name: iOS Build
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -153,10 +154,11 @@ jobs:
           path: flutter/ios/Frameworks/EdgeVedaCore.xcframework
           retention-days: 7
 
-  # Android Build
+  # Android Build (non-blocking: AAR requires NDK + local submodules — see issue #32)
   android-build:
     name: Android Build
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -411,17 +413,18 @@ jobs:
         working-directory: flutter
         run: flutter test integration_test || echo "Integration tests not configured yet"
 
-  # Build Summary
+  # Build Summary (depends only on required checks — see issue #32)
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [core-build, ios-build, android-build, flutter-analyze]
+    needs: [core-build, flutter-analyze]
     if: always()
     steps:
       - name: Check Build Status
         run: |
           echo "Build Summary:"
           echo "Core Build: ${{ needs.core-build.result }}"
-          echo "iOS Build: ${{ needs.ios-build.result }}"
-          echo "Android Build: ${{ needs.android-build.result }}"
           echo "Flutter: ${{ needs.flutter-analyze.result }}"
+          echo ""
+          echo "Note: ios-build and android-build are non-blocking (continue-on-error)."
+          echo "They require local submodules and platform SDKs not available in CI."
