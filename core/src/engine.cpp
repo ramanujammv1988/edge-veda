@@ -36,11 +36,19 @@ extern "C" {
     void memory_guard_set_callback(void (*callback)(void*, size_t, size_t), void* user_data);
 }
 
+// Tombstone magic numbers for use-after-free detection (issue #28)
+static constexpr uint32_t EV_CTX_MAGIC = 0x45564354; // "EVCT"
+static constexpr uint32_t EV_CTX_DEAD  = 0xDEADDEAD;
+
 /* ============================================================================
  * Internal Structures
  * ========================================================================= */
 
 struct ev_context_impl {
+    // Tombstone magic for use-after-free detection (issue #28)
+    // MUST be first field for reliable memory layout.
+    uint32_t magic = EV_CTX_MAGIC;
+
     // Configuration
     ev_config config;
 
@@ -151,7 +159,10 @@ struct ev_stream_impl {
     void mark_ended() {
         ended = true;
         if (!deactivated.exchange(true, std::memory_order_acq_rel)) {
-            ctx->active_stream_count.fetch_sub(1, std::memory_order_release);
+            // Tombstone guard: skip decrement if ctx was already freed (issue #28)
+            if (ctx && ctx->magic == EV_CTX_MAGIC) {
+                ctx->active_stream_count.fetch_sub(1, std::memory_order_release);
+            }
         }
     }
 };
@@ -430,6 +441,8 @@ void ev_free(ev_context ctx) {
     edge_veda_backend_release();
 #endif
 
+    // Poison the magic before deletion so stale pointers can detect UAF (issue #28)
+    ctx->magic = EV_CTX_DEAD;
     delete ctx;
 }
 
@@ -699,6 +712,16 @@ ev_stream ev_generate_stream(
         return nullptr;
     }
 
+    // Enforce single active stream per context (issue #29).
+    // A second stream's ev_stream_next() would clear KV cache, silently
+    // invalidating the first stream. Reject early with a clear error.
+    if (ctx->active_stream_count.load(std::memory_order_acquire) > 0) {
+        ctx->last_error = "Another stream is active on this context — "
+                          "end or free the existing stream first";
+        if (error) *error = EV_ERROR_CONTEXT_INVALID;
+        return nullptr;
+    }
+
     ev_stream stream = new (std::nothrow) ev_stream_impl(ctx, prompt, params);
     if (!stream) {
         if (error) *error = EV_ERROR_OUT_OF_MEMORY;
@@ -914,8 +937,10 @@ void ev_stream_cancel(ev_stream stream) {
 
 void ev_stream_free(ev_stream stream) {
     if (!stream) return;
-    // Safety net: decrement count if stream was freed without ending.
-    if (stream->ctx && !stream->deactivated.exchange(true, std::memory_order_acq_rel)) {
+    // Tombstone guard: if ctx was already freed (magic poisoned), skip
+    // the active_stream_count decrement to avoid use-after-free (issue #28).
+    if (stream->ctx && stream->ctx->magic == EV_CTX_MAGIC &&
+        !stream->deactivated.exchange(true, std::memory_order_acq_rel)) {
         stream->ctx->active_stream_count.fetch_sub(1, std::memory_order_release);
     }
     // Destructor handles sampler cleanup
