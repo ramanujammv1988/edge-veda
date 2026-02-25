@@ -167,6 +167,29 @@ typedef struct {
 EV_API void ev_config_default(ev_config* config);
 
 /* ============================================================================
+ * Thread Safety & Lock Ordering
+ * =========================================================================
+ *
+ * The C API is thread-safe. Functions that mutate context state acquire
+ * internal mutexes. Read-only accessors on immutable state (e.g., model
+ * metadata set at init time) may skip locking.
+ *
+ * **Lock ordering** (always acquire in this order to prevent deadlock):
+ *   1. ev_stream::mutex   (stream-level, acquired first)
+ *   2. ev_context::mutex  (context-level, acquired second)
+ *
+ * ev_stream_next() acquires stream->mutex then ctx->mutex (nested).
+ * ev_generate() acquires only ctx->mutex.
+ * ev_embed() acquires only ctx->mutex.
+ *
+ * Direct C API consumers (Swift, Kotlin, etc.) must NOT hold ctx->mutex
+ * then acquire stream->mutex — this inverts the ordering and deadlocks.
+ *
+ * The Dart SDK serializes all commands through isolate SendPort/ReceivePort,
+ * so lock ordering is not observable from Dart.
+ * ========================================================================= */
+
+/* ============================================================================
  * Context Management
  * ========================================================================= */
 
@@ -185,6 +208,11 @@ EV_API ev_context ev_init(const ev_config* config, ev_error_t* error);
 
 /**
  * @brief Free Edge Veda context and release all resources
+ *
+ * All streams created from this context must be freed with
+ * ev_stream_free() BEFORE calling ev_free(). Calling ev_free()
+ * while streams are still alive is undefined behavior.
+ *
  * @param ctx Context handle to free
  */
 EV_API void ev_free(ev_context ctx);
@@ -297,6 +325,10 @@ typedef struct ev_stream_impl* ev_stream;
  *
  * Returns a stream handle that can be used with ev_stream_next()
  * to retrieve tokens as they are generated.
+ *
+ * The returned stream borrows the context — the context must outlive
+ * the stream. Only one stream should be active per context at a time;
+ * creating a second stream invalidates the first stream's KV cache state.
  *
  * @param ctx Context handle
  * @param prompt Input prompt text
