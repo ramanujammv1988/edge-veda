@@ -933,6 +933,10 @@ ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats) {
         // Context memory usage
         stats->context_bytes = llama_state_get_size(ctx->llama_ctx);
     }
+    if (ctx->embed_ctx) {
+        // Include persistent embedding context in memory accounting.
+        stats->context_bytes += llama_state_get_size(ctx->embed_ctx);
+    }
 #endif
 
     // Update peak
@@ -995,6 +999,9 @@ ev_error_t ev_memory_cleanup(ev_context ctx) {
     // Clear KV cache to free memory
     if (ctx->llama_ctx) {
         llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
+    }
+    if (ctx->embed_ctx) {
+        llama_memory_clear(llama_get_memory(ctx->embed_ctx), true);
     }
 #endif
 
@@ -1214,6 +1221,9 @@ ev_error_t ev_reset(ev_context ctx) {
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
     llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
+    if (ctx->embed_ctx) {
+        llama_memory_clear(llama_get_memory(ctx->embed_ctx), true);
+    }
     return EV_SUCCESS;
 #else
     return EV_ERROR_NOT_IMPLEMENTED;
