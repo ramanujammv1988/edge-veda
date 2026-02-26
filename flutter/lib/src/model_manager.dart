@@ -167,14 +167,32 @@ class ModelManager {
     final modelPath = await getModelPath(model.id);
     final file = File(modelPath);
 
-    // CHECK CACHE FIRST - skip copy if valid model exists
+    // Guard: source and destination must not be the same file.
+    // Only check when both files exist (resolveSymbolicLinks throws on missing files).
+    final sourceExists = await File(sourcePath).exists();
+    if (sourceExists && await File(modelPath).exists()) {
+      final resolvedSource = await File(sourcePath).resolveSymbolicLinks();
+      final resolvedDestPath = await File(modelPath).resolveSymbolicLinks();
+      if (resolvedSource == resolvedDestPath) {
+        return modelPath; // Already in cache -- no-op
+      }
+    }
+
+    // CHECK CACHE - skip copy if valid model exists
     if (await file.exists()) {
       if (verifyChecksum && model.checksum != null) {
         final isValid = await _verifyChecksum(modelPath, model.checksum!);
         if (isValid) {
           return modelPath;
         }
-        // Invalid checksum - delete and re-copy
+        // Invalid checksum -- validate source exists BEFORE deleting cache
+        // to prevent data loss when source is missing
+        if (!sourceExists) {
+          throw ModelValidationException(
+            'Source file not found',
+            details: sourcePath,
+          );
+        }
         await file.delete();
       } else {
         // No checksum to verify - assume cached file is valid
@@ -184,7 +202,7 @@ class ModelManager {
 
     // Validate source file exists
     final sourceFile = File(sourcePath);
-    if (!await sourceFile.exists()) {
+    if (!sourceExists) {
       throw ModelValidationException(
         'Source file not found',
         details: sourcePath,
@@ -210,21 +228,23 @@ class ModelManager {
       await tempFile.delete();
     }
 
+    IOSink? sink;
     try {
       // Chunked copy with progress reporting
       final sourceStream = sourceFile.openRead();
-      final sink = tempFile.openWrite();
+      sink = tempFile.openWrite();
       var bytesCopied = 0;
       final totalBytes = sourceSize;
 
       await for (final chunk in sourceStream) {
-        sink.add(chunk);
+        sink!.add(chunk);
         bytesCopied += chunk.length;
         onProgress?.call(bytesCopied, totalBytes);
       }
 
-      await sink.flush();
-      await sink.close();
+      await sink!.flush();
+      await sink!.close();
+      sink = null; // Prevent double-close in catch
 
       // Verify checksum before atomic rename
       if (verifyChecksum && model.checksum != null) {
@@ -246,6 +266,12 @@ class ModelManager {
 
       return modelPath;
     } catch (e) {
+      // Close sink before cleanup to release file handle
+      try {
+        if (sink != null) {
+          await sink.close();
+        }
+      } catch (_) {}
       // Clean up .tmp on any error
       try {
         if (await tempFile.exists()) {
