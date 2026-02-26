@@ -34,7 +34,7 @@ final response = await edgeVeda.generate('Explain quantum computing');
 
 ## Time to First App
 
-How long from zero to a running on-device AI app — measured, not estimated.
+Typical observed times from prompt to a running on-device AI app.
 
 | You are a... | Starting point | With MCP plugin | Manual setup |
 |-------------|---------------|-----------------|-------------|
