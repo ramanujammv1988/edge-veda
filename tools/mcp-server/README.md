@@ -54,8 +54,8 @@ Add to `claude_desktop_config.json`:
 ### From Source (contributors)
 
 ```bash
-git clone https://github.com/AedVeda/edge.git
-cd edge/tools/mcp-server
+git clone https://github.com/ramanujammv1988/edge-veda.git
+cd edge-veda/tools/mcp-server
 npm install
 npm run build
 ```

@@ -5,10 +5,10 @@
   "description": "MCP server for Claude Code to automate Edge Veda Flutter project setup",
   "author": "Edge Veda",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/AedVeda/edge/tree/main/tools/mcp-server",
+  "homepage": "https://github.com/ramanujammv1988/edge-veda/tree/main/tools/mcp-server",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AedVeda/edge.git",
+    "url": "https://github.com/ramanujammv1988/edge-veda.git",
     "directory": "tools/mcp-server"
   },
   "keywords": [
