@@ -131,6 +131,7 @@ Downloads automatically resume if interrupted. The SDK uses HTTP byte-range requ
 For pre-downloaded or bundled GGUF files:
 
 ```dart
+final modelManager = ModelManager();
 final modelPath = await modelManager.importModel(
   ModelRegistry.llama32_1b,
   sourcePath: '/path/to/your/model.gguf',
@@ -202,6 +203,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final modelPath = await _modelManager.downloadModel(
         ModelRegistry.llama32_1b,
       );
+      if (!mounted) return;
 
       // 2. Get device-optimized config
       final device = DeviceProfile.detect();
@@ -220,6 +222,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // 3. Initialize the inference engine
       setState(() { _output = 'Loading model...'; });
       await _edgeVeda.init(config);
+      if (!mounted) return;
       setState(() { _isLoading = false; _output = 'Ready! Tap Generate.'; });
     } catch (e) {
       setState(() { _output = 'Error: $e'; _isLoading = false; });
@@ -241,6 +244,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() { _output = 'Generation error: $e'; });
     }
 
+    if (!mounted) return;
     setState(() { _isLoading = false; });
   }
 
