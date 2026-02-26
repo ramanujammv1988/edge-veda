@@ -3,9 +3,31 @@
   "version": "0.1.0",
   "type": "module",
   "description": "MCP server for Claude Code to automate Edge Veda Flutter project setup",
+  "author": "Edge Veda",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/AedVeda/edge/tree/main/tools/mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AedVeda/edge.git",
+    "directory": "tools/mcp-server"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "edge-veda",
+    "flutter",
+    "on-device-ai",
+    "llm"
+  ],
   "bin": {
     "edge-veda-mcp": "./build/index.js"
   },
+  "files": [
+    "build/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",
     "prepare": "npm run build",
@@ -22,6 +44,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "license": "MIT"
+  }
 }
