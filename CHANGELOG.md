@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-02-26
+
+### Fixed
+- **Stream lifecycle safety:** Single-stream enforcement — second `ev_generate_stream()` returns `EV_ERROR_CONTEXT_INVALID` instead of silently corrupting KV cache
+- **Generate/stream guard:** `ev_generate()` blocked while stream is active, preventing KV cache corruption
+- **Context tombstone guard:** `ev_stream_free()` safely handles context-already-freed via magic number check (prevents use-after-free)
+- **Embed context reuse:** `ev_embed()` now lazy-inits and persists embedding context instead of per-call allocation
+- **Grammar string deep-copy:** `ev_generate_stream()` deep-copies grammar strings, preventing use-after-free when caller frees before stream ends
+- **strdup OOM guard:** Grammar string allocation failure returns `EV_ERROR_OUT_OF_MEMORY` instead of silently dropping constraints
+
+### Added
+- **41 C API tests in CI:** 29 NULL-path guard tests + 12 model-backed tests (stream lifecycle, embeddings)
+- **CI model strategy:** SmolLM2-135M Q2_K auto-downloaded and cached for Debug builds
+- **Lock ordering documentation** for C API mutex acquisition (`edge_veda.h`)
+
 ## [2.4.0] - 2026-02-22
 
 ### Changed
