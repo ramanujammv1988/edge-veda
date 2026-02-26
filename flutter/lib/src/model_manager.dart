@@ -140,6 +140,131 @@ class ModelManager {
     return _downloadWithRetry(model, modelPath, verifyChecksum, cancelToken);
   }
 
+  /// Import a model from a local file path into the SDK model cache.
+  ///
+  /// Copies the source file to a temporary location in the models directory,
+  /// optionally verifies SHA256 checksum, then atomically renames to the final
+  /// location. This ensures no corrupt files if the copy is interrupted.
+  ///
+  /// If a valid cached model already exists (matching checksum), returns
+  /// immediately without re-copying.
+  ///
+  /// The [sourcePath] must point to an existing file (e.g., a Flutter asset
+  /// extracted to a temp directory, or a file the user already has on disk).
+  ///
+  /// [onProgress] is called periodically with (bytesCopied, totalBytes).
+  ///
+  /// Throws [ModelValidationException] if:
+  /// - Source file does not exist
+  /// - Source file size does not match [model.sizeBytes] (when > 0)
+  /// - SHA256 checksum does not match [model.checksum] (when non-null and verifyChecksum is true)
+  Future<String> importModel(
+    ModelInfo model, {
+    required String sourcePath,
+    bool verifyChecksum = true,
+    void Function(int bytesCopied, int totalBytes)? onProgress,
+  }) async {
+    final modelPath = await getModelPath(model.id);
+    final file = File(modelPath);
+
+    // CHECK CACHE FIRST - skip copy if valid model exists
+    if (await file.exists()) {
+      if (verifyChecksum && model.checksum != null) {
+        final isValid = await _verifyChecksum(modelPath, model.checksum!);
+        if (isValid) {
+          return modelPath;
+        }
+        // Invalid checksum - delete and re-copy
+        await file.delete();
+      } else {
+        // No checksum to verify - assume cached file is valid
+        return modelPath;
+      }
+    }
+
+    // Validate source file exists
+    final sourceFile = File(sourcePath);
+    if (!await sourceFile.exists()) {
+      throw ModelValidationException(
+        'Source file not found',
+        details: sourcePath,
+      );
+    }
+
+    // Validate source file size
+    final sourceSize = await sourceFile.length();
+    if (model.sizeBytes > 0 && sourceSize != model.sizeBytes) {
+      throw ModelValidationException(
+        'Source file size mismatch',
+        details:
+            'Expected ${model.sizeBytes} bytes, got $sourceSize bytes',
+      );
+    }
+
+    // Create temp file for atomic copy
+    final tempPath = '$modelPath.tmp';
+    final tempFile = File(tempPath);
+
+    // Delete any stale .tmp file from a prior interrupted copy
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+
+    try {
+      // Chunked copy with progress reporting
+      final sourceStream = sourceFile.openRead();
+      final sink = tempFile.openWrite();
+      var bytesCopied = 0;
+      final totalBytes = sourceSize;
+
+      await for (final chunk in sourceStream) {
+        sink.add(chunk);
+        bytesCopied += chunk.length;
+        onProgress?.call(bytesCopied, totalBytes);
+      }
+
+      await sink.flush();
+      await sink.close();
+
+      // Verify checksum before atomic rename
+      if (verifyChecksum && model.checksum != null) {
+        final isValid = await _verifyChecksum(tempPath, model.checksum!);
+        if (!isValid) {
+          await tempFile.delete();
+          throw ModelValidationException(
+            'SHA256 checksum mismatch',
+            details: 'Expected: ${model.checksum}, file may be corrupted',
+          );
+        }
+      }
+
+      // Atomic rename
+      await tempFile.rename(modelPath);
+
+      // Save metadata
+      await _saveModelMetadata(model);
+
+      return modelPath;
+    } catch (e) {
+      // Clean up .tmp on any error
+      try {
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      } catch (_) {
+        // Ignore cleanup errors
+      }
+      if (e is EdgeVedaException) {
+        rethrow;
+      }
+      throw ModelValidationException(
+        'Failed to import model',
+        details: e.toString(),
+        originalError: e,
+      );
+    }
+  }
+
   /// Internal download implementation with retry logic
   Future<String> _downloadWithRetry(
     ModelInfo model,
