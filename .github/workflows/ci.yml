@@ -73,7 +73,9 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DBUILD_TESTING=ON
+            -DBUILD_TESTING=ON \
+            -DEDGE_VEDA_BUILD_TESTS=ON \
+            -DEDGE_VEDA_BUILD_STATIC=ON
 
       - name: Build Core
         working-directory: core
