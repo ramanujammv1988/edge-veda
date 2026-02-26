@@ -487,4 +487,315 @@ void main() {
       manager.dispose();
     });
   });
+
+  // ── importModel tests ───────────────────────────────────────────────────
+
+  group('importModel', () {
+    test('copies file to model cache atomically', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        final sourceContent = List.filled(256, 0x41);
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(sourceContent);
+
+        final model = _testModel(sizeBytes: 256);
+        final resultPath = await manager.importModel(
+          model,
+          sourcePath: sourceFile.path,
+          verifyChecksum: false,
+        );
+
+        // Final model file exists with correct content
+        final finalFile = File(resultPath);
+        expect(finalFile.existsSync(), true);
+        expect(finalFile.readAsBytesSync(), sourceContent);
+
+        // No .tmp file left behind
+        expect(File('$resultPath.tmp').existsSync(), false);
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('returns cached model without re-copy when already exists', () async {
+      final manager = TestableModelManager(tmpDir);
+
+      final model = _testModel(sizeBytes: 100);
+      final modelPath = await manager.getModelPath(model.id);
+
+      // Pre-create the cached model file
+      File(modelPath).writeAsBytesSync(List.filled(100, 0x42));
+
+      // Call importModel with a non-existent source -- cache check happens first
+      final resultPath = await manager.importModel(
+        model,
+        sourcePath: '/non/existent/path.gguf',
+        verifyChecksum: false,
+      );
+
+      expect(resultPath, modelPath);
+      // Verify content is unchanged (no re-copy happened)
+      expect(File(resultPath).readAsBytesSync(), List.filled(100, 0x42));
+
+      manager.dispose();
+    });
+
+    test('verifies SHA256 checksum on success', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        final sourceContent = [0x48, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello"
+        final correctChecksum = _sha256Hex(sourceContent);
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(sourceContent);
+
+        final model = _testModel(
+          sizeBytes: sourceContent.length,
+          checksum: correctChecksum,
+        );
+
+        final resultPath = await manager.importModel(
+          model,
+          sourcePath: sourceFile.path,
+        );
+
+        expect(File(resultPath).existsSync(), true);
+        expect(File(resultPath).readAsBytesSync(), sourceContent);
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('throws ModelValidationException on checksum mismatch', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        final sourceContent = List.filled(64, 0x43);
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(sourceContent);
+
+        final model = _testModel(
+          sizeBytes: 64,
+          checksum:
+              'deadbeef0000000000000000000000000000000000000000000000000000dead',
+        );
+
+        try {
+          await manager.importModel(
+            model,
+            sourcePath: sourceFile.path,
+          );
+          fail('Should have thrown');
+        } on ModelValidationException catch (e) {
+          expect(e.message, 'SHA256 checksum mismatch');
+        }
+
+        // Verify .tmp file is cleaned up
+        final modelPath = await manager.getModelPath(model.id);
+        expect(File('$modelPath.tmp').existsSync(), false);
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('throws ModelValidationException when source file missing', () async {
+      final manager = TestableModelManager(tmpDir);
+
+      final model = _testModel(sizeBytes: 100);
+
+      try {
+        await manager.importModel(
+          model,
+          sourcePath: '/non/existent/file.gguf',
+          verifyChecksum: false,
+        );
+        fail('Should have thrown');
+      } on ModelValidationException catch (e) {
+        expect(e.message, 'Source file not found');
+        expect(e.details, '/non/existent/file.gguf');
+      }
+
+      manager.dispose();
+    });
+
+    test('throws ModelValidationException on size mismatch', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        // Create source file with 100 bytes
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(List.filled(100, 0x44));
+
+        // Declare model expects 200 bytes
+        final model = _testModel(sizeBytes: 200);
+
+        try {
+          await manager.importModel(
+            model,
+            sourcePath: sourceFile.path,
+            verifyChecksum: false,
+          );
+          fail('Should have thrown');
+        } on ModelValidationException catch (e) {
+          expect(e.message, 'Source file size mismatch');
+          expect(e.details, contains('200'));
+          expect(e.details, contains('100'));
+        }
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('reports progress via onProgress callback', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        // Create a 256KB source file
+        final sourceContent = List.filled(256 * 1024, 0x45);
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(sourceContent);
+
+        final model = _testModel(sizeBytes: 256 * 1024);
+        final progressCalls = <(int, int)>[];
+
+        await manager.importModel(
+          model,
+          sourcePath: sourceFile.path,
+          verifyChecksum: false,
+          onProgress: (bytesCopied, totalBytes) {
+            progressCalls.add((bytesCopied, totalBytes));
+          },
+        );
+
+        // At least 2 progress calls (stream may deliver in chunks)
+        expect(progressCalls.length, greaterThanOrEqualTo(1));
+
+        // Last call should have bytesCopied == totalBytes
+        final lastCall = progressCalls.last;
+        expect(lastCall.$1, lastCall.$2);
+        expect(lastCall.$2, 256 * 1024);
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('cleans up .tmp on checksum verification error', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        final sourceContent = List.filled(128, 0x46);
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(sourceContent);
+
+        final model = _testModel(
+          sizeBytes: 128,
+          checksum:
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        );
+
+        try {
+          await manager.importModel(
+            model,
+            sourcePath: sourceFile.path,
+          );
+          fail('Should have thrown');
+        } on ModelValidationException {
+          // Expected
+        }
+
+        // .tmp file should have been cleaned up
+        final modelPath = await manager.getModelPath(model.id);
+        expect(File('$modelPath.tmp').existsSync(), false);
+        // Final file should NOT exist either
+        expect(File(modelPath).existsSync(), false);
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('re-validates cached model when checksum provided and cached exists',
+        () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        final correctContent = [0x47, 0x6F, 0x6F, 0x64]; // "Good"
+        final correctChecksum = _sha256Hex(correctContent);
+
+        // Pre-create a cached model with WRONG content
+        final model = _testModel(
+          sizeBytes: correctContent.length,
+          checksum: correctChecksum,
+        );
+        final modelPath = await manager.getModelPath(model.id);
+        File(modelPath).writeAsBytesSync([0x42, 0x61, 0x64, 0x21]); // "Bad!"
+
+        // Source has correct content
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(correctContent);
+
+        final resultPath = await manager.importModel(
+          model,
+          sourcePath: sourceFile.path,
+        );
+
+        // Should have replaced bad cache with correct content
+        expect(File(resultPath).readAsBytesSync(), correctContent);
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+
+    test('saves metadata after successful import', () async {
+      final manager = TestableModelManager(tmpDir);
+      final sourceDir =
+          Directory.systemTemp.createTempSync('import_source_');
+
+      try {
+        final sourceContent = List.filled(50, 0x48);
+        final sourceFile = File('${sourceDir.path}/model.gguf');
+        sourceFile.writeAsBytesSync(sourceContent);
+
+        final model = _testModel(
+          id: 'import-test-model',
+          sizeBytes: 50,
+        );
+
+        await manager.importModel(
+          model,
+          sourcePath: sourceFile.path,
+          verifyChecksum: false,
+        );
+
+        // Verify metadata was saved
+        final metadata = await manager.getModelMetadata('import-test-model');
+        expect(metadata, isNotNull);
+        expect(metadata!.id, 'import-test-model');
+      } finally {
+        sourceDir.deleteSync(recursive: true);
+        manager.dispose();
+      }
+    });
+  });
 }
