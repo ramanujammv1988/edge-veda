@@ -19,6 +19,7 @@ set_target_properties(test_inference PROPERTIES
 add_executable(test_api_guards test_api_guards.cpp)
 
 target_link_libraries(test_api_guards PRIVATE edge_veda_static)
+target_compile_definitions(test_api_guards PRIVATE EDGE_VEDA_TEST_HOOKS)
 
 target_include_directories(test_api_guards PRIVATE
     ${CMAKE_SOURCE_DIR}/include
