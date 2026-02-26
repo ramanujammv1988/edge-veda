@@ -66,7 +66,7 @@ npm run build
 |------|-------------|---------------|
 | `edge_veda_check_environment` | Verify dev prerequisites are installed | (none) |
 | `edge_veda_list_models` | List models with device-aware recommendations | `use_case?`, `show_all?` |
-| `edge_veda_create_project` | Scaffold a Flutter project with Edge Veda | `project_name`, `path?` |
+| `edge_veda_create_project` | Scaffold a Flutter project with Edge Veda | `project_name`, `path?`, `model_id?` |
 | `edge_veda_download_model` | Download a model GGUF file | `model_id`, `project_path` |
 | `edge_veda_add_capability` | Add capability code scaffolding | `capability`, `project_path` |
 | `edge_veda_run` | Build and deploy to iOS device | `project_path`, `mode?`, `device_id?` |
@@ -88,22 +88,23 @@ Returns a table of models with size, estimated memory usage, device fit status, 
 
 - `project_name` (required): Flutter project name (lowercase_with_underscores)
 - `path` (optional): Parent directory (defaults to cwd)
+- `model_id` (optional): Model ID for the boilerplate (defaults to `llama-3.2-1b-instruct-q4`). Valid IDs: `llama-3.2-1b-instruct-q4`, `phi-3.5-mini-instruct-q4`, `gemma-2-2b-instruct-q4`, `qwen3-0.6b-q4`, `tinyllama-1.1b-chat-q4`.
 
-Runs `flutter create`, adds `edge_veda: ^2.4.2` to pubspec.yaml, sets iOS 13.0 minimum, runs `pod install`, and writes a working boilerplate `main.dart` with model download + streaming inference.
+Runs `flutter create`, adds `edge_veda: ^2.4.2` to pubspec.yaml, runs `flutter pub get`, sets iOS 16.0 minimum, configures `use_modular_headers!` for FFI compatibility, runs `pod install`, and writes a working boilerplate `main.dart` with model download + streaming inference.
 
 #### edge_veda_download_model
 
 - `model_id` (required): Model ID from `edge_veda_list_models` (e.g., `llama-3.2-1b-instruct-q4`)
 - `project_path` (required): Path to the Flutter project
 
-Downloads the model file to `/tmp/` using curl. Provides import instructions for using pre-downloaded files.
+Downloads the model file to `{project}/models/` and adds `models/` to `.gitignore`. This is optional -- the app auto-downloads models at runtime via `ModelManager.downloadModel()`.
 
 #### edge_veda_add_capability
 
 - `capability` (required): One of `chat`, `vision`, `stt`, `tts`, `image`, `rag`
 - `project_path` (required): Path to the Flutter project
 
-Creates a new screen file (`lib/{capability}_screen.dart`) with complete working code. Lists required models that need downloading. Adds extra dependencies to pubspec.yaml if needed.
+Creates a new screen file (`lib/{capability}_screen.dart`) with complete working code, runs `flutter pub get`, and provides main.dart wiring instructions. Lists required models that need downloading. Adds extra dependencies to pubspec.yaml if needed.
 
 #### edge_veda_run
 
@@ -130,8 +131,8 @@ The boilerplate `main.dart` auto-downloads the model on first launch, so the app
 **You:** "Add vision capability too"
 
 **Claude Code:**
-1. Calls `edge_veda_add_capability` with `capability: "vision"` -- creates `lib/vision_screen.dart`
-2. Calls `edge_veda_download_model` with `model_id: "smolvlm2-500m-video-instruct-q8"` -- pre-downloads the model
+1. Calls `edge_veda_add_capability` with `capability: "vision"` -- creates `lib/vision_screen.dart`, runs `flutter pub get` automatically, and provides wiring instructions
+2. Calls `edge_veda_download_model` with `model_id: "smolvlm2-500m-video-instruct-q8"` -- pre-downloads the model to `{project}/models/`
 3. Calls `edge_veda_run` -- rebuilds and deploys the updated app
 
 ## Supported Models

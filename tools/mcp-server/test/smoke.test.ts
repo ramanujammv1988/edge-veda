@@ -179,4 +179,58 @@ describe("Edge Veda MCP Server", () => {
       `list_models should show recommended model`,
     );
   });
+
+  it("should reject create_project with invalid name", async () => {
+    const response = await sendAndReceive(serverProcess, "tools/call", {
+      name: "edge_veda_create_project",
+      arguments: { project_name: "Invalid-Name!" },
+    });
+    const result = response.result as { content: Array<{ type: string; text: string }> };
+    assert.ok(
+      result.content[0].text.includes("Invalid project name"),
+      "Should reject invalid project name",
+    );
+  });
+
+  it("should reject add_capability with unknown capability", async () => {
+    const response = await sendAndReceive(serverProcess, "tools/call", {
+      name: "edge_veda_add_capability",
+      arguments: { capability: "teleportation", project_path: "/tmp/nonexistent" },
+    });
+    // MCP SDK wraps Zod validation errors as isError content or error response
+    const responseStr = JSON.stringify(response).toLowerCase();
+    assert.ok(
+      responseStr.includes("invalid") ||
+        responseStr.includes("error") ||
+        responseStr.includes("unknown") ||
+        responseStr.includes("expected"),
+      `Should reject unknown capability, got: ${responseStr.slice(0, 500)}`,
+    );
+  });
+
+  it("should reject download_model with unknown model_id", async () => {
+    const response = await sendAndReceive(serverProcess, "tools/call", {
+      name: "edge_veda_download_model",
+      arguments: { model_id: "nonexistent-model-v99", project_path: "/tmp" },
+    });
+    const result = response.result as { content: Array<{ type: string; text: string }> };
+    assert.ok(
+      result.content[0].text.includes("not found"),
+      "Should reject unknown model_id",
+    );
+  });
+
+  it("should list_models with each use_case filter", async () => {
+    for (const useCase of ["chat", "vision", "stt", "embedding"]) {
+      const response = await sendAndReceive(serverProcess, "tools/call", {
+        name: "edge_veda_list_models",
+        arguments: { use_case: useCase },
+      });
+      const result = response.result as { content: Array<{ type: string; text: string }> };
+      assert.ok(
+        result.content[0].text.length > 50,
+        `list_models(${useCase}) should return substantial content`,
+      );
+    }
+  });
 });

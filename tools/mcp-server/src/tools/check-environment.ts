@@ -24,8 +24,15 @@ export function registerCheckEnvironment(server: McpServer): void {
     async () => {
       const checks: CheckResult[] = [];
 
+      // Run independent checks in parallel
+      const [flutter, xcode, pods, device] = await Promise.all([
+        exec("flutter --version"),
+        exec("xcode-select -p"),
+        exec("pod --version"),
+        getConnectedIOSDevice(),
+      ]);
+
       // Flutter
-      const flutter = await exec("flutter --version");
       if (flutter.exitCode === 0) {
         const versionMatch = flutter.stdout.match(/Flutter\s+([\d.]+)/);
         checks.push({
@@ -44,8 +51,7 @@ export function registerCheckEnvironment(server: McpServer): void {
         });
       }
 
-      // Xcode
-      const xcode = await exec("xcode-select -p");
+      // Xcode -- xcodebuild needs xcode-select to have succeeded
       if (xcode.exitCode === 0) {
         const xcodeVersion = await exec("xcodebuild -version");
         const verMatch = xcodeVersion.stdout.match(/Xcode\s+([\d.]+)/);
@@ -66,7 +72,6 @@ export function registerCheckEnvironment(server: McpServer): void {
       }
 
       // CocoaPods
-      const pods = await exec("pod --version");
       if (pods.exitCode === 0) {
         checks.push({
           name: "CocoaPods",
@@ -85,7 +90,6 @@ export function registerCheckEnvironment(server: McpServer): void {
       }
 
       // Connected iOS device
-      const device = await getConnectedIOSDevice();
       if (device) {
         checks.push({
           name: "iOS Device",
