@@ -7,7 +7,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { exec } from "../utils.js";
+import { execFileAsync, validateProjectName } from "../utils.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -54,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final modelPath = await _modelManager.downloadModel(
         ModelRegistry.llama32_1b,
       );
+      if (!mounted) return;
 
       // 2. Get device-optimized config
       final device = DeviceProfile.detect();
@@ -72,6 +73,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // 3. Initialize the inference engine
       setState(() { _output = 'Loading model...'; });
       await _edgeVeda.init(config);
+      if (!mounted) return;
       setState(() { _isLoading = false; _output = 'Ready! Tap Generate.'; });
     } catch (e) {
       setState(() { _output = 'Error: \$e'; _isLoading = false; });
@@ -93,6 +95,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() { _output = 'Generation error: \$e'; });
     }
 
+    if (!mounted) return;
     setState(() { _isLoading = false; });
   }
 
@@ -147,16 +150,30 @@ export function registerCreateProject(server: McpServer): void {
         .describe("Directory to create project in (defaults to cwd)"),
     },
     async ({ project_name, path: targetPath }) => {
+      // Validate project name to prevent command injection
+      try {
+        validateProjectName(project_name);
+      } catch (e) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Invalid project name: ${(e as Error).message}`,
+            },
+          ],
+        };
+      }
+
       const cwd = targetPath ?? process.cwd();
       const projectDir = join(cwd, project_name);
       const steps: string[] = [];
 
-      // 1. Create Flutter project
+      // 1. Create Flutter project (execFileAsync -- no shell interpolation)
       steps.push("Creating Flutter project...");
-      const create = await exec(`flutter create ${project_name}`, );
+      const create = await execFileAsync("flutter", ["create", project_name], { cwd });
       if (create.exitCode !== 0 && !create.stderr.includes("already exists")) {
-        // Try running in cwd
-        const create2 = await exec(`cd "${cwd}" && flutter create ${project_name}`);
+        // Try again in cwd (same call, cwd option replaces cd)
+        const create2 = await execFileAsync("flutter", ["create", project_name], { cwd });
         if (create2.exitCode !== 0) {
           return {
             content: [
@@ -209,7 +226,7 @@ export function registerCreateProject(server: McpServer): void {
       }
 
       // 4. Run flutter pub get
-      const pubGet = await exec(`cd "${projectDir}" && flutter pub get`);
+      const pubGet = await execFileAsync("flutter", ["pub", "get"], { cwd: projectDir });
       if (pubGet.exitCode === 0) {
         steps.push("flutter pub get succeeded");
       } else {
@@ -217,9 +234,9 @@ export function registerCreateProject(server: McpServer): void {
       }
 
       // 5. Run pod install
-      const podInstall = await exec(
-        `cd "${join(projectDir, "ios")}" && pod install`,
-      );
+      const podInstall = await execFileAsync("pod", ["install"], {
+        cwd: join(projectDir, "ios"),
+      });
       if (podInstall.exitCode === 0) {
         steps.push("pod install succeeded");
       } else {

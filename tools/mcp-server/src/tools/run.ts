@@ -7,7 +7,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { exec } from "../utils.js";
+import { execFileAsync, validateDeviceId, validateProjectPath } from "../utils.js";
 import { getConnectedIOSDevice } from "../device-profile.js";
 
 export function registerRun(server: McpServer): void {
@@ -27,32 +27,54 @@ export function registerRun(server: McpServer): void {
         .describe("Device UDID (auto-detects if not provided)"),
     },
     async ({ project_path, mode, device_id }) => {
+      // Validate inputs to prevent command injection
+      try {
+        validateProjectPath(project_path);
+        if (device_id) {
+          validateDeviceId(device_id);
+        }
+      } catch (e) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Invalid input: ${(e as Error).message}`,
+            },
+          ],
+        };
+      }
+
       // Resolve device
-      let deviceArg = "";
+      let deviceId: string | undefined;
       if (device_id) {
-        deviceArg = `-d ${device_id}`;
+        deviceId = device_id;
       } else {
         const device = await getConnectedIOSDevice();
         if (device) {
-          deviceArg = `-d ${device.udid}`;
+          deviceId = device.udid;
         }
         // If no device, flutter run will pick the default (simulator)
       }
 
       const modeArg = mode ? `--${mode}` : "--release";
-      const cmd = `cd "${project_path}" && flutter run ${modeArg} ${deviceArg}`.trim();
+      const args = ["run", modeArg];
+      if (deviceId) {
+        args.push("-d", deviceId);
+      }
+
+      const displayCmd = `flutter ${args.join(" ")}`;
 
       const lines: string[] = [
         `# Building and Deploying\n`,
         `Project: ${project_path}`,
         `Mode: ${mode || "release"}`,
         `Device: ${device_id || "auto-detect"}`,
-        `Command: \`${cmd}\`\n`,
+        `Command: \`${displayCmd}\`\n`,
         "Building...\n",
       ];
 
       // Run with a generous timeout (Flutter builds can take a while)
-      const result = await exec(cmd);
+      const result = await execFileAsync("flutter", args, { cwd: project_path });
 
       if (result.exitCode === 0) {
         lines.push("## Build Succeeded\n");
