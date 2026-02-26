@@ -225,6 +225,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() { _isLoading = false; _output = 'Ready! Tap Generate.'; });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _output = 'Error: $e'; _isLoading = false; });
     }
   }
@@ -241,6 +242,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() { _output = 'Generation error: $e'; });
     }
 

@@ -174,7 +174,18 @@ class ModelManager {
       final resolvedSource = await File(sourcePath).resolveSymbolicLinks();
       final resolvedDestPath = await File(modelPath).resolveSymbolicLinks();
       if (resolvedSource == resolvedDestPath) {
-        return modelPath; // Already in cache -- no-op
+        // Same file — still verify checksum if requested
+        if (verifyChecksum && model.checksum != null) {
+          final isValid = await _verifyChecksum(modelPath, model.checksum!);
+          if (!isValid) {
+            throw ModelValidationException(
+              'Model file failed checksum verification',
+              details:
+                  'File at $modelPath has invalid SHA256 (expected: ${model.checksum})',
+            );
+          }
+        }
+        return modelPath;
       }
     }
 
