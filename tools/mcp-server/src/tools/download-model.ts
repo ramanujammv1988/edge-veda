@@ -10,7 +10,8 @@ import { z } from "zod";
 import { exec } from "../utils.js";
 import { getModelById, MODEL_REGISTRY } from "../model-registry.js";
 import { formatSize } from "../device-profile.js";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { readFile, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export function registerDownloadModel(server: McpServer): void {
@@ -43,7 +44,11 @@ export function registerDownloadModel(server: McpServer): void {
 
       const ext = model_id.startsWith("whisper-") ? "bin" : "gguf";
       const filename = `${model_id}.${ext}`;
-      const downloadPath = join("/tmp", filename);
+      const modelsDir = join(project_path, "models");
+      const downloadPath = join(modelsDir, filename);
+
+      // Ensure models/ directory exists
+      mkdirSync(modelsDir, { recursive: true });
 
       // Check if already downloaded
       if (existsSync(downloadPath)) {
@@ -59,9 +64,10 @@ export function registerDownloadModel(server: McpServer): void {
                 "",
                 "The model file already exists at the path above.",
                 "",
+                "**Note:** This is optional pre-download. The app auto-downloads models at runtime via `ModelManager.downloadModel()`.",
+                "",
                 "## Usage in your app\n",
-                "The boilerplate main.dart auto-downloads models on first launch.",
-                "Alternatively, use `importModel()` to load from this path:",
+                "To use this pre-downloaded file, call `importModel()`:",
                 "```dart",
                 `final path = await modelManager.importModel(`,
                 `  ModelRegistry.getModelById('${model_id}')!,`,
@@ -101,6 +107,18 @@ export function registerDownloadModel(server: McpServer): void {
         };
       }
 
+      // Add models/ to .gitignore if not already present
+      const gitignorePath = join(project_path, ".gitignore");
+      try {
+        const gitignore = await readFile(gitignorePath, "utf-8");
+        if (!gitignore.includes("models/")) {
+          await appendFile(gitignorePath, "\n# AI model files (large)\nmodels/\n");
+        }
+      } catch {
+        // No .gitignore exists -- create one
+        await writeFile(gitignorePath, "# AI model files (large)\nmodels/\n");
+      }
+
       return {
         content: [
           {
@@ -111,9 +129,10 @@ export function registerDownloadModel(server: McpServer): void {
               `Path: ${downloadPath}`,
               `Size: ${formatSize(model.sizeBytes)}`,
               "",
+              "**Note:** This is optional pre-download. The app auto-downloads models at runtime via `ModelManager.downloadModel()`.",
+              "",
               "## Next Steps\n",
-              "The boilerplate main.dart auto-downloads models on first launch.",
-              "To use this pre-downloaded file instead, call `importModel()`:",
+              "To use this pre-downloaded file, call `importModel()`:",
               "```dart",
               `final path = await modelManager.importModel(`,
               `  ModelRegistry.getModelById('${model_id}')!,`,

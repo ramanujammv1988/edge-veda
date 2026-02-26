@@ -11,7 +11,18 @@ import { execFileAsync, validateProjectName } from "../utils.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const BOILERPLATE_MAIN = `import 'package:edge_veda/edge_veda.dart';
+/** Map model_id to Dart registry constant and use case */
+const MODEL_ID_TO_DART: Record<string, { registry: string; useCase: string }> = {
+  'llama-3.2-1b-instruct-q4': { registry: 'ModelRegistry.llama32_1b', useCase: 'UseCase.chat' },
+  'phi-3.5-mini-instruct-q4': { registry: 'ModelRegistry.phi35Mini', useCase: 'UseCase.chat' },
+  'gemma-2-2b-instruct-q4': { registry: 'ModelRegistry.gemma2_2b', useCase: 'UseCase.chat' },
+  'qwen3-0.6b-q4': { registry: 'ModelRegistry.qwen3_06b', useCase: 'UseCase.chat' },
+  'tinyllama-1.1b-chat-q4': { registry: 'ModelRegistry.tinyLlama11b', useCase: 'UseCase.chat' },
+};
+
+/** Generate boilerplate main.dart with the specified model registry constant and use case */
+function getBoilerplateMain(registryConst: string, useCase: string): string {
+  return `import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
 
 void main() => runApp(const MyApp());
@@ -23,19 +34,19 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       title: 'Edge Veda Quickstart',
-      home: ChatScreen(),
+      home: QuickstartScreen(),
     );
   }
 }
 
-class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+class QuickstartScreen extends StatefulWidget {
+  const QuickstartScreen({super.key});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State<QuickstartScreen> createState() => _QuickstartScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _QuickstartScreenState extends State<QuickstartScreen> {
   final _edgeVeda = EdgeVeda();
   final _modelManager = ModelManager();
   String _output = 'Initializing...';
@@ -52,16 +63,16 @@ class _ChatScreenState extends State<ChatScreen> {
       // 1. Download model (returns immediately if already cached)
       setState(() { _output = 'Downloading model...'; });
       final modelPath = await _modelManager.downloadModel(
-        ModelRegistry.llama32_1b,
+        ${registryConst},
       );
       if (!mounted) return;
 
       // 2. Get device-optimized config
       final device = DeviceProfile.detect();
       final scored = ModelAdvisor.score(
-        model: ModelRegistry.llama32_1b,
+        model: ${registryConst},
         device: device,
-        useCase: UseCase.chat,
+        useCase: ${useCase},
       );
       final config = EdgeVedaConfig(
         modelPath: modelPath,
@@ -137,6 +148,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 `;
+}
 
 export function registerCreateProject(server: McpServer): void {
   server.tool(
@@ -150,8 +162,12 @@ export function registerCreateProject(server: McpServer): void {
         .string()
         .optional()
         .describe("Directory to create project in (defaults to cwd)"),
+      model_id: z
+        .string()
+        .optional()
+        .describe("Model ID (defaults to llama-3.2-1b-instruct-q4)"),
     },
-    async ({ project_name, path: targetPath }) => {
+    async ({ project_name, path: targetPath, model_id }) => {
       // Validate project name to prevent command injection
       try {
         validateProjectName(project_name);
@@ -161,6 +177,21 @@ export function registerCreateProject(server: McpServer): void {
             {
               type: "text" as const,
               text: `Invalid project name: ${(e as Error).message}`,
+            },
+          ],
+        };
+      }
+
+      // Resolve model_id to Dart registry constant
+      const resolvedModelId = model_id ?? "llama-3.2-1b-instruct-q4";
+      const dartModel = MODEL_ID_TO_DART[resolvedModelId];
+      if (!dartModel) {
+        const validIds = Object.keys(MODEL_ID_TO_DART).join(", ");
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Unknown model_id: ${resolvedModelId}\n\nValid model IDs for create_project: ${validIds}`,
             },
           ],
         };
@@ -207,32 +238,36 @@ export function registerCreateProject(server: McpServer): void {
         steps.push(`Warning: Could not patch pubspec.yaml: ${e}`);
       }
 
-      // 3. Patch iOS Podfile
-      try {
-        const podfilePath = join(projectDir, "ios", "Podfile");
-        let podfile = await readFile(podfilePath, "utf-8");
-
-        // Uncomment and set platform version
-        podfile = podfile.replace(
-          /# platform :ios, '[\d.]+'/,
-          "platform :ios, '13.0'",
-        );
-        podfile = podfile.replace(
-          /platform :ios, '[\d.]+'/,
-          "platform :ios, '13.0'",
-        );
-        await writeFile(podfilePath, podfile);
-        steps.push("Set iOS deployment target to 13.0 in Podfile");
-      } catch (e) {
-        steps.push(`Warning: Could not patch Podfile: ${e}`);
-      }
-
-      // 4. Run flutter pub get
+      // 3. Run flutter pub get
       const pubGet = await execFileAsync("flutter", ["pub", "get"], { cwd: projectDir });
       if (pubGet.exitCode === 0) {
         steps.push("flutter pub get succeeded");
       } else {
         steps.push(`Warning: flutter pub get failed: ${pubGet.stderr}`);
+      }
+
+      // 4. Patch iOS Podfile (AFTER pub get so Podfile exists from flutter create)
+      try {
+        const podfilePath = join(projectDir, "ios", "Podfile");
+        let podfile = await readFile(podfilePath, "utf-8");
+
+        // Uncomment and set platform version to 16.0 (SDK minimum)
+        podfile = podfile.replace(
+          /# platform :ios, '[\d.]+'/,
+          "platform :ios, '16.0'",
+        );
+        podfile = podfile.replace(
+          /platform :ios, '[\d.]+'/,
+          "platform :ios, '16.0'",
+        );
+
+        // Switch from use_frameworks! to use_modular_headers! for FFI compatibility
+        podfile = podfile.replace(/use_frameworks!/, "use_modular_headers!");
+
+        await writeFile(podfilePath, podfile);
+        steps.push("Set iOS 16.0 and use_modular_headers! in Podfile");
+      } catch (e) {
+        steps.push(`Warning: Could not patch Podfile: ${e}`);
       }
 
       // 5. Run pod install
@@ -250,7 +285,7 @@ export function registerCreateProject(server: McpServer): void {
       // 6. Write boilerplate main.dart
       try {
         const mainPath = join(projectDir, "lib", "main.dart");
-        await writeFile(mainPath, BOILERPLATE_MAIN);
+        await writeFile(mainPath, getBoilerplateMain(dartModel.registry, dartModel.useCase));
         steps.push("Wrote boilerplate lib/main.dart with Edge Veda quickstart");
       } catch (e) {
         steps.push(`Warning: Could not write main.dart: ${e}`);
@@ -258,7 +293,8 @@ export function registerCreateProject(server: McpServer): void {
 
       const summary = [
         `# Project Created: ${project_name}\n`,
-        `Path: ${projectDir}\n`,
+        `Path: ${projectDir}`,
+        `Model: ${resolvedModelId}\n`,
         "## Steps Completed\n",
         ...steps.map((s) => `- ${s}`),
         "",
@@ -267,7 +303,7 @@ export function registerCreateProject(server: McpServer): void {
         "2. Use `edge_veda_download_model` to download a model",
         "3. Use `edge_veda_run` to build and deploy to your device",
         "",
-        "The boilerplate main.dart auto-downloads Llama 3.2 1B on first launch.",
+        `The boilerplate main.dart auto-downloads ${resolvedModelId} on first launch.`,
       ];
 
       return {

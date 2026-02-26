@@ -9,6 +9,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { execFileAsync } from "../utils.js";
 
 // Code templates for each capability
 const CAPABILITY_TEMPLATES: Record<
@@ -630,6 +632,11 @@ export function registerAddCapability(server: McpServer): void {
       const filePath = join(project_path, "lib", template.filename);
       const steps: string[] = [];
 
+      // Check if file already exists (idempotency warning)
+      if (existsSync(filePath)) {
+        steps.push(`Warning: lib/${template.filename} already exists -- overwriting`);
+      }
+
       // Write the screen file
       try {
         await writeFile(filePath, template.code);
@@ -668,6 +675,14 @@ export function registerAddCapability(server: McpServer): void {
         }
       }
 
+      // Run flutter pub get to resolve dependencies
+      const pubGetResult = await execFileAsync("flutter", ["pub", "get"], { cwd: project_path });
+      if (pubGetResult.exitCode === 0) {
+        steps.push("flutter pub get succeeded");
+      } else {
+        steps.push(`Warning: flutter pub get failed: ${pubGetResult.stderr}`);
+      }
+
       // Build response
       const lines = [
         `# Added Capability: ${capability}\n`,
@@ -698,13 +713,13 @@ export function registerAddCapability(server: McpServer): void {
 
       lines.push(
         "",
-        "## Integration\n",
-        `Import and use in your app:`,
+        "## Wiring\n",
+        `Add this import to lib/main.dart:`,
         "```dart",
         `import '${template.filename}';`,
         "```",
         "",
-        `Navigate to the new screen or add it to your app's navigation.`,
+        `Then add the screen to your app's navigation (e.g., as a tab or route).`,
       );
 
       return {
