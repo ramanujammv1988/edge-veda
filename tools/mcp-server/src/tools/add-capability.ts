@@ -138,7 +138,7 @@ class _ChatScreenState extends State<ChatScreen> {
   vision: {
     filename: "vision_screen.dart",
     models: ["smolvlm2-500m-video-instruct-q8", "smolvlm2-500m-mmproj-f16"],
-    extraDeps: ["image_picker"],
+    extraDeps: ["image_picker: ^1.1.2"],
     code: `import 'dart:io';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
@@ -220,7 +220,7 @@ class _VisionScreenState extends State<VisionScreen> {
   stt: {
     filename: "stt_screen.dart",
     models: ["whisper-base-en"],
-    extraDeps: ["record"],
+    extraDeps: ["record: ^5.1.3"],
     code: `import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
 
@@ -489,7 +489,7 @@ class _ImageScreenState extends State<ImageScreen> {
   rag: {
     filename: "rag_screen.dart",
     models: ["all-minilm-l6-v2-f16", "llama-3.2-1b-instruct-q4"],
-    extraDeps: ["file_picker"],
+    extraDeps: ["file_picker: ^8.0.0"],
     code: `import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -662,7 +662,7 @@ export function registerAddCapability(server: McpServer): void {
             if (!pubspec.includes(dep)) {
               pubspec = pubspec.replace(
                 /(edge_veda: \^[\d.]+\n)/,
-                `$1  ${dep}: any\n`,
+                `$1  ${dep}\n`,
               );
             }
           }

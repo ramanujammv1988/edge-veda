@@ -109,7 +109,7 @@ export function registerListModels(server: McpServer): void {
         const capsStr = model.capabilities.join(", ");
 
         lines.push(
-          `| ${model.name} | ${formatSize(model.sizeBytes)} | ${memMB} MB | ${fits ? "Yes" : "No"} | ${capsStr} | ${isRecommended ? "** YES **" : ""} |`,
+          `| ${model.name} | ${formatSize(model.sizeBytes)} | ${memMB} MB | ${fits ? "Yes" : "No"} | ${capsStr} | ${isRecommended ? "**YES**" : ""} |`,
         );
       }
 
