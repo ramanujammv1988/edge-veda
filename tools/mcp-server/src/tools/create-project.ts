@@ -266,11 +266,16 @@ export function registerCreateProject(server: McpServer): void {
           podfile = podfile.replace(/use_frameworks!/, "use_modular_headers!");
           steps.push("Replaced use_frameworks! with use_modular_headers! in Podfile");
         } else if (!podfile.includes("use_modular_headers!")) {
+          const before = podfile;
           podfile = podfile.replace(
             /(target\s+'Runner'\s+do\n)/,
             "$1  use_modular_headers!\n",
           );
-          steps.push("Inserted use_modular_headers! in Podfile (use_frameworks! not found)");
+          if (podfile !== before) {
+            steps.push("Inserted use_modular_headers! in Podfile (use_frameworks! not found)");
+          } else {
+            steps.push("Warning: Could not find insertion point for use_modular_headers! in Podfile — add it manually");
+          }
         } else {
           steps.push("Podfile already has use_modular_headers!");
         }
