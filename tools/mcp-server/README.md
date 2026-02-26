@@ -22,34 +22,21 @@ Reduces the 3-hour beginner journey to ~15 minutes by providing 6 tools that Cla
 
 ## Installation
 
+### One-liner (npx)
+
+No install needed -- npx fetches and runs the latest version:
+
 ```bash
-cd tools/mcp-server
-npm install
-npm run build
+npx @edge-veda/mcp-server
 ```
 
-This compiles TypeScript to `build/` and makes the `edge-veda-mcp` binary available.
+### Add to Claude Code
 
-## Configuration
-
-### Claude Code (recommended)
-
-Add to your project's `.mcp.json` (or `~/.claude.json` for global access):
-
-```json
-{
-  "mcpServers": {
-    "edge-veda": {
-      "command": "node",
-      "args": ["/absolute/path/to/edge/tools/mcp-server/build/index.js"]
-    }
-  }
-}
+```bash
+claude mcp add edge-veda -- npx @edge-veda/mcp-server
 ```
 
-Replace `/absolute/path/to/edge` with the actual path to this repository.
-
-### Claude Desktop
+### Add to Claude Desktop
 
 Add to `claude_desktop_config.json`:
 
@@ -57,11 +44,20 @@ Add to `claude_desktop_config.json`:
 {
   "mcpServers": {
     "edge-veda": {
-      "command": "node",
-      "args": ["/absolute/path/to/edge/tools/mcp-server/build/index.js"]
+      "command": "npx",
+      "args": ["@edge-veda/mcp-server"]
     }
   }
 }
+```
+
+### From Source (contributors)
+
+```bash
+git clone https://github.com/AedVeda/edge.git
+cd edge/tools/mcp-server
+npm install
+npm run build
 ```
 
 ## Available Tools
@@ -161,16 +157,17 @@ Ensure Node.js >= 18 is installed:
 node --version
 ```
 
-Rebuild if needed:
+Test the server directly:
 ```bash
-cd tools/mcp-server && npm run build
+npx @edge-veda/mcp-server
 ```
+It should hang waiting for JSON-RPC input on stdin. Press Ctrl+C to exit.
 
 ### Tools not appearing in Claude Code
 
-1. Verify the path in `.mcp.json` is absolute and correct
-2. Restart Claude Code after changing MCP configuration
-3. Check server starts manually: `node build/index.js` (should hang waiting for JSON-RPC on stdin)
+1. Verify the MCP server is registered: `claude mcp list`
+2. Re-add if needed: `claude mcp add edge-veda -- npx @edge-veda/mcp-server`
+3. Restart Claude Code after changing MCP configuration
 
 ### flutter create fails
 
