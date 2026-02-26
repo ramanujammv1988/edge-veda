@@ -1038,6 +1038,32 @@ EV_API ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_par
  */
 EV_API void ev_image_free_result(ev_image_result* result);
 
+/* ============================================================================
+ * Test Hooks (compile with EDGE_VEDA_TEST_HOOKS to enable)
+ * ========================================================================= */
+
+#ifdef EDGE_VEDA_TEST_HOOKS
+
+/**
+ * @brief Test hook: check if stream owns grammar string copies
+ *
+ * Returns whether the stream's internal grammar_str_owned and
+ * grammar_root_owned fields are non-NULL. Used to verify the
+ * strdup-based ownership fix (issue #33) without UB-based crash tests.
+ *
+ * @param stream Stream handle
+ * @param has_grammar_str Set to true if grammar_str_owned is non-NULL
+ * @param has_grammar_root Set to true if grammar_root_owned is non-NULL
+ * @return EV_SUCCESS, or EV_ERROR_INVALID_PARAM if stream is NULL
+ */
+EV_API ev_error_t ev_test_stream_grammar_owned(
+    ev_stream stream,
+    bool* has_grammar_str,
+    bool* has_grammar_root
+);
+
+#endif /* EDGE_VEDA_TEST_HOOKS */
+
 #ifdef __cplusplus
 }
 #endif

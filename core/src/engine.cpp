@@ -1312,3 +1312,22 @@ ev_error_t ev_reset(ev_context ctx) {
     return EV_ERROR_NOT_IMPLEMENTED;
 #endif
 }
+
+/* ============================================================================
+ * Test Hooks (compiled only with EDGE_VEDA_TEST_HOOKS)
+ * ========================================================================= */
+
+#ifdef EDGE_VEDA_TEST_HOOKS
+ev_error_t ev_test_stream_grammar_owned(
+    ev_stream stream,
+    bool* has_grammar_str,
+    bool* has_grammar_root
+) {
+    if (!stream || !has_grammar_str || !has_grammar_root) {
+        return EV_ERROR_INVALID_PARAM;
+    }
+    *has_grammar_str = (stream->grammar_str_owned != nullptr);
+    *has_grammar_root = (stream->grammar_root_owned != nullptr);
+    return EV_SUCCESS;
+}
+#endif
