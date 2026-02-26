@@ -64,9 +64,40 @@ jobs:
         with:
           key: ${{ matrix.os }}-${{ matrix.build_type }}
 
+      - name: Cache Test Model
+        if: matrix.build_type == 'Debug'
+        uses: actions/cache@v4
+        with:
+          path: core/build/tests/models
+          key: test-model-smollm2-135m-q2k-v1
+
+      - name: Download Test Model
+        if: matrix.build_type == 'Debug'
+        id: test-model
+        run: |
+          MODEL_DIR="${{ github.workspace }}/core/build/tests/models"
+          MODEL_NAME="SmolLM2-135M.Q2_K.gguf"
+          MODEL_PATH="${MODEL_DIR}/${MODEL_NAME}"
+          mkdir -p "${MODEL_DIR}"
+          if [ ! -f "${MODEL_PATH}" ]; then
+            echo "Downloading ${MODEL_NAME}..."
+            curl -L --fail --retry 3 --retry-delay 5 \
+              -o "${MODEL_PATH}" \
+              "https://huggingface.co/QuantFactory/SmolLM2-135M-GGUF/resolve/main/${MODEL_NAME}"
+          else
+            echo "Model already cached at ${MODEL_PATH}"
+          fi
+          echo "model_path=${MODEL_PATH}" >> "$GITHUB_OUTPUT"
+
       - name: Configure CMake
         working-directory: core
         run: |
+          MODEL_FLAG=""
+          if [ "${{ matrix.build_type }}" = "Debug" ] && \
+             [ -n "${{ steps.test-model.outputs.model_path }}" ] && \
+             [ -f "${{ steps.test-model.outputs.model_path }}" ]; then
+            MODEL_FLAG="-DEDGE_VEDA_TEST_MODEL_PATH=${{ steps.test-model.outputs.model_path }}"
+          fi
           cmake -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
@@ -75,7 +106,8 @@ jobs:
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DBUILD_TESTING=ON \
             -DEDGE_VEDA_BUILD_TESTS=ON \
-            -DEDGE_VEDA_BUILD_STATIC=ON
+            -DEDGE_VEDA_BUILD_STATIC=ON \
+            ${MODEL_FLAG}
 
       - name: Build Core
         working-directory: core
