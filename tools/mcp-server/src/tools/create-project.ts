@@ -14,10 +14,10 @@ import { join } from "node:path";
 /** Map model_id to Dart registry constant and use case */
 const MODEL_ID_TO_DART: Record<string, { registry: string; useCase: string }> = {
   'llama-3.2-1b-instruct-q4': { registry: 'ModelRegistry.llama32_1b', useCase: 'UseCase.chat' },
-  'phi-3.5-mini-instruct-q4': { registry: 'ModelRegistry.phi35Mini', useCase: 'UseCase.chat' },
+  'phi-3.5-mini-instruct-q4': { registry: 'ModelRegistry.phi35_mini', useCase: 'UseCase.chat' },
   'gemma-2-2b-instruct-q4': { registry: 'ModelRegistry.gemma2_2b', useCase: 'UseCase.chat' },
   'qwen3-0.6b-q4': { registry: 'ModelRegistry.qwen3_06b', useCase: 'UseCase.chat' },
-  'tinyllama-1.1b-chat-q4': { registry: 'ModelRegistry.tinyLlama11b', useCase: 'UseCase.chat' },
+  'tinyllama-1.1b-chat-q4': { registry: 'ModelRegistry.tinyLlama', useCase: 'UseCase.chat' },
 };
 
 /** Generate boilerplate main.dart with the specified model registry constant and use case */
@@ -262,10 +262,21 @@ export function registerCreateProject(server: McpServer): void {
         );
 
         // Switch from use_frameworks! to use_modular_headers! for FFI compatibility
-        podfile = podfile.replace(/use_frameworks!/, "use_modular_headers!");
+        if (/use_frameworks!/.test(podfile)) {
+          podfile = podfile.replace(/use_frameworks!/, "use_modular_headers!");
+          steps.push("Replaced use_frameworks! with use_modular_headers! in Podfile");
+        } else if (!podfile.includes("use_modular_headers!")) {
+          podfile = podfile.replace(
+            /(target\s+'Runner'\s+do\n)/,
+            "$1  use_modular_headers!\n",
+          );
+          steps.push("Inserted use_modular_headers! in Podfile (use_frameworks! not found)");
+        } else {
+          steps.push("Podfile already has use_modular_headers!");
+        }
 
         await writeFile(podfilePath, podfile);
-        steps.push("Set iOS 16.0 and use_modular_headers! in Podfile");
+        steps.push("Set iOS 16.0 in Podfile");
       } catch (e) {
         steps.push(`Warning: Could not patch Podfile: ${e}`);
       }

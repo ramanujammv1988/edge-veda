@@ -7,7 +7,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { exec } from "../utils.js";
+import { execFileAsync, validateProjectPath } from "../utils.js";
 import { getModelById, MODEL_REGISTRY } from "../model-registry.js";
 import { formatSize } from "../device-profile.js";
 import { existsSync, mkdirSync } from "node:fs";
@@ -37,6 +37,20 @@ export function registerDownloadModel(server: McpServer): void {
             {
               type: "text" as const,
               text: `Model not found: ${model_id}\n\nAvailable models:\n  ${available}`,
+            },
+          ],
+        };
+      }
+
+      // Validate project path to prevent path traversal
+      try {
+        validateProjectPath(project_path);
+      } catch (e) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Invalid project path: ${(e as Error).message}`,
             },
           ],
         };
@@ -80,9 +94,8 @@ export function registerDownloadModel(server: McpServer): void {
         };
       }
 
-      // Download using curl with progress
-      const curlCmd = `curl -L --progress-bar -o "${downloadPath}" "${model.downloadUrl}"`;
-      const result = await exec(curlCmd);
+      // Download using curl with progress (execFileAsync -- no shell interpolation)
+      const result = await execFileAsync("curl", ["-L", "--progress-bar", "-o", downloadPath, model.downloadUrl]);
 
       if (result.exitCode !== 0) {
         return {
