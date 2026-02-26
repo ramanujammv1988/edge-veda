@@ -2,6 +2,8 @@
 
 **A managed on-device AI runtime for Flutter — text, vision, speech-to-text, text-to-speech, image generation, and RAG running sustainably on real phones under real constraints. Private by default.**
 
+> **iOS only** (iPhone, Metal GPU). Android support is [on the roadmap](https://github.com/ramanujammv1988/edge-veda/issues/23).
+
 `~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
@@ -27,6 +29,27 @@ final response = await edgeVeda.generate('Explain quantum computing');
 ```
 
 > Start with **Llama 3.2 1B** for chat, **Qwen3 0.6B** for tool calling, **SmolVLM2** for vision.
+
+---
+
+## Time to First App
+
+How long from zero to a running on-device AI app — measured, not estimated.
+
+| You are a... | Starting point | With MCP plugin | Manual setup |
+|-------------|---------------|-----------------|-------------|
+| **Flutter developer** | Xcode + Flutter installed | **~2 min** | ~15 min |
+| **Developer (any stack)** | Mac + Claude Code, no Flutter | **~30 min** | ~1 hour |
+| **Complete beginner** | Mac, no dev tools | **~1–3 hours** | ~1 day |
+
+> **What's the MCP plugin?** A [Claude Code plugin](tools/mcp-server/) that automates environment checks, project scaffolding, model selection, and device deployment. One command to install:
+> ```bash
+> claude mcp add edge-veda -- npx @edge-veda/mcp-server
+> ```
+
+The bottleneck for beginners is Apple's toolchain (Xcode is a 10 GB download, Developer Mode requires a device restart, code signing needs a free Apple ID). Once the dev environment exists, Edge Veda setup is minutes, not hours.
+
+New to iOS development? See the [Quickstart Guide](flutter/QUICKSTART.md) for step-by-step setup.
 
 ---
 
@@ -372,6 +395,18 @@ final result = await visionWorker.describeFrame(
 );
 print(result.description);
 ```
+
+### Zero-Config Setup (Claude Code)
+
+Skip all manual setup — the MCP plugin creates a working project in one command:
+
+```bash
+claude mcp add edge-veda -- npx @edge-veda/mcp-server
+```
+
+Then tell Claude: *"Create an on-device chat app"* — it scaffolds the project, configures iOS, and deploys to your phone.
+
+See [tools/mcp-server/](tools/mcp-server/) for full documentation and all 6 available tools.
 
 ---
 
