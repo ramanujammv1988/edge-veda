@@ -90,7 +90,7 @@ Returns a table of models with size, estimated memory usage, device fit status, 
 - `path` (optional): Parent directory (defaults to cwd)
 - `model_id` (optional): Model ID for the boilerplate (defaults to `llama-3.2-1b-instruct-q4`). Valid IDs: `llama-3.2-1b-instruct-q4`, `phi-3.5-mini-instruct-q4`, `gemma-2-2b-instruct-q4`, `qwen3-0.6b-q4`, `tinyllama-1.1b-chat-q4`.
 
-Runs `flutter create`, adds `edge_veda: ^2.4.2` to pubspec.yaml, runs `flutter pub get`, sets iOS 16.0 minimum, configures `use_modular_headers!` for FFI compatibility, runs `pod install`, and writes a working boilerplate `main.dart` with model download + streaming inference.
+Runs `flutter create`, adds `edge_veda: ^2.4.2` to pubspec.yaml, runs `flutter pub get`, sets iOS 13.0 minimum, configures `use_modular_headers!` for FFI compatibility, runs `pod install`, and writes a working boilerplate `main.dart` with model download + streaming inference.
 
 #### edge_veda_download_model
 

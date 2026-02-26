@@ -251,14 +251,14 @@ export function registerCreateProject(server: McpServer): void {
         const podfilePath = join(projectDir, "ios", "Podfile");
         let podfile = await readFile(podfilePath, "utf-8");
 
-        // Uncomment and set platform version to 16.0 (SDK minimum)
+        // Uncomment and set platform version to 13.0 (SDK minimum)
         podfile = podfile.replace(
           /# platform :ios, '[\d.]+'/,
-          "platform :ios, '16.0'",
+          "platform :ios, '13.0'",
         );
         podfile = podfile.replace(
           /platform :ios, '[\d.]+'/,
-          "platform :ios, '16.0'",
+          "platform :ios, '13.0'",
         );
 
         // Switch from use_frameworks! to use_modular_headers! for FFI compatibility
@@ -281,7 +281,7 @@ export function registerCreateProject(server: McpServer): void {
         }
 
         await writeFile(podfilePath, podfile);
-        steps.push("Set iOS 16.0 in Podfile");
+        steps.push("Set iOS 13.0 in Podfile");
       } catch (e) {
         steps.push(`Warning: Could not patch Podfile: ${e}`);
       }
