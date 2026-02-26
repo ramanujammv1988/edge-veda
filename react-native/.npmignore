@@ -1,0 +1,35 @@
+# Source files (publish only built files)
+src/
+
+# Development files
+*.log
+*.tsbuildinfo
+.DS_Store
+.idea/
+.vscode/
+
+# Test files
+__tests__/
+__mocks__/
+coverage/
+*.test.ts
+*.test.tsx
+
+# Build configs
+tsconfig.json
+tsconfig.build.json
+.eslintrc.js
+.prettierrc
+
+# Git
+.git/
+.gitignore
+
+# Examples and docs
+example/
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
