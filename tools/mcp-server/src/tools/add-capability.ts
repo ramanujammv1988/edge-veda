@@ -57,7 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
       numThreads: scored.recommendedConfig.numThreads,
       useGpu: true,
     ));
-    _session = _edgeVeda.createChatSession();
+    _session = ChatSession(edgeVeda: _edgeVeda);
     setState(() { _isLoading = false; _status = 'Ready'; });
   }
 
@@ -138,10 +138,12 @@ class _ChatScreenState extends State<ChatScreen> {
   vision: {
     filename: "vision_screen.dart",
     models: ["smolvlm2-500m-video-instruct-q8", "smolvlm2-500m-mmproj-f16"],
-    extraDeps: ["image_picker: ^1.1.2"],
+    extraDeps: ["image_picker: ^1.1.2", "image: ^4.0.0"],
     code: `import 'dart:io';
+import 'dart:typed_data';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 class VisionScreen extends StatefulWidget {
@@ -180,10 +182,20 @@ class _VisionScreenState extends State<VisionScreen> {
 
     setState(() { _imagePath = image.path; _isLoading = true; _output = 'Analyzing...'; });
 
+    final bytes = await File(image.path).readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) {
+      setState(() { _output = 'Failed to decode selected image'; _isLoading = false; });
+      return;
+    }
+    final rgb = Uint8List.fromList(decoded.getBytes(order: img.ChannelOrder.rgb));
     final result = await _edgeVeda.describeImage(
-      imagePath: image.path, prompt: 'Describe this image in detail.',
+      rgb,
+      width: decoded.width,
+      height: decoded.height,
+      prompt: 'Describe this image in detail.',
     );
-    setState(() { _output = result.text; _isLoading = false; });
+    setState(() { _output = result; _isLoading = false; });
   }
 
   @override
@@ -220,8 +232,10 @@ class _VisionScreenState extends State<VisionScreen> {
   stt: {
     filename: "stt_screen.dart",
     models: ["whisper-base-en"],
-    extraDeps: ["record: ^5.1.3"],
-    code: `import 'package:edge_veda/edge_veda.dart';
+    extraDeps: [],
+    code: `import 'dart:async';
+import 'dart:typed_data';
+import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
 
 class SttScreen extends StatefulWidget {
@@ -233,7 +247,10 @@ class SttScreen extends StatefulWidget {
 
 class _SttScreenState extends State<SttScreen> {
   final _modelManager = ModelManager();
+  String? _modelPath;
   WhisperSession? _whisper;
+  StreamSubscription<WhisperSegment>? _segmentSubscription;
+  StreamSubscription<Float32List>? _audioSubscription;
   String _transcript = 'Tap microphone to start...';
   bool _isRecording = false;
   bool _isLoading = true;
@@ -245,28 +262,43 @@ class _SttScreenState extends State<SttScreen> {
   }
 
   Future<void> _setup() async {
-    final modelPath = await _modelManager.downloadModel(ModelRegistry.whisperBaseEn);
-    _whisper = WhisperSession(modelPath: modelPath);
-    await _whisper!.init();
+    _modelPath = await _modelManager.downloadModel(ModelRegistry.whisperBaseEn);
     setState(() { _isLoading = false; });
   }
 
   Future<void> _toggleRecording() async {
-    if (_whisper == null) return;
     if (_isRecording) {
-      await _whisper!.stopRecording();
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+      await _whisper?.flush();
+      await _whisper?.stop();
+      await _segmentSubscription?.cancel();
+      _segmentSubscription = null;
       setState(() { _isRecording = false; });
     } else {
-      setState(() { _isRecording = true; _transcript = ''; });
-      await _whisper!.startRecording();
-      _whisper!.transcriptionStream.listen((text) {
-        setState(() { _transcript = text; });
+      if (_modelPath == null) return;
+      final granted = await WhisperSession.requestMicrophonePermission();
+      if (!granted) {
+        setState(() { _transcript = 'Microphone permission denied'; });
+        return;
+      }
+      _whisper = WhisperSession(modelPath: _modelPath!);
+      await _whisper!.start();
+      await _segmentSubscription?.cancel();
+      _segmentSubscription = _whisper!.onSegment.listen((segment) {
+        setState(() { _transcript = _whisper!.transcript; });
       });
+      _audioSubscription = WhisperSession.microphone().listen((samples) {
+        _whisper?.feedAudio(samples);
+      });
+      setState(() { _isRecording = true; _transcript = ''; });
     }
   }
 
   @override
   void dispose() {
+    _audioSubscription?.cancel();
+    _segmentSubscription?.cancel();
     _whisper?.dispose();
     _modelManager.dispose();
     super.dispose();
@@ -321,7 +353,6 @@ class _TtsScreenState extends State<TtsScreen> {
   @override
   void initState() {
     super.initState();
-    _tts.init();
   }
 
   Future<void> _speak() async {
@@ -339,7 +370,6 @@ class _TtsScreenState extends State<TtsScreen> {
 
   @override
   void dispose() {
-    _tts.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -396,7 +426,8 @@ class _TtsScreenState extends State<TtsScreen> {
   image: {
     filename: "image_screen.dart",
     models: ["sd-v2-1-turbo-q8"],
-    code: `import 'package:edge_veda/edge_veda.dart';
+    code: `import 'dart:typed_data';
+import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/material.dart';
 
 class ImageScreen extends StatefulWidget {
@@ -407,10 +438,10 @@ class ImageScreen extends StatefulWidget {
 }
 
 class _ImageScreenState extends State<ImageScreen> {
+  final _edgeVeda = EdgeVeda();
   final _modelManager = ModelManager();
-  ImageWorker? _worker;
   final _controller = TextEditingController(text: 'A serene mountain lake at sunset');
-  ImageResult? _result;
+  Uint8List? _result;
   String _status = 'Initializing...';
   bool _isLoading = true;
   double _progress = 0;
@@ -423,18 +454,17 @@ class _ImageScreenState extends State<ImageScreen> {
 
   Future<void> _setup() async {
     final modelPath = await _modelManager.downloadModel(ModelRegistry.sdV21Turbo);
-    _worker = ImageWorker(modelPath: modelPath);
-    await _worker!.init();
+    await _edgeVeda.initImageGeneration(modelPath: modelPath);
     setState(() { _isLoading = false; _status = 'Ready'; });
   }
 
   Future<void> _generate() async {
     final prompt = _controller.text.trim();
-    if (prompt.isEmpty || _worker == null) return;
+    if (prompt.isEmpty) return;
     setState(() { _isLoading = true; _progress = 0; _status = 'Generating...'; });
 
-    final result = await _worker!.generateImage(
-      prompt: prompt,
+    final result = await _edgeVeda.generateImage(
+      prompt,
       onProgress: (p) {
         setState(() { _progress = p.progress; });
       },
@@ -444,7 +474,7 @@ class _ImageScreenState extends State<ImageScreen> {
 
   @override
   void dispose() {
-    _worker?.dispose();
+    _edgeVeda.dispose();
     _modelManager.dispose();
     _controller.dispose();
     super.dispose();
@@ -470,7 +500,7 @@ class _ImageScreenState extends State<ImageScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: _result != null
-                  ? Image.memory(_result!.pixelData, fit: BoxFit.contain)
+                  ? Image.memory(_result!, fit: BoxFit.contain)
                   : Center(child: Text(_status)),
             ),
             ElevatedButton(
@@ -503,7 +533,8 @@ class RagScreen extends StatefulWidget {
 }
 
 class _RagScreenState extends State<RagScreen> {
-  final _edgeVeda = EdgeVeda();
+  final _generator = EdgeVeda();
+  final _embedder = EdgeVeda();
   final _modelManager = ModelManager();
   RagPipeline? _rag;
   final _controller = TextEditingController();
@@ -522,14 +553,17 @@ class _RagScreenState extends State<RagScreen> {
     final embedPath = await _modelManager.downloadModel(ModelRegistry.allMiniLmL6V2);
     final llmPath = await _modelManager.downloadModel(ModelRegistry.llama32_1b);
 
-    // Initialize LLM
-    await _edgeVeda.init(EdgeVedaConfig(modelPath: llmPath, useGpu: true));
+    // Initialize separate embedder and generator models
+    await _embedder.init(EdgeVedaConfig(modelPath: embedPath, useGpu: true));
+    await _generator.init(EdgeVedaConfig(modelPath: llmPath, useGpu: true));
 
-    // Create RAG pipeline with separate embedder
-    _rag = _edgeVeda.createRagPipeline(
-      embedModelPath: embedPath,
+    // Create RAG pipeline
+    _rag = RagPipeline.withModels(
+      embedder: _embedder,
+      generator: _generator,
+      index: VectorIndex(dimensions: 384),
+      ftsIndex: FtsIndex(),
     );
-    await _rag!.init();
 
     setState(() { _isLoading = false; _output = 'Ready! Pick a text document.'; });
   }
@@ -541,7 +575,11 @@ class _RagScreenState extends State<RagScreen> {
     setState(() { _isLoading = true; _output = 'Indexing document...'; });
     final text = await File(result.files.single.path!).readAsString();
 
-    await _rag!.indexDocument(text, metadata: {'source': result.files.single.name});
+    await _rag!.addDocument(
+      result.files.single.name,
+      text,
+      metadata: {'source': result.files.single.name},
+    );
     setState(() { _isLoading = false; _hasDocument = true; _output = 'Document indexed. Ask a question!'; });
   }
 
@@ -561,7 +599,8 @@ class _RagScreenState extends State<RagScreen> {
 
   @override
   void dispose() {
-    _edgeVeda.dispose();
+    _generator.dispose();
+    _embedder.dispose();
     _modelManager.dispose();
     _controller.dispose();
     super.dispose();

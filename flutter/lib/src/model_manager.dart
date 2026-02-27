@@ -248,13 +248,13 @@ class ModelManager {
       final totalBytes = sourceSize;
 
       await for (final chunk in sourceStream) {
-        sink!.add(chunk);
+        sink.add(chunk);
         bytesCopied += chunk.length;
         onProgress?.call(bytesCopied, totalBytes);
       }
 
-      await sink!.flush();
-      await sink!.close();
+      await sink.flush();
+      await sink.close();
       sink = null; // Prevent double-close in catch
 
       // Verify checksum before atomic rename
