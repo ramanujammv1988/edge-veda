@@ -20,7 +20,7 @@ permissions:
   contents: write
 
 env:
-  FLUTTER_VERSION: '3.24.0'
+  FLUTTER_VERSION: '3.41.2'
 
 jobs:
   # Job 1: Validate version consistency before expensive builds
