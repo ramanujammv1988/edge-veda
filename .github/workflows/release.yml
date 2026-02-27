@@ -6,8 +6,8 @@
 #   2. build-and-release-xcframework - Build iOS binary and create GitHub Release
 #   3. publish-to-pub-dev - Validate with pana and publish to pub.dev
 #
-# Required secrets:
-#   - PUB_TOKEN: pub.dev publishing token (see user_setup in plan)
+# Optional secrets:
+#   - PUB_TOKEN: pub.dev publishing token (required only for automated pub.dev publish)
 
 name: Release
 
@@ -190,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build-and-release-xcframework
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && secrets.PUB_TOKEN != ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -231,23 +231,6 @@ jobs:
             echo "Review pana_output.txt for improvement suggestions"
             exit 1
           fi
-
-      - name: Check PUB_TOKEN secret
-        run: |
-          if [ -z "${{ secrets.PUB_TOKEN }}" ]; then
-            echo "::error::PUB_TOKEN secret is not configured!"
-            echo ""
-            echo "To configure pub.dev authentication:"
-            echo "  1. Go to https://pub.dev"
-            echo "  2. Sign in -> Account -> Publishing Access"
-            echo "  3. Create a new token with 'Publish packages' permission"
-            echo "  4. Add the token as a GitHub secret named PUB_TOKEN"
-            echo "     Repository Settings -> Secrets and variables -> Actions -> New repository secret"
-            echo ""
-            echo "After adding the secret, re-run this workflow."
-            exit 1
-          fi
-          echo "PUB_TOKEN secret is configured"
 
       - name: Setup pub.dev credentials
         run: |
