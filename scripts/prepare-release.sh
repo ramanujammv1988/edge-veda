@@ -215,11 +215,12 @@ main() {
         flutter pub get --quiet 2>/dev/null || true
     fi
 
-    # Run dart pub publish --dry-run and capture output
+    # Run dart pub publish --dry-run non-interactively and capture output.
+    # Pipe `yes` to satisfy any confirmation prompt when warnings are present.
     local dryrun_output
     local dryrun_exit_code=0
     if command -v dart &> /dev/null; then
-        dryrun_output=$(dart pub publish --dry-run 2>&1) || dryrun_exit_code=$?
+        dryrun_output=$(yes | dart pub publish --dry-run 2>&1) || dryrun_exit_code=$?
     else
         dryrun_output="dart command not found - skipping dry-run"
         dryrun_exit_code=127
