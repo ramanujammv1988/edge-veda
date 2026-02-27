@@ -175,6 +175,7 @@ artifacts/
 
 # Profiling and debugging
 *.trace
+*.jsonl
 *.perf
 *.prof
 perf.data
