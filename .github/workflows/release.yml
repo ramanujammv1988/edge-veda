@@ -133,12 +133,15 @@ jobs:
         run: |
           VERSION="${{ needs.validate-release.outputs.version }}"
 
-          # Extract section for this version from CHANGELOG.md
-          # Matches from ## [X.Y.Z] to the next ## [ or end of file
-          NOTES=$(awk "/^## \[$VERSION\]/,/^## \[/" flutter/CHANGELOG.md | head -n -1)
+          # Extract section for this version from CHANGELOG.md (portable on macOS/Linux)
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { in_section=1; print; next }
+            in_section && $0 ~ "^## \\[" { exit }
+            in_section { print }
+          ' flutter/CHANGELOG.md > release_notes.md
 
           # If no notes found, use a default message
-          if [ -z "$NOTES" ]; then
+          if [ ! -s release_notes.md ]; then
             cat > release_notes.md << 'DEFAULTEOF'
           ## Release
 
@@ -147,9 +150,6 @@ jobs:
             # Add version and repo link
             sed -i '' "s/## Release/## Release v$VERSION/" release_notes.md 2>/dev/null || \
               sed -i "s/## Release/## Release v$VERSION/" release_notes.md
-          else
-            # Write extracted notes to file
-            echo "$NOTES" > release_notes.md
           fi
 
           echo "Release notes extracted:"
