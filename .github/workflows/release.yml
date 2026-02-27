@@ -190,25 +190,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build-and-release-xcframework
-    if: startsWith(github.ref, 'refs/tags/v') && secrets.PUB_TOKEN != ''
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check PUB_TOKEN availability
+        id: pub_token
+        run: |
+          if [ -n "${{ secrets.PUB_TOKEN }}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "PUB_TOKEN is configured; pub.dev publish will run."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::PUB_TOKEN is not configured; skipping pub.dev publish."
+          fi
+
       - name: Setup Flutter
+        if: steps.pub_token.outputs.available == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
 
       - name: Get Flutter dependencies
+        if: steps.pub_token.outputs.available == 'true'
         working-directory: flutter
         run: flutter pub get
 
       - name: Install pana
+        if: steps.pub_token.outputs.available == 'true'
         run: dart pub global activate pana
 
       - name: Run pana validation
+        if: steps.pub_token.outputs.available == 'true'
         working-directory: flutter
         run: |
           echo "Running pana analysis..."
@@ -233,6 +248,7 @@ jobs:
           fi
 
       - name: Setup pub.dev credentials
+        if: steps.pub_token.outputs.available == 'true'
         run: |
           # Create pub credentials directory
           mkdir -p ~/.pub-cache
@@ -252,6 +268,7 @@ jobs:
           echo "pub.dev credentials configured"
 
       - name: Publish to pub.dev
+        if: steps.pub_token.outputs.available == 'true'
         working-directory: flutter
         run: |
           echo "Publishing to pub.dev..."
@@ -259,6 +276,7 @@ jobs:
           dart pub publish --force
 
       - name: Publish successful
+        if: steps.pub_token.outputs.available == 'true'
         run: |
           VERSION="${{ needs.build-and-release-xcframework.outputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"  # Remove 'v' prefix if present
@@ -270,7 +288,7 @@ jobs:
           echo "It may take a few minutes for the package to appear."
 
       - name: Publish failed
-        if: failure()
+        if: failure() && steps.pub_token.outputs.available == 'true'
         run: |
           echo "::error::pub.dev publishing failed!"
           echo ""
