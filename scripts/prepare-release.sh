@@ -24,6 +24,8 @@ PUBSPEC="$FLUTTER_DIR/pubspec.yaml"
 PODSPEC="$FLUTTER_DIR/ios/edge_veda.podspec"
 CORE_PODSPEC="$PROJECT_ROOT/EdgeVedaCore.podspec"
 CHANGELOG="$FLUTTER_DIR/CHANGELOG.md"
+RELEASE_WORKFLOW="$PROJECT_ROOT/.github/workflows/release.yml"
+EXPECTED_XCFW_ASSET="EdgeVedaCore.xcframework.zip"
 
 # Print colored status
 print_status() {
@@ -325,6 +327,36 @@ main() {
         print_status "warn" "XCFramework not found — build before releasing"
         echo "  Build: ./scripts/build-ios.sh --clean --release"
         warnings=$((warnings + 1))
+    fi
+
+    echo ""
+
+    # Check release artifact contract consistency
+    echo "Checking release artifact contract..."
+    echo ""
+
+    if [ ! -f "$RELEASE_WORKFLOW" ]; then
+        print_status "fail" "Release workflow missing: $RELEASE_WORKFLOW"
+        errors=$((errors + 1))
+    else
+        if grep -q "$EXPECTED_XCFW_ASSET" "$RELEASE_WORKFLOW"; then
+            print_status "ok" "Release workflow references $EXPECTED_XCFW_ASSET"
+        else
+            print_status "fail" "Release workflow does not reference $EXPECTED_XCFW_ASSET"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    if [ ! -f "$CORE_PODSPEC" ]; then
+        print_status "fail" "Core podspec missing: $CORE_PODSPEC"
+        errors=$((errors + 1))
+    else
+        if grep -q "$EXPECTED_XCFW_ASSET" "$CORE_PODSPEC"; then
+            print_status "ok" "EdgeVedaCore podspec references $EXPECTED_XCFW_ASSET"
+        else
+            print_status "fail" "EdgeVedaCore podspec does not reference $EXPECTED_XCFW_ASSET"
+            errors=$((errors + 1))
+        fi
     fi
 
     echo ""

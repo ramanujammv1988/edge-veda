@@ -5,6 +5,13 @@ All notable changes to the Edge Veda Flutter SDK will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-02-27
+
+### Fixed
+- Aligned release asset naming contract for iOS binary distribution: GitHub Release workflow now publishes `EdgeVedaCore.xcframework.zip` to match `EdgeVedaCore.podspec` download URL.
+- Added release preflight validation to detect asset-name drift between release workflow and podspec before publish.
+- Synchronized podspec versions with Flutter SDK package version (`2.4.2`) for consistent release validation.
+
 ## [2.4.1] - 2026-02-22
 
 ### Added

@@ -125,8 +125,8 @@ jobs:
       - name: Create XCFramework ZIP archive
         run: |
           cd flutter/ios/Frameworks
-          zip -r EdgeVedaCore-ios.xcframework.zip EdgeVedaCore.xcframework
-          echo "Created archive: $(ls -lh EdgeVedaCore-ios.xcframework.zip)"
+          zip -r EdgeVedaCore.xcframework.zip EdgeVedaCore.xcframework
+          echo "Created archive: $(ls -lh EdgeVedaCore.xcframework.zip)"
 
       - name: Extract release notes from CHANGELOG
         id: release_notes
@@ -158,7 +158,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: flutter/ios/Frameworks/EdgeVedaCore-ios.xcframework.zip
+          files: flutter/ios/Frameworks/EdgeVedaCore.xcframework.zip
           body_path: release_notes.md
           draft: false
           prerelease: ${{ contains(needs.validate-release.outputs.version, '-') }}
