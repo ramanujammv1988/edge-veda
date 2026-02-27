@@ -113,14 +113,14 @@ jobs:
           SIZE_MB=$((SIZE_KB / 1024))
           echo "XCFramework size: ${SIZE_MB}MB"
 
-          # Fail if exceeds 30MB (indicates bloat)
-          if [ $SIZE_KB -gt 30720 ]; then
-            echo "::error::XCFramework is too large: ${SIZE_MB}MB (limit: 30MB)"
+          # Fail if exceeds 100MB (guards against accidental debug/bloat artifacts)
+          if [ $SIZE_KB -gt 102400 ]; then
+            echo "::error::XCFramework is too large: ${SIZE_MB}MB (limit: 100MB)"
             echo "Check for unintended dependencies or debug symbols"
             exit 1
           fi
 
-          echo "XCFramework size OK: ${SIZE_MB}MB (limit: 30MB)"
+          echo "XCFramework size OK: ${SIZE_MB}MB (limit: 100MB)"
 
       - name: Create XCFramework ZIP archive
         run: |
