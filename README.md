@@ -396,17 +396,65 @@ final result = await visionWorker.describeFrame(
 print(result.description);
 ```
 
-### Zero-Config Setup (Claude Code)
+### Zero-Config Setup (Claude Code MCP)
 
-Skip all manual setup — the MCP plugin creates a working project in one command:
+Skip all manual setup — the [MCP plugin](tools/mcp-server/) automates environment checks, project scaffolding, model selection, capability wiring, and device deployment.
 
 ```bash
-claude mcp add edge-veda -- npx @edge-veda/mcp-server
+claude mcp add edge-veda -- npx @edge-veda/mcp-server@0.2.0
 ```
 
-Then tell Claude: *"Create an on-device chat app"* — it scaffolds the project, configures iOS, and deploys to your phone.
+Then tell Claude what you want to build:
 
-See [tools/mcp-server/](tools/mcp-server/) for full documentation and all 6 available tools.
+| Prompt | What happens |
+|--------|-------------|
+| *"Create an on-device chat app"* | Scaffolds project, configures iOS, downloads model, builds & deploys |
+| *"Add vision capability"* | Wires SmolVLM2 imports, model download, camera screen into existing app |
+| *"Add RAG to my app"* | Adds embedding model, VectorIndex, RagPipeline, document picker UI |
+
+**6 tools available:** `check_environment`, `list_models`, `create_project`, `add_capability`, `download_model`, `run`
+
+See [tools/mcp-server/](tools/mcp-server/) for full documentation.
+
+[![npm](https://img.shields.io/npm/v/@edge-veda/mcp-server)](https://www.npmjs.com/package/@edge-veda/mcp-server)
+
+---
+
+## Example Apps
+
+Four complete apps that showcase different personas and SDK capabilities. Each is a standalone Flutter project you can run on your iPhone.
+
+### Smart Home Control ([examples/intent_engine](examples/intent_engine/))
+
+*"I'm heading to bed"* — the LLM dims lights, locks doors, and turns off the TV.
+
+On-device natural language intent parsing with LLM function calling. 10 virtual devices across 3 rooms, animated state dashboard, transparent action log, and a pluggable Home Assistant connector.
+
+**SDK features:** `ChatSession.sendWithTools()`, `ToolRegistry`, `ToolDefinition`, Qwen3-0.6B
+
+### Document Q&A ([examples/document_qa](examples/document_qa/))
+
+Load any PDF or text file and ask questions — RAG retrieval + LLM generation, 100% offline.
+
+Dual-model architecture (embedder + generator), semantic chunking, streaming answers with source attribution.
+
+**SDK features:** `RagPipeline`, `VectorIndex`, `embed()`, dual `EdgeVeda` instances, `ModelManager`
+
+### Health Advisor ([examples/health_advisor](examples/health_advisor/))
+
+Confidence-aware medical document Q&A with explicit cloud handoff when the model is uncertain.
+
+Per-token confidence scoring with color-coded badges (green/yellow/red) and a dismissible banner suggesting professional consultation when confidence drops below threshold.
+
+**SDK features:** `ConfidenceInfo`, `needsCloudHandoff`, `RagPipeline`, `GenerateOptions.confidenceThreshold`
+
+### Voice Journal ([examples/voice_journal](examples/voice_journal/))
+
+Record thoughts, auto-transcribe, auto-summarize, and semantically search across entries — entirely on-device.
+
+Three independent model instances (STT + summarization + embeddings) with SQLite persistence and cross-session semantic search.
+
+**SDK features:** `WhisperSession`, `ChatSession.reset()`, `VectorIndex` persistence, `ModelManager`
 
 ---
 
@@ -612,10 +660,16 @@ edge-veda/
 |   +-- ios/                      Podspec + XCFramework
 |   +-- android/                  Android plugin (scaffolded)
 |   +-- example/                  Demo app (10 files, 8,383 LOC)
-|   +-- test/                     Unit tests (253 LOC, 14 tests)
+|   +-- test/                     Unit tests (184 tests)
++-- examples/
+|   +-- intent_engine/            Smart home control (function calling)
+|   +-- document_qa/              Document Q&A (RAG)
+|   +-- health_advisor/           Confidence-aware health Q&A
+|   +-- voice_journal/            Voice journal (STT + summarization)
 +-- scripts/
 |   +-- build-ios.sh              XCFramework build pipeline (406 LOC)
 +-- tools/
+|   +-- mcp-server/               Claude Code MCP plugin (TypeScript, 6 tools)
 |   +-- analyze_trace.py          Soak test JSONL analysis (1,797 LOC)
 ```
 
@@ -651,24 +705,23 @@ The demo app includes Chat (multi-turn with tool calling), Vision (continuous ca
 ## Roadmap (Directional)
 
 - Android sustained runtime validation (CPU + Vulkan GPU)
-- Text-to-speech integration
 - Semantic perception APIs (event-driven vision)
 - Observability dashboard (localhost trace viewer)
 - NPU/CoreML backend support
+- LoRA adapter support
 - Model conversion toolchain
 
 ---
 
 ## Who This Is For
 
-Edge-Veda is designed for teams building:
+Edge-Veda is designed for three developer personas:
 
-- On-device AI assistants
-- Continuous perception apps
-- Privacy-sensitive AI systems
-- Long-running edge agents
-- Voice-first applications
-- Regulated or offline-first applications
+- **The IoT Builder** — smart home control, voice assistants, intent-driven automation. Needs function calling and real-time device interaction, 100% offline. *See [Intent Engine](examples/intent_engine/).*
+- **The Knowledge Worker** — document Q&A, medical advisors, legal research. Needs RAG, confidence scoring, and explicit cloud handoff when the model is uncertain. *See [Health Advisor](examples/health_advisor/) and [Document Q&A](examples/document_qa/).*
+- **The Personal AI Builder** — voice journals, thought capture, semantic search over personal data. Needs STT, summarization, and persistent vector search — all private, all on-device. *See [Voice Journal](examples/voice_journal/).*
+
+And more broadly, any team building privacy-sensitive, offline-first, or long-running on-device AI applications.
 
 ---
 
@@ -694,7 +747,7 @@ Contributions are welcome. Here's how to get started:
 - **Runtime policy** — New QoS strategies, thermal adaptation improvements
 - **Trace analysis** — Visualization tools, anomaly detection, regression tracking
 - **Model support** — Testing additional GGUF models, quantization profiles
-- **Example apps** — Minimal examples for specific use cases (document scanner, voice assistant, visual QA)
+- **Example apps** — New use-case examples building on the four existing personas
 
 ### Development Workflow
 
