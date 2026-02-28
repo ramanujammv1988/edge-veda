@@ -19,9 +19,11 @@ Plans:
 - [x] 02-02-PLAN.md -- Add telemetry MethodChannel and update build verification
 
 ## Phase 3: Flutter Plugin Integration (Dart)
-**Goal:** Expose the Android interfaces cleanly back towards Flutter Dart isolates.
-- Update `pubspec.yaml` to declare Android platform support
-- Wire up Dart FFI for Android (`DynamicLibrary.open` for `.so` files) in `flutter/lib/src/`
+**Goal:** Validate Dart FFI Android integration and update documentation for Android platform parity.
+**Plans:** 1 plan
+
+Plans:
+- [ ] 03-01-PLAN.md -- Update TelemetryService docs for Android parity and validate FFI symbol coverage
 
 ## Phase 4: Verification Loop
 **Goal:** Prove the stack operates accurately in emulator / physical hardware testing.
