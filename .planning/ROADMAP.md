@@ -26,5 +26,9 @@ Plans:
 - [ ] 03-01-PLAN.md -- Update TelemetryService docs for Android parity and validate FFI symbol coverage
 
 ## Phase 4: Verification Loop
-**Goal:** Prove the stack operates accurately in emulator / physical hardware testing.
-- Test initialization parameters (VRAM, memory guards) in emulator CPU backend context.
+**Goal:** Prove the Android build system and integration chain are internally consistent and correctly wired from C++ through Kotlin to Dart.
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md -- Verify build system flag consistency and CPU-only backend enforcement
+- [ ] 04-02-PLAN.md -- Verify JNI-to-Kotlin-to-Dart integration chain coherence
