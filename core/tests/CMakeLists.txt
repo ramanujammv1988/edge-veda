@@ -32,6 +32,21 @@ set_target_properties(test_api_guards PROPERTIES
 # ctest discovery
 add_test(NAME api_guards COMMAND test_api_guards)
 
+# Backend detection tests (no model needed - tests C API contracts)
+add_executable(test_backend_detection test_backend_detection.cpp)
+
+target_link_libraries(test_backend_detection PRIVATE edge_veda_static)
+
+target_include_directories(test_backend_detection PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+set_target_properties(test_backend_detection PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+
+add_test(NAME backend_detection COMMAND test_backend_detection)
+
 # Model-backed tests (require -DEDGE_VEDA_TEST_MODEL_PATH=<path>)
 if(DEFINED EDGE_VEDA_TEST_MODEL_PATH AND EXISTS "${EDGE_VEDA_TEST_MODEL_PATH}")
     message(STATUS "Model-backed tests enabled: ${EDGE_VEDA_TEST_MODEL_PATH}")
