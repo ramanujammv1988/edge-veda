@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'edge_veda'
-  s.version          = '2.4.1'
+  s.version          = '2.4.2'
   s.summary          = 'Edge Veda SDK - On-device AI inference for Flutter'
   s.description      = <<-DESC
 Edge Veda SDK enables running Large Language Models, Speech-to-Text, and
@@ -37,7 +37,7 @@ Features sub-200ms latency, 100% privacy, and zero server costs.
   # is the only approach that works for pub.dev consumers.
   #
   # For local development: ./scripts/build-ios.sh --clean --release
-  s.dependency 'EdgeVedaCore', '~> 2.3'
+  s.dependency 'EdgeVedaCore', '~> 2.4'
 
   # Frameworks used by the ObjC plugin classes (not the C engine — those are
   # linked into the dynamic framework itself)

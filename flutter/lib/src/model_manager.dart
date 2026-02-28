@@ -6,9 +6,11 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import 'telemetry_service.dart';
 import 'types.dart';
 
 /// Manages model downloads, caching, and verification
@@ -17,6 +19,11 @@ class ModelManager {
   static const String _metadataFileName = 'metadata.json';
   static const int _maxRetries = 3;
   static const Duration _initialRetryDelay = Duration(seconds: 1);
+
+  /// Telemetry service for disk space checks.
+  /// Replaceable in tests to inject a mock.
+  @visibleForTesting
+  TelemetryService telemetryService = TelemetryService();
 
   final StreamController<DownloadProgress> _progressController =
       StreamController<DownloadProgress>.broadcast();
@@ -112,11 +119,187 @@ class ModelManager {
       }
     }
 
+    // Check disk space before downloading
+    final freeBytes = await telemetryService.getFreeDiskSpace();
+    if (freeBytes >= 0) {
+      const bufferBytes = 100 * 1024 * 1024; // 100MB buffer for temp files
+      if (freeBytes < model.sizeBytes + bufferBytes) {
+        final freeMB = (freeBytes / (1024 * 1024)).round();
+        final requiredMB = (model.sizeBytes / (1024 * 1024)).round();
+        throw DownloadException(
+          'Insufficient disk space',
+          details: '${freeMB}MB free, ${requiredMB}MB required for ${model.name}',
+        );
+      }
+    }
+
     // Store cancel token for external cancellation
     _currentDownloadToken = cancelToken;
 
     // Attempt download with retries for transient network errors
     return _downloadWithRetry(model, modelPath, verifyChecksum, cancelToken);
+  }
+
+  /// Import a model from a local file path into the SDK model cache.
+  ///
+  /// Copies the source file to a temporary location in the models directory,
+  /// optionally verifies SHA256 checksum, then atomically renames to the final
+  /// location. This ensures no corrupt files if the copy is interrupted.
+  ///
+  /// If a valid cached model already exists (matching checksum), returns
+  /// immediately without re-copying.
+  ///
+  /// The [sourcePath] must point to an existing file (e.g., a Flutter asset
+  /// extracted to a temp directory, or a file the user already has on disk).
+  ///
+  /// [onProgress] is called periodically with (bytesCopied, totalBytes).
+  ///
+  /// Throws [ModelValidationException] if:
+  /// - Source file does not exist
+  /// - Source file size does not match [model.sizeBytes] (when > 0)
+  /// - SHA256 checksum does not match [model.checksum] (when non-null and verifyChecksum is true)
+  Future<String> importModel(
+    ModelInfo model, {
+    required String sourcePath,
+    bool verifyChecksum = true,
+    void Function(int bytesCopied, int totalBytes)? onProgress,
+  }) async {
+    final modelPath = await getModelPath(model.id);
+    final file = File(modelPath);
+
+    // Guard: source and destination must not be the same file.
+    // Only check when both files exist (resolveSymbolicLinks throws on missing files).
+    final sourceExists = await File(sourcePath).exists();
+    if (sourceExists && await File(modelPath).exists()) {
+      final resolvedSource = await File(sourcePath).resolveSymbolicLinks();
+      final resolvedDestPath = await File(modelPath).resolveSymbolicLinks();
+      if (resolvedSource == resolvedDestPath) {
+        // Same file — still verify checksum if requested
+        if (verifyChecksum && model.checksum != null) {
+          final isValid = await _verifyChecksum(modelPath, model.checksum!);
+          if (!isValid) {
+            throw ModelValidationException(
+              'Model file failed checksum verification',
+              details:
+                  'File at $modelPath has invalid SHA256 (expected: ${model.checksum})',
+            );
+          }
+        }
+        return modelPath;
+      }
+    }
+
+    // CHECK CACHE - skip copy if valid model exists
+    if (await file.exists()) {
+      if (verifyChecksum && model.checksum != null) {
+        final isValid = await _verifyChecksum(modelPath, model.checksum!);
+        if (isValid) {
+          return modelPath;
+        }
+        // Invalid checksum -- validate source exists BEFORE deleting cache
+        // to prevent data loss when source is missing
+        if (!sourceExists) {
+          throw ModelValidationException(
+            'Source file not found',
+            details: sourcePath,
+          );
+        }
+        await file.delete();
+      } else {
+        // No checksum to verify - assume cached file is valid
+        return modelPath;
+      }
+    }
+
+    // Validate source file exists
+    final sourceFile = File(sourcePath);
+    if (!sourceExists) {
+      throw ModelValidationException(
+        'Source file not found',
+        details: sourcePath,
+      );
+    }
+
+    // Validate source file size
+    final sourceSize = await sourceFile.length();
+    if (model.sizeBytes > 0 && sourceSize != model.sizeBytes) {
+      throw ModelValidationException(
+        'Source file size mismatch',
+        details:
+            'Expected ${model.sizeBytes} bytes, got $sourceSize bytes',
+      );
+    }
+
+    // Create temp file for atomic copy
+    final tempPath = '$modelPath.tmp';
+    final tempFile = File(tempPath);
+
+    // Delete any stale .tmp file from a prior interrupted copy
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+
+    IOSink? sink;
+    try {
+      // Chunked copy with progress reporting
+      final sourceStream = sourceFile.openRead();
+      sink = tempFile.openWrite();
+      var bytesCopied = 0;
+      final totalBytes = sourceSize;
+
+      await for (final chunk in sourceStream) {
+        sink.add(chunk);
+        bytesCopied += chunk.length;
+        onProgress?.call(bytesCopied, totalBytes);
+      }
+
+      await sink.flush();
+      await sink.close();
+      sink = null; // Prevent double-close in catch
+
+      // Verify checksum before atomic rename
+      if (verifyChecksum && model.checksum != null) {
+        final isValid = await _verifyChecksum(tempPath, model.checksum!);
+        if (!isValid) {
+          await tempFile.delete();
+          throw ModelValidationException(
+            'SHA256 checksum mismatch',
+            details: 'Expected: ${model.checksum}, file may be corrupted',
+          );
+        }
+      }
+
+      // Atomic rename
+      await tempFile.rename(modelPath);
+
+      // Save metadata
+      await _saveModelMetadata(model);
+
+      return modelPath;
+    } catch (e) {
+      // Close sink before cleanup to release file handle
+      try {
+        if (sink != null) {
+          await sink.close();
+        }
+      } catch (_) {}
+      // Clean up .tmp on any error
+      try {
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      } catch (_) {
+        // Ignore cleanup errors
+      }
+      if (e is EdgeVedaException) {
+        rethrow;
+      }
+      throw ModelValidationException(
+        'Failed to import model',
+        details: e.toString(),
+        originalError: e,
+      );
+    }
   }
 
   /// Internal download implementation with retry logic
@@ -174,21 +357,27 @@ class ModelManager {
     );
   }
 
-  /// Perform the actual download to temp file with atomic rename
+  /// Perform the actual download to temp file with atomic rename.
+  ///
+  /// Supports HTTP byte-range resume: if a .tmp file exists from a prior
+  /// interrupted download, sends `Range: bytes=N-` to resume from byte N.
+  /// Handles 206 (resume), 200 (fresh/fallback), and 416 (corrupt .tmp).
   Future<String> _performDownload(
     ModelInfo model,
     String modelPath,
     bool verifyChecksum,
     CancelToken? cancelToken, {
     required String downloadUrl,
+    bool isRetry = false,
   }) async {
     // Create temporary file for downloading (atomic pattern - Pitfall 12)
     final tempPath = '$modelPath.tmp';
     final tempFile = File(tempPath);
 
-    // Clean up any stale temp file from previous interrupted download
+    // Check for existing .tmp file to determine resume offset
+    int resumeOffset = 0;
     if (await tempFile.exists()) {
-      await tempFile.delete();
+      resumeOffset = await tempFile.length();
     }
 
     final client = http.Client();
@@ -200,43 +389,97 @@ class ModelManager {
         throw const DownloadException('Download cancelled');
       }
 
-      // Start download with progress tracking
+      // Start download with optional Range header for resume
       final request = http.Request('GET', Uri.parse(downloadUrl));
+      if (resumeOffset > 0) {
+        request.headers['Range'] = 'bytes=$resumeOffset-';
+      }
       final response = await client.send(request);
 
-      if (response.statusCode != 200) {
+      var downloadedBytes = 0;
+      var lastReportedBytes = 0;
+
+      if (response.statusCode == 206 && resumeOffset > 0) {
+        // Resume supported - append to existing temp file
+        sink = tempFile.openWrite(mode: FileMode.append);
+        downloadedBytes = resumeOffset;
+        lastReportedBytes = resumeOffset;
+      } else if (response.statusCode == 200) {
+        // Fresh download (server may not support Range, or no resume needed)
+        if (resumeOffset > 0) {
+          // Server ignored Range header - restart from scratch
+          await tempFile.delete();
+        }
+        sink = tempFile.openWrite();
+      } else if (response.statusCode == 416 && resumeOffset > 0) {
+        // Range not satisfiable - temp file corrupt, restart
+        await tempFile.delete();
+        client.close();
+        if (isRetry) {
+          throw const DownloadException(
+            'Failed to download model',
+            details: 'HTTP 416 Range Not Satisfiable after retry',
+          );
+        }
+        return _performDownload(
+          model,
+          modelPath,
+          verifyChecksum,
+          cancelToken,
+          downloadUrl: downloadUrl,
+          isRetry: true,
+        );
+      } else {
         throw DownloadException(
           'Failed to download model',
           details: 'HTTP ${response.statusCode}',
         );
       }
 
-      // Use Content-Length if available, otherwise fall back to model.sizeBytes
-      final totalBytes = response.contentLength ?? model.sizeBytes;
-      var downloadedBytes = 0;
-      var lastReportedBytes = 0; // Guard against progress going backwards
+      // Compute total bytes correctly for resumed vs fresh downloads.
+      // For 206, Content-Length is the remaining bytes, not the total.
+      final contentLength = response.contentLength ?? 0;
+      final totalBytes = response.statusCode == 206
+          ? resumeOffset + contentLength
+          : (contentLength > 0 ? contentLength : model.sizeBytes);
+
       final startTime = DateTime.now();
 
-      sink = tempFile.openWrite();
+      // Emit initial progress immediately on resume so UI shows
+      // the already-downloaded portion right away.
+      if (resumeOffset > 0 && response.statusCode == 206) {
+        _progressController.add(DownloadProgress(
+          totalBytes: totalBytes,
+          downloadedBytes: resumeOffset,
+          speedBytesPerSecond: 0,
+          estimatedSecondsRemaining: null,
+        ));
+      }
+
+      // At this point sink is guaranteed non-null: the 416 and error
+      // branches above all return/throw before reaching here.
+      final IOSink activeSink = sink!; // ignore: unnecessary_non_null_assertion
 
       await for (final chunk in response.stream) {
         // Check for cancellation during download
         if (cancelToken?.isCancelled == true) {
-          await sink.close();
-          await tempFile.delete();
+          await activeSink.close();
+          sink = null;
+          // Keep temp file for resume on next attempt
           throw const DownloadException('Download cancelled');
         }
 
         downloadedBytes += chunk.length;
-        sink.add(chunk);
+        activeSink.add(chunk);
 
         // Only emit progress if it increased (guard against backwards progress)
         if (downloadedBytes > lastReportedBytes) {
           lastReportedBytes = downloadedBytes;
 
-          // Calculate download speed and ETA
+          // Calculate download speed and ETA (speed based on NEW bytes only)
           final elapsed = DateTime.now().difference(startTime).inMilliseconds;
-          final speed = elapsed > 0 ? (downloadedBytes / elapsed) * 1000 : 0.0;
+          final newBytes = downloadedBytes - resumeOffset;
+          final speed = elapsed > 0 ? (newBytes / elapsed) * 1000 : 0.0;
           final remaining =
               speed > 0
                   ? ((totalBytes - downloadedBytes) / speed).round()
@@ -254,8 +497,8 @@ class ModelManager {
         }
       }
 
-      await sink.flush();
-      await sink.close();
+      await activeSink.flush();
+      await activeSink.close();
       sink = null;
 
       // Verify checksum BEFORE atomic rename
@@ -288,16 +531,22 @@ class ModelManager {
 
       return modelPath;
     } catch (e) {
-      // Clean up temp file on error - ensures no corrupt files left
+      // Clean up sink on error, but KEEP .tmp file for resume
       try {
         if (sink != null) {
           await sink.close();
         }
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
       } catch (_) {
         // Ignore cleanup errors
+      }
+
+      // Only delete .tmp on non-resumable errors (validation failures)
+      if (e is ModelValidationException) {
+        try {
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
+        } catch (_) {}
       }
 
       if (e is EdgeVedaException) {

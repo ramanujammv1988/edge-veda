@@ -167,6 +167,29 @@ typedef struct {
 EV_API void ev_config_default(ev_config* config);
 
 /* ============================================================================
+ * Thread Safety & Lock Ordering
+ * =========================================================================
+ *
+ * The C API is thread-safe. Functions that mutate context state acquire
+ * internal mutexes. Read-only accessors on immutable state (e.g., model
+ * metadata set at init time) may skip locking.
+ *
+ * **Lock ordering** (always acquire in this order to prevent deadlock):
+ *   1. ev_stream::mutex   (stream-level, acquired first)
+ *   2. ev_context::mutex  (context-level, acquired second)
+ *
+ * ev_stream_next() acquires stream->mutex then ctx->mutex (nested).
+ * ev_generate() acquires only ctx->mutex.
+ * ev_embed() acquires only ctx->mutex.
+ *
+ * Direct C API consumers (Swift, Kotlin, etc.) must NOT hold ctx->mutex
+ * then acquire stream->mutex — this inverts the ordering and deadlocks.
+ *
+ * The Dart SDK serializes all commands through isolate SendPort/ReceivePort,
+ * so lock ordering is not observable from Dart.
+ * ========================================================================= */
+
+/* ============================================================================
  * Context Management
  * ========================================================================= */
 
@@ -185,6 +208,11 @@ EV_API ev_context ev_init(const ev_config* config, ev_error_t* error);
 
 /**
  * @brief Free Edge Veda context and release all resources
+ *
+ * All streams created from this context must be freed with
+ * ev_stream_free() BEFORE calling ev_free(). Calling ev_free()
+ * while streams are still alive is undefined behavior.
+ *
  * @param ctx Context handle to free
  */
 EV_API void ev_free(ev_context ctx);
@@ -298,6 +326,11 @@ typedef struct ev_stream_impl* ev_stream;
  * Returns a stream handle that can be used with ev_stream_next()
  * to retrieve tokens as they are generated.
  *
+ * The returned stream borrows the context — the context must outlive
+ * the stream. Only one stream may be active per context. If a stream is
+ * already active (not yet freed), this function returns NULL and sets
+ * *error to EV_ERROR_CONTEXT_INVALID.
+ *
  * @param ctx Context handle
  * @param prompt Input prompt text
  * @param params Generation parameters (NULL = use defaults)
@@ -338,6 +371,10 @@ EV_API void ev_stream_cancel(ev_stream stream);
 
 /**
  * @brief Free stream handle and release resources
+ *
+ * Safe to call after ev_free(ctx) — gracefully skips the context
+ * reference if the context has already been freed.
+ *
  * @param stream Stream handle to free
  */
 EV_API void ev_stream_free(ev_stream stream);
@@ -1000,6 +1037,32 @@ EV_API ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_par
  * @param result Pointer to result structure to free
  */
 EV_API void ev_image_free_result(ev_image_result* result);
+
+/* ============================================================================
+ * Test Hooks (compile with EDGE_VEDA_TEST_HOOKS to enable)
+ * ========================================================================= */
+
+#ifdef EDGE_VEDA_TEST_HOOKS
+
+/**
+ * @brief Test hook: check if stream owns grammar string copies
+ *
+ * Returns whether the stream's internal grammar_str_owned and
+ * grammar_root_owned fields are non-NULL. Used to verify the
+ * strdup-based ownership fix (issue #33) without UB-based crash tests.
+ *
+ * @param stream Stream handle
+ * @param has_grammar_str Set to true if grammar_str_owned is non-NULL
+ * @param has_grammar_root Set to true if grammar_root_owned is non-NULL
+ * @return EV_SUCCESS, or EV_ERROR_INVALID_PARAM if stream is NULL
+ */
+EV_API ev_error_t ev_test_stream_grammar_owned(
+    ev_stream stream,
+    bool* has_grammar_str,
+    bool* has_grammar_root
+);
+
+#endif /* EDGE_VEDA_TEST_HOOKS */
 
 #ifdef __cplusplus
 }
