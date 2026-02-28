@@ -1,36 +1,26 @@
 # Roadmap
 
-## Phase 1: Foundation (Build System & Scripts) ✓
-**Goal:** Establish Android native build chain in the core C++.
-**Status:** Complete (2026-02-28) — Verified 7/7 must-haves
-**Plans:** 2 plans
+## Milestones
 
-Plans:
-- [x] 01-01-PLAN.md -- Polish build-android.sh and add JNI bridge to CMakeLists.txt
-- [x] 01-02-PLAN.md -- Align JNI bridge with Kotlin declarations and clean up build.gradle
+- ✅ **v1.0 Flutter Android Support** — Phases 1-4 (shipped 2026-02-28)
 
-## Phase 2: Native Android Layer (JNI & Kotlin) ✓
-**Goal:** Create the bridge connecting Java/Kotlin Android services to C++ methods.
-**Status:** Complete (2026-02-28)
-**Plans:** 2 plans
+## Phases
 
-Plans:
-- [x] 02-01-PLAN.md -- Expand JNI bridge with whisper STT functions
-- [x] 02-02-PLAN.md -- Add telemetry MethodChannel and update build verification
+<details>
+<summary>✅ v1.0 Flutter Android Support (Phases 1-4) — SHIPPED 2026-02-28</summary>
 
-## Phase 3: Flutter Plugin Integration (Dart) ✓
-**Goal:** Validate Dart FFI Android integration and update documentation for Android platform parity.
-**Status:** Complete (2026-02-28)
-**Plans:** 1 plan
+- [x] Phase 1: Foundation — Build System & Scripts (2/2 plans) — completed 2026-02-28
+- [x] Phase 2: Native Android Layer — JNI & Kotlin (2/2 plans) — completed 2026-02-28
+- [x] Phase 3: Flutter Plugin Integration — Dart (1/1 plan) — completed 2026-02-28
+- [x] Phase 4: Verification Loop (2/2 plans) — completed 2026-02-28
 
-Plans:
-- [x] 03-01-PLAN.md -- Update TelemetryService docs for Android parity and validate FFI symbol coverage
+</details>
 
-## Phase 4: Verification Loop ✓
-**Goal:** Prove the Android build system and integration chain are internally consistent and correctly wired from C++ through Kotlin to Dart.
-**Status:** Complete (2026-02-28)
-**Plans:** 2 plans
+## Progress
 
-Plans:
-- [x] 04-01-PLAN.md -- Verify build system flag consistency and CPU-only backend enforcement
-- [x] 04-02-PLAN.md -- Verify JNI-to-Kotlin-to-Dart integration chain coherence
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Foundation (Build System & Scripts) | v1.0 | 2/2 | Complete | 2026-02-28 |
+| 2. Native Android Layer (JNI & Kotlin) | v1.0 | 2/2 | Complete | 2026-02-28 |
+| 3. Flutter Plugin Integration (Dart) | v1.0 | 1/1 | Complete | 2026-02-28 |
+| 4. Verification Loop | v1.0 | 2/2 | Complete | 2026-02-28 |
