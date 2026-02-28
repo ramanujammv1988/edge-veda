@@ -1,0 +1,38 @@
+# Codecov Configuration for Edge Veda
+# https://docs.codecov.com/docs/codecov-yaml
+
+# Coverage status checks
+coverage:
+  status:
+    # Project-level coverage (overall codebase)
+    project:
+      default:
+        target: auto  # Track coverage trends
+        threshold: 1%  # Allow 1% regression before failing
+        informational: false  # Fail status check if threshold exceeded
+
+    # Patch-level coverage (new code in PRs)
+    patch:
+      default:
+        target: 80%  # New code should have reasonable coverage
+        informational: false
+
+# Pull request comment configuration
+comment:
+  layout: "reach,diff,flags,files"  # Show coverage diff and file-level breakdown
+  behavior: default  # Post new comment, update existing
+  require_changes: false  # Always post comment even if no coverage change
+
+# Coverage flags for tracking different parts of the codebase
+flags:
+  flutter:
+    paths:
+      - flutter/lib/
+    carryforward: true  # Carry forward previous coverage if not updated in current build
+
+# Ignore generated files and third-party code
+ignore:
+  - "flutter/lib/src/ffi/generated_bindings.dart"
+  - "core/third_party/**/*"
+  - "**/*.g.dart"
+  - "**/*.freezed.dart"
