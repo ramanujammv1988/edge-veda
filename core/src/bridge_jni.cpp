@@ -99,4 +99,117 @@ Java_com_edgeveda_edge_1veda_NativeEdgeVeda_generateNative(
   return jOutput;
 }
 
+// ============================================================================
+// Whisper (Speech-to-Text) JNI Functions
+// ============================================================================
+
+// Get whisper version
+JNIEXPORT jstring JNICALL
+Java_com_edgeveda_edge_1veda_NativeEdgeVeda_whisperVersionNative(
+    JNIEnv *env, jobject clazz) {
+  const char *version = ev_version();
+  return env->NewStringUTF(version);
+}
+
+// Initialize whisper context
+JNIEXPORT jlong JNICALL
+Java_com_edgeveda_edge_1veda_NativeEdgeVeda_whisperInitNative(
+    JNIEnv *env, jobject clazz, jstring jModelPath, jint numThreads,
+    jboolean useGpu) {
+  std::string modelPath = jstring2string(env, jModelPath);
+  LOGI("Initializing Whisper with model: %s", modelPath.c_str());
+
+  ev_whisper_config config;
+  ev_whisper_config_default(&config);
+  config.model_path = modelPath.c_str();
+  config.num_threads = numThreads;
+  // Phase 2 Android: CPU-only backend (matching existing LLM pattern)
+  config.use_gpu = false;
+
+  ev_error_t error;
+  ev_whisper_context ctx = ev_whisper_init(&config, &error);
+
+  if (ctx == nullptr) {
+    LOGE("Failed to initialize Whisper: %s", ev_error_string(error));
+    return 0;
+  }
+
+  LOGI("Whisper initialized successfully (CPU backend)");
+  return reinterpret_cast<jlong>(ctx);
+}
+
+// Transcribe audio to text
+JNIEXPORT jstring JNICALL
+Java_com_edgeveda_edge_1veda_NativeEdgeVeda_whisperTranscribeNative(
+    JNIEnv *env, jobject clazz, jlong contextHandle, jfloatArray audioData,
+    jint numSamples, jstring jLanguage) {
+  if (contextHandle == 0)
+    return env->NewStringUTF("");
+
+  ev_whisper_context ctx = reinterpret_cast<ev_whisper_context>(contextHandle);
+
+  // Get float array from JNI
+  jfloat *samples = env->GetFloatArrayElements(audioData, NULL);
+  if (samples == nullptr) {
+    LOGE("Failed to get audio data array");
+    return env->NewStringUTF("");
+  }
+
+  // Set up transcription parameters
+  ev_whisper_params params;
+  params.n_threads = 0; // Use config default
+  std::string language = jstring2string(env, jLanguage);
+  params.language = language.empty() ? "en" : language.c_str();
+  params.translate = false;
+  params.reserved = nullptr;
+
+  // Transcribe
+  ev_whisper_result result;
+  ev_error_t err = ev_whisper_transcribe(ctx, samples, numSamples, &params, &result);
+
+  // Release float array
+  env->ReleaseFloatArrayElements(audioData, samples, JNI_ABORT);
+
+  if (err != EV_SUCCESS) {
+    LOGE("Whisper transcription failed: %s", ev_error_string(err));
+    return env->NewStringUTF("");
+  }
+
+  // Concatenate all segment texts into single string
+  std::string fullText;
+  for (int i = 0; i < result.n_segments; i++) {
+    if (result.segments[i].text != nullptr) {
+      fullText += result.segments[i].text;
+    }
+  }
+
+  jstring jOutput = env->NewStringUTF(fullText.c_str());
+
+  // Free whisper result
+  ev_whisper_free_result(&result);
+
+  return jOutput;
+}
+
+// Free whisper context
+JNIEXPORT void JNICALL
+Java_com_edgeveda_edge_1veda_NativeEdgeVeda_whisperFreeNative(
+    JNIEnv *env, jobject clazz, jlong contextHandle) {
+  if (contextHandle == 0)
+    return;
+  ev_whisper_context ctx = reinterpret_cast<ev_whisper_context>(contextHandle);
+  ev_whisper_free(ctx);
+  LOGI("Whisper context freed");
+}
+
+// Check if whisper context is valid
+JNIEXPORT jboolean JNICALL
+Java_com_edgeveda_edge_1veda_NativeEdgeVeda_whisperIsValidNative(
+    JNIEnv *env, jobject clazz, jlong contextHandle) {
+  if (contextHandle == 0)
+    return JNI_FALSE;
+  ev_whisper_context ctx = reinterpret_cast<ev_whisper_context>(contextHandle);
+  return ev_whisper_is_valid(ctx) ? JNI_TRUE : JNI_FALSE;
+}
+
 } // extern "C"
