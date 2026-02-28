@@ -44,6 +44,8 @@ android {
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+        // Don't look for prebuilt JNI libs; CMake builds them via externalNativeBuild
+        main.jniLibs.srcDirs = []
     }
 
     defaultConfig {
@@ -109,34 +111,4 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation 'androidx.annotation:annotation:1.7.0'
     // Vulkan support deferred to Phase 7
-}
-
-// Copy native libraries to jniLibs
-task copyNativeLibs(type: Copy) {
-    from '../../core/build/android'
-    into 'src/main/jniLibs'
-    include '**/*.so'
-}
-
-// Generate CMake headers
-task generateHeaders(type: Exec) {
-    workingDir '../../core'
-    commandLine 'sh', '-c', 'mkdir -p include && echo "// Generated header placeholder" > include/edge_veda.h'
-    onlyIf { !file('../../core/include/edge_veda.h').exists() }
-}
-
-preBuild.dependsOn generateHeaders
-
-// Task to build native library
-task buildNative {
-    doLast {
-        println "Building Edge Veda native library for Android..."
-        println "Native library will be built via CMake during Gradle build"
-    }
-}
-
-tasks.whenTaskAdded { task ->
-    if (task.name == 'assembleRelease' || task.name == 'assembleDebug') {
-        task.dependsOn buildNative
-    }
 }
