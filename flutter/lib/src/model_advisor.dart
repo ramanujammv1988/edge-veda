@@ -80,23 +80,49 @@ class DeviceProfile {
     required this.tier,
   });
 
-  /// Safe memory budget in MB (iOS: 60%, macOS: 80% due to Unified Memory limits)
-  int get safeMemoryBudgetMB =>
-      (totalRamGB * 1024 * (Platform.isMacOS ? 0.80 : 0.60)).round();
+  /// Safe memory budget in MB (Android: 50%, iOS: 60%, macOS: 80%)
+  int get safeMemoryBudgetMB {
+    if (Platform.isAndroid) {
+      return (totalRamGB * 1024 * 0.50).round();
+    }
+    return (totalRamGB * 1024 * (Platform.isMacOS ? 0.80 : 0.60)).round();
+  }
 
   // ── Detection (sync, cached) ──
 
   static DeviceProfile? _cached;
 
-  static final _sysctlbyname = ffi.DynamicLibrary.process()
-      .lookupFunction<_SysctlByNameC, _SysctlByNameDart>('sysctlbyname');
+  // Lazily resolved — only accessed on Apple platforms (iOS/macOS).
+  // On Android, sysctlbyname does not exist in the process symbol table.
+  static _SysctlByNameDart? _sysctlbyname;
+
+  static _SysctlByNameDart _getSysctlbyname() {
+    _sysctlbyname ??= ffi.DynamicLibrary.process()
+        .lookupFunction<_SysctlByNameC, _SysctlByNameDart>('sysctlbyname');
+    return _sysctlbyname!;
+  }
 
   /// Detect current device hardware profile.
   ///
-  /// Sync call, cached after first invocation. On simulator or unknown
-  /// hardware, falls back to RAM-based tier detection via hw.memsize.
+  /// Sync call, cached after first invocation. On Android, returns a
+  /// conservative default profile (async detection via MethodChannel is
+  /// handled separately by TelemetryService). On simulator or unknown
+  /// Apple hardware, falls back to RAM-based tier detection via hw.memsize.
   static DeviceProfile detect() {
     if (_cached != null) return _cached!;
+
+    // Android: no sysctlbyname — return conservative default.
+    // Real device info is fetched async via TelemetryService MethodChannel.
+    if (Platform.isAndroid) {
+      _cached = const DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Android Device',
+        totalRamGB: 6.0,
+        chipName: 'ARM64',
+        tier: DeviceTier.medium,
+      );
+      return _cached!;
+    }
 
     String identifier;
     try {
@@ -172,19 +198,20 @@ class DeviceProfile {
     return _cached!;
   }
 
-  // ── FFI Helpers ──
+  // ── FFI Helpers (Apple platforms only) ──
 
   static String _readString(String name) {
+    final sysctl = _getSysctlbyname();
     final namePtr = name.toNativeUtf8();
     final sizePtr = calloc<ffi.Size>();
     try {
-      _sysctlbyname(namePtr.cast(), ffi.nullptr, sizePtr, ffi.nullptr, 0);
+      sysctl(namePtr.cast(), ffi.nullptr, sizePtr, ffi.nullptr, 0);
       final bufLen = sizePtr.value;
       if (bufLen == 0) return 'Unknown';
 
       final buf = calloc<ffi.Uint8>(bufLen);
       try {
-        _sysctlbyname(namePtr.cast(), buf.cast(), sizePtr, ffi.nullptr, 0);
+        sysctl(namePtr.cast(), buf.cast(), sizePtr, ffi.nullptr, 0);
         return buf.cast<Utf8>().toDartString();
       } finally {
         calloc.free(buf);
@@ -196,12 +223,13 @@ class DeviceProfile {
   }
 
   static int _readInt64(String name) {
+    final sysctl = _getSysctlbyname();
     final namePtr = name.toNativeUtf8();
     final sizePtr = calloc<ffi.Size>();
     final valPtr = calloc<ffi.Int64>();
     try {
       sizePtr.value = ffi.sizeOf<ffi.Int64>();
-      _sysctlbyname(namePtr.cast(), valPtr.cast(), sizePtr, ffi.nullptr, 0);
+      sysctl(namePtr.cast(), valPtr.cast(), sizePtr, ffi.nullptr, 0);
       return valPtr.value;
     } finally {
       calloc.free(valPtr);
