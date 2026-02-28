@@ -35,10 +35,12 @@
   2. CI fails predictably when platform builds break, without blocking unrelated changes
   3. Developer can run all tests locally with documented commands matching CI behavior
   4. Code coverage is visible on pull requests with trend information
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD
+- [ ] 05-01-PLAN.md — Fix NDK consistency, label optional CI jobs, configure Codecov
+- [ ] 05-02-PLAN.md — Register C++ tests, create integration smoke test, add streaming unit test
+- [ ] 05-03-PLAN.md — CI documentation and local test runner docs
 
 ### Phase 6: Release Validation
 **Goal**: Release artifacts have validated contracts and dry-run validation prevents broken releases
@@ -63,5 +65,5 @@ v1.0 complete → Phase 5 → Phase 6
 | 2. Native Android Layer (JNI & Kotlin) | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 3. Flutter Plugin Integration (Dart) | v1.0 | 1/1 | Complete | 2026-02-28 |
 | 4. Verification Loop | v1.0 | 2/2 | Complete | 2026-02-28 |
-| 5. CI/CD + Testing Infrastructure | v1.1 | 0/TBD | Not started | - |
+| 5. CI/CD + Testing Infrastructure | v1.1 | 0/3 | Planning complete | - |
 | 6. Release Validation | v1.1 | 0/TBD | Not started | - |
