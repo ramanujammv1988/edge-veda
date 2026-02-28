@@ -178,8 +178,8 @@ for ABI in "${ABIS[@]}"; do
     # Check JNI symbols (bridge_jni.cpp entry points)
     JNI_SYMBOLS=$(nm -D "$SO_FILE" 2>/dev/null | grep -c "Java_com_edgeveda" || echo "0")
     echo "JNI symbols: $JNI_SYMBOLS"
-    if [ "$JNI_SYMBOLS" -lt 3 ]; then
-        echo "WARNING: Expected at least 3 JNI symbols (found $JNI_SYMBOLS)"
+    if [ "$JNI_SYMBOLS" -lt 5 ]; then
+        echo "WARNING: Expected at least 5 JNI symbols (found $JNI_SYMBOLS)"
     fi
 
     # Check llama.cpp symbols
