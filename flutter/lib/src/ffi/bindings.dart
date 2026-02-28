@@ -244,6 +244,35 @@ final class EvMemoryStats extends Struct {
   external Array<Size> reserved;
 }
 
+/// Model metadata information
+/// Corresponds to: ev_model_info in edge_veda.h
+final class EvModelInfo extends Struct {
+  /// Model name
+  external Pointer<Utf8> name;
+
+  /// Model architecture
+  external Pointer<Utf8> architecture;
+
+  /// Number of parameters
+  @Uint64()
+  external int numParameters;
+
+  /// Context length
+  @Int32()
+  external int contextLength;
+
+  /// Embedding dimension
+  @Int32()
+  external int embeddingDim;
+
+  /// Number of layers
+  @Int32()
+  external int numLayers;
+
+  /// Reserved for future use
+  external Pointer<Void> reserved;
+}
+
 // =============================================================================
 // Streaming Types (matching edge_veda.h)
 // =============================================================================
@@ -635,6 +664,12 @@ typedef EvSetMemoryPressureCallbackDart =
 
 typedef EvMemoryCleanupNative = Int32 Function(Pointer<EvContextImpl> ctx);
 typedef EvMemoryCleanupDart = int Function(Pointer<EvContextImpl> ctx);
+
+// Model information
+typedef EvGetModelInfoNative =
+    Int32 Function(Pointer<EvContextImpl> ctx, Pointer<EvModelInfo> info);
+typedef EvGetModelInfoDart =
+    int Function(Pointer<EvContextImpl> ctx, Pointer<EvModelInfo> info);
 
 // Utility functions
 typedef EvSetVerboseNative = Void Function(Bool enable);
@@ -1036,6 +1071,13 @@ class EdgeVedaNativeBindings {
   late final EvMemoryCleanupDart evMemoryCleanup;
 
   // ---------------------------------------------------------------------------
+  // Model Information Functions
+  // ---------------------------------------------------------------------------
+
+  /// Get model metadata information
+  late final EvGetModelInfoDart evGetModelInfo;
+
+  // ---------------------------------------------------------------------------
   // Utility Functions
   // ---------------------------------------------------------------------------
 
@@ -1227,6 +1269,12 @@ class EdgeVedaNativeBindings {
     evMemoryCleanup = _dylib
         .lookupFunction<EvMemoryCleanupNative, EvMemoryCleanupDart>(
           'ev_memory_cleanup',
+        );
+
+    // Model information
+    evGetModelInfo = _dylib
+        .lookupFunction<EvGetModelInfoNative, EvGetModelInfoDart>(
+          'ev_get_model_info',
         );
 
     // Utility functions
