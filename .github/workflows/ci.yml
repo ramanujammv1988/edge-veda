@@ -443,9 +443,13 @@ jobs:
           name: core-macos-latest-release
           path: core/build
 
+      - name: Get Flutter Dependencies
+        working-directory: flutter/example
+        run: flutter pub get
+
       - name: Run Integration Tests
-        working-directory: flutter
-        run: flutter test integration_test || echo "Integration tests not configured yet"
+        working-directory: flutter/example
+        run: flutter test integration_test
 
   # Build Summary (depends only on required checks — see issue #32)
   build-summary:
