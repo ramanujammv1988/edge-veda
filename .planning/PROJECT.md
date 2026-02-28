@@ -8,10 +8,19 @@ Edge Veda is a Flutter plugin providing zero-cloud, on-device AI inference (LLM,
 
 Zero-cloud, on-device AI for Flutter applications natively utilizing hardware accelerators.
 
+## Current Milestone: v1.1 CI/CD + Quality
+
+**Goal:** Establish CI/CD pipeline, test suite, and release infrastructure to ensure quality gates before further feature expansion.
+
+**Target features:**
+- CI/CD pipeline with multi-platform build verification (#21)
+- Unit and integration test suite (#22)
+- CI green-by-default with deterministic vs device-only lane separation (#49)
+- Release artifact contract fix for XCFramework (#46)
+
 ## Constraints & Boundaries
 - **Must not break existing code:** iOS/macOS Metal logic remains intact. Android extensions are additive.
-- **Vulkan Deferred:** Android runs CPU-only execution (Vulkan deferred to v1.1 to reduce device fragmentation risk).
-- **Target Architecture:** arm64-v8a only for Android initial release (no 32-bit).
+- **Target Architecture:** arm64-v8a only for Android (no 32-bit).
 
 ## Requirements
 
@@ -20,26 +29,25 @@ Zero-cloud, on-device AI for Flutter applications natively utilizing hardware ac
 - ✓ [STT/TTS capabilities] — existing
 - ✓ [iOS / macOS Flutter Plugin framework] — existing
 - ✓ [Issue #12: Flutter Android support via pub.dev] — v1.0
-  - Android NDK CMake cross-compilation
-  - 9-function JNI bridge (4 LLM + 5 whisper STT)
-  - Telemetry MethodChannel with 7 Android API implementations
-  - 48/48 ev_* FFI bindings with DynamicLibrary.open
-  - Verified integration chain (C++ → JNI → Kotlin → Dart)
 
 ### Active
-
-(No active requirements — define via `/gsd:new-milestone`)
+- [ ] CI/CD pipeline for multi-platform builds and testing (#21)
+- [ ] Unit and integration test suite (#22)
+- [ ] CI green-by-default: deterministic vs device-only lanes (#49)
+- [ ] Release artifact contract alignment (#46)
 
 ### Out of Scope
-- Android GPU (Vulkan/OpenCL) support — deferred to v1.1
+- Android GPU (Vulkan/OpenCL) support — deferred to v1.2+
 - Battery level and free disk space telemetry — stubs returning -1
-- On-device runtime testing — verified statically, needs device validation
+- Developer experience improvements (tiered exports, metrics, canRun guard) — v1.2
+- Native SDKs (Swift SPM, Kotlin Maven) — v2.0+
 
 ## Context
 
 Shipped v1.0 with 1,136 lines added across 10 files on `feat/12-flutter-android` branch.
 Tech stack: C++ core (llama.cpp, whisper.cpp, stable-diffusion.cpp), Kotlin JNI bridge, Dart FFI, Flutter plugin.
 Platform support: iOS (Obj-C, Metal), macOS (Swift, Metal), Android (Kotlin, CPU-only).
+No CI/CD pipeline currently — builds and tests are manual.
 
 ## Key Decisions
 
@@ -51,6 +59,7 @@ Platform support: iOS (Obj-C, Metal), macOS (Swift, Metal), Android (Kotlin, CPU
 | Thermal returns -1 on Android | No direct API equivalent to iOS NSProcessInfo.ThermalState | ✓ Good — graceful degradation |
 | ActivityManager.MemoryInfo.availMem | Android equivalent of iOS os_proc_available_memory | ✓ Good — consistent with iOS pattern |
 | Whisper segments concatenated | Simpler JNI return, timing info not needed for basic STT | ✓ Good — avoids complex array marshaling |
+| v1.1 = CI/CD before features | Quality gates before expanding feature surface | — Pending |
 
 ---
-*Last updated: 2026-02-28 after v1.0 milestone*
+*Last updated: 2026-02-28 after v1.1 milestone start*
