@@ -1612,6 +1612,222 @@ void main() {
       expect(androidLib, contains('.so'));
       expect(iosFramework, contains('.framework'));
     });
+
+    test('DynamicLibrary.open is ABI-agnostic — same .so name for all ABIs',
+        () {
+      // On Android, DynamicLibrary.open('libedge_veda.so') resolves to
+      // the correct ABI directory automatically (e.g. lib/arm64-v8a/,
+      // lib/armeabi-v7a/, lib/x86_64/). The Dart code never specifies the ABI.
+      const libName = 'libedge_veda.so';
+      for (final abi in ['arm64-v8a', 'armeabi-v7a', 'x86_64']) {
+        final expectedPath = 'lib/$abi/$libName';
+        expect(expectedPath, contains(libName));
+        expect(expectedPath, startsWith('lib/'));
+      }
+    });
+  });
+
+  // =========================================================================
+  // 22a. Android Multi-ABI Build Configuration
+  // =========================================================================
+
+  group('Android Multi-ABI — build.gradle abiFilters', () {
+    test('build.gradle declares arm64-v8a, armeabi-v7a, and x86_64', () {
+      final gradleFile = File(
+          '${Directory.current.path}/android/build.gradle');
+      if (gradleFile.existsSync()) {
+        final content = gradleFile.readAsStringSync();
+        expect(content, contains('arm64-v8a'));
+        expect(content, contains('armeabi-v7a'));
+        expect(content, contains('x86_64'));
+      }
+    });
+
+    test('build.gradle abiFilters lists exactly 3 ABIs', () {
+      final gradleFile = File(
+          '${Directory.current.path}/android/build.gradle');
+      if (gradleFile.existsSync()) {
+        final content = gradleFile.readAsStringSync();
+        // Match the abiFilters line
+        final match = RegExp(r"abiFilters\s+'([^']+)'(?:\s*,\s*'([^']+)')*")
+            .firstMatch(content);
+        expect(match, isNotNull, reason: 'abiFilters declaration not found');
+
+        // Extract all quoted ABI strings from the abiFilters line
+        final abiLine = content.split('\n').firstWhere(
+            (l) => l.contains('abiFilters'), orElse: () => '');
+        final abis = RegExp(r"'([^']+)'")
+            .allMatches(abiLine)
+            .map((m) => m.group(1)!)
+            .toList();
+        expect(abis, hasLength(3));
+        expect(abis, containsAll(['arm64-v8a', 'armeabi-v7a', 'x86_64']));
+      }
+    });
+
+    test('build.gradle does not include x86 (32-bit Intel)', () {
+      final gradleFile = File(
+          '${Directory.current.path}/android/build.gradle');
+      if (gradleFile.existsSync()) {
+        final content = gradleFile.readAsStringSync();
+        final abiLine = content.split('\n').firstWhere(
+            (l) => l.contains('abiFilters'), orElse: () => '');
+        final abis = RegExp(r"'([^']+)'")
+            .allMatches(abiLine)
+            .map((m) => m.group(1)!)
+            .toList();
+        // x86_64 is included, but bare 'x86' (32-bit) should not be
+        expect(abis, isNot(contains('x86')));
+      }
+    });
+
+    test('build.gradle does not hardcode GGML_LLAMAFILE (now ABI-conditional)',
+        () {
+      final gradleFile = File(
+          '${Directory.current.path}/android/build.gradle');
+      if (gradleFile.existsSync()) {
+        final content = gradleFile.readAsStringSync();
+        expect(content, isNot(contains('-DGGML_LLAMAFILE')),
+            reason: 'GGML_LLAMAFILE should be set in CMakeLists.txt '
+                'per-ABI, not hardcoded in build.gradle');
+      }
+    });
+
+    test('packagingOptions wildcard covers all ABIs', () {
+      final gradleFile = File(
+          '${Directory.current.path}/android/build.gradle');
+      if (gradleFile.existsSync()) {
+        final content = gradleFile.readAsStringSync();
+        // lib/*/ glob matches any ABI subdirectory
+        expect(content, contains("lib/*/libedge_veda.so"));
+        expect(content, contains("lib/*/libc++_shared.so"));
+      }
+    });
+  });
+
+  group('Android Multi-ABI — CMakeLists.txt SIMD configuration', () {
+    test('CMakeLists.txt has ABI-conditional NEON logic', () {
+      // CMakeLists.txt is two directories up from the flutter/ working dir
+      final cmakeFile = File(
+          '${Directory.current.path}/../core/CMakeLists.txt');
+      if (cmakeFile.existsSync()) {
+        final content = cmakeFile.readAsStringSync();
+        // Must check ANDROID_ABI for NEON
+        expect(content, contains('ANDROID_ABI'));
+        expect(content, contains('GGML_NEON ON'));
+        expect(content, contains('GGML_NEON OFF'));
+      }
+    });
+
+    test('CMakeLists.txt enables NEON for ARM ABIs only', () {
+      final cmakeFile = File(
+          '${Directory.current.path}/../core/CMakeLists.txt');
+      if (cmakeFile.existsSync()) {
+        final content = cmakeFile.readAsStringSync();
+        // ARM targets (arm64-v8a, armeabi-v7a) get NEON ON
+        expect(content, contains('arm64-v8a'));
+        expect(content, contains('armeabi-v7a'));
+        // NEON ON only in the ARM branch
+        final armBranch = RegExp(
+          r'if\(ANDROID_ABI\s+STREQUAL\s+"arm64-v8a"\s+OR\s+ANDROID_ABI\s+STREQUAL\s+"armeabi-v7a"\)',
+        ).hasMatch(content);
+        expect(armBranch, true,
+            reason: 'ARM ABI conditional for NEON not found');
+      }
+    });
+
+    test('CMakeLists.txt disables NEON for x86_64', () {
+      final cmakeFile = File(
+          '${Directory.current.path}/../core/CMakeLists.txt');
+      if (cmakeFile.existsSync()) {
+        final content = cmakeFile.readAsStringSync();
+        // x86_64 branch must set NEON OFF (would fail with <arm_neon.h>)
+        final x86Branch = RegExp(
+          r'elseif\(ANDROID_ABI\s+STREQUAL\s+"x86_64"\)',
+        ).hasMatch(content);
+        expect(x86Branch, true,
+            reason: 'x86_64 ABI conditional branch not found');
+      }
+    });
+
+    test('CMakeLists.txt enables LLAMAFILE for x86_64 only', () {
+      final cmakeFile = File(
+          '${Directory.current.path}/../core/CMakeLists.txt');
+      if (cmakeFile.existsSync()) {
+        final content = cmakeFile.readAsStringSync();
+        // LLAMAFILE provides optimized x86 SIMD kernels
+        expect(content, contains('GGML_LLAMAFILE ON'));
+        expect(content, contains('GGML_LLAMAFILE OFF'));
+      }
+    });
+
+    test('CMakeLists.txt disables OpenMP for all Android ABIs', () {
+      final cmakeFile = File(
+          '${Directory.current.path}/../core/CMakeLists.txt');
+      if (cmakeFile.existsSync()) {
+        final content = cmakeFile.readAsStringSync();
+        // OpenMP OFF is outside the ABI conditional — applies to all ABIs
+        expect(content,
+            contains('set(GGML_OPENMP OFF CACHE BOOL "" FORCE)'));
+      }
+    });
+  });
+
+  group('Android Multi-ABI — toolchain per-ABI flags', () {
+    test('android.toolchain.cmake has arm64-v8a flags', () {
+      final toolchainFile = File(
+          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+      if (toolchainFile.existsSync()) {
+        final content = toolchainFile.readAsStringSync();
+        expect(content, contains('arm64-v8a'));
+        expect(content, contains('-march=armv8-a'));
+      }
+    });
+
+    test('android.toolchain.cmake has armeabi-v7a flags', () {
+      final toolchainFile = File(
+          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+      if (toolchainFile.existsSync()) {
+        final content = toolchainFile.readAsStringSync();
+        expect(content, contains('armeabi-v7a'));
+        expect(content, contains('-march=armv7-a'));
+        expect(content, contains('-mfpu=neon'));
+      }
+    });
+
+    test('android.toolchain.cmake has x86_64 flags', () {
+      final toolchainFile = File(
+          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+      if (toolchainFile.existsSync()) {
+        final content = toolchainFile.readAsStringSync();
+        expect(content, contains('x86_64'));
+        expect(content, contains('-msse4.2'));
+      }
+    });
+
+    test('android.toolchain.cmake sets NEON define only for ARM', () {
+      final toolchainFile = File(
+          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+      if (toolchainFile.existsSync()) {
+        final content = toolchainFile.readAsStringSync();
+        // GGML_USE_NEON should appear in arm64-v8a and armeabi-v7a blocks
+        expect(content, contains('GGML_USE_NEON=1'));
+        // But x86_64 block should NOT have NEON defines
+        final x86Block = _extractBlock(content, 'x86_64');
+        expect(x86Block, isNot(contains('NEON')),
+            reason: 'x86_64 block should not reference NEON');
+      }
+    });
+
+    test('android.toolchain.cmake defaults to arm64-v8a when ABI not set',
+        () {
+      final toolchainFile = File(
+          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+      if (toolchainFile.existsSync()) {
+        final content = toolchainFile.readAsStringSync();
+        expect(content, contains('set(ANDROID_ABI "arm64-v8a")'));
+      }
+    });
   });
 
   // =========================================================================
@@ -1704,4 +1920,25 @@ String _mapTrimLevel(int level) {
   if (level >= 15) return 'running_critical'; // TRIM_MEMORY_RUNNING_CRITICAL
   if (level >= 10) return 'running_low'; // TRIM_MEMORY_RUNNING_LOW
   return 'normal';
+}
+
+/// Extract the CMake elseif block for a given ABI keyword.
+/// Returns the text between the elseif(... "abi") and the next elseif/endif.
+String _extractBlock(String content, String abiKeyword) {
+  final lines = content.split('\n');
+  final buffer = StringBuffer();
+  var inBlock = false;
+  for (final line in lines) {
+    if (line.contains(abiKeyword)) {
+      inBlock = true;
+      continue;
+    }
+    if (inBlock && (line.contains('elseif(') || line.contains('endif()'))) {
+      break;
+    }
+    if (inBlock) {
+      buffer.writeln(line);
+    }
+  }
+  return buffer.toString();
 }

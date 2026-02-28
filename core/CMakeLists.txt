@@ -111,11 +111,16 @@ if(ANDROID)
     # that don't ship libgomp. CPU backend works fine without it.
     set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 
-    # Disable LLAMAFILE - x86 optimizations not needed on ARM64
-    set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
-
-    # Enable NEON (ARM SIMD) - automatic on arm64 but be explicit
-    set(GGML_NEON ON CACHE BOOL "" FORCE)
+    # ABI-aware SIMD configuration
+    if(ANDROID_ABI STREQUAL "arm64-v8a" OR ANDROID_ABI STREQUAL "armeabi-v7a")
+        # ARM targets: enable NEON (SIMD), disable LLAMAFILE (x86-only)
+        set(GGML_NEON ON CACHE BOOL "" FORCE)
+        set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+    elseif(ANDROID_ABI STREQUAL "x86_64")
+        # x86_64: disable NEON (would include <arm_neon.h>), enable LLAMAFILE (x86 SIMD)
+        set(GGML_NEON OFF CACHE BOOL "" FORCE)
+        set(GGML_LLAMAFILE ON CACHE BOOL "" FORCE)
+    endif()
 endif()
 
 # Include llama.cpp as subdirectory
