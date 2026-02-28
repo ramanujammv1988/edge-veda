@@ -84,6 +84,11 @@ set(EDGE_VEDA_SOURCES
     src/image_engine.cpp
 )
 
+# JNI bridge for Android (exposes ev_* functions to Kotlin/Java layer)
+if(ANDROID)
+    list(APPEND EDGE_VEDA_SOURCES src/bridge_jni.cpp)
+endif()
+
 # Header files
 set(EDGE_VEDA_HEADERS
     include/edge_veda.h
