@@ -55,7 +55,7 @@ class SoakTestService extends ChangeNotifier {
   DateTime? _startTime;
   bool _isManaged = true;
 
-  static const _testDuration = Duration(minutes: 30);
+  static const _testDuration = Duration(minutes: 35);
   static const _telemetryInterval = Duration(seconds: 2);
   static const _telemetryChannel =
       MethodChannel('com.edgeveda.edge_veda/telemetry');
@@ -121,7 +121,7 @@ class SoakTestService extends ChangeNotifier {
           mmprojPath: _mmprojPath!,
           numThreads: Platform.isMacOS ? 6 : 4,
           contextSize: 4096,
-          useGpu: true,
+          useGpu: Platform.isIOS,
         );
         if (Platform.isMacOS) {
           _statusMessage = 'Initializing screen capture...';
@@ -453,6 +453,11 @@ class SoakTestService extends ChangeNotifier {
     _screenCaptureTimer = null;
   }
 
+  /// Grab-and-stop: start the camera stream, capture ONE frame, immediately
+  /// stop the stream to eliminate GC pressure during inference. On CPU-only
+  /// devices the camera plugin delivers 30 CameraImage objects/sec even when
+  /// frames are unused; each ~500 KB YUV allocation triggers GC that competes
+  /// with the native inference thread for CPU time.
   void _startCameraStream() {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
@@ -461,7 +466,7 @@ class SoakTestService extends ChangeNotifier {
     _cameraController!.startImageStream((CameraImage image) {
       if (!_isRunning) return;
 
-      final rgb = Platform.isIOS
+      var rgb = Platform.isIOS
           ? CameraUtils.convertBgraToRgb(
               image.planes[0].bytes,
               image.width,
@@ -478,7 +483,27 @@ class SoakTestService extends ChangeNotifier {
               image.planes[1].bytesPerPixel ?? 1,
             );
 
-      _frameQueue.enqueue(rgb, image.width, image.height);
+      // Stop the camera stream immediately after grabbing one frame.
+      // This frees CPU and eliminates GC pressure while inference runs.
+      _stopCameraStream();
+
+      // Downscale to 128px longest side for CPU-only devices.
+      // CLIP patch count scales quadratically (720x480 → ~1734 patches;
+      // 128x85 → ~54 patches → ~1000x faster attention on CPU).
+      var frameWidth = image.width;
+      var frameHeight = image.height;
+      const maxDim = 128;
+      final longest = frameWidth > frameHeight ? frameWidth : frameHeight;
+      if (longest > maxDim) {
+        final scale = maxDim / longest;
+        final newW = (frameWidth * scale).round();
+        final newH = (frameHeight * scale).round();
+        rgb = CameraUtils.resizeRgb(rgb, frameWidth, frameHeight, newW, newH);
+        frameWidth = newW;
+        frameHeight = newH;
+      }
+
+      _frameQueue.enqueue(rgb, frameWidth, frameHeight);
       unawaited(_processNextFrame());
     });
   }
@@ -578,13 +603,18 @@ class SoakTestService extends ChangeNotifier {
       _totalLatencyMs += totalInferenceMs;
       _avgLatencyMs = _totalLatencyMs / _frameCount;
       _lastDescription = result.description;
+      debugPrint('[SoakTest] frame=$_frameCount '
+          'latency=${totalInferenceMs.toStringAsFixed(0)}ms '
+          'encode=${result.imageEncodeMs.toStringAsFixed(0)}ms '
+          'tokens=${result.generatedTokens}');
       notifyListeners();
-    } catch (_) {
-      // Ignore transient per-frame failures while keeping soak active.
+    } catch (e) {
+      debugPrint('[SoakTest] frame error: $e');
     } finally {
       _frameQueue.markDone();
-      if (_frameQueue.hasPending && _isRunning) {
-        unawaited(_processNextFrame());
+      if (_isRunning) {
+        // Restart camera to grab the next frame (grab-and-stop pattern).
+        _startCameraStream();
       }
     }
   }

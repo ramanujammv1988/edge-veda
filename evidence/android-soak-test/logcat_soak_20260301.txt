@@ -1,0 +1,22 @@
+== EdgeVeda Android Vision Soak Test - Logcat Evidence ==
+== Device: OnePlus A6000 (SD845), Android 11 (SDK 30), arm64-v8a ==
+== Date: 2026-03-01, PID: 28535 ==
+
+03-01 20:59:27.730 I/flutter (28535): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+03-01 20:59:27.741 I/flutter (28535): [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+03-01 20:59:27.833 I/flutter (28535): The Dart VM service is listening on http://127.0.0.1:42397/Pw_VYX31CNo=/
+03-01 21:00:48.505 I/flutter (28535): [SoakTest] matched model: smolvlm2-500m-video-instruct-q8 (mmprojMissing=false)
+03-01 21:00:48.510 I/flutter (28535): [SoakTest] model=/data/user/0/com.edgeveda.edge_veda_example/files/edge_veda_models/smolvlm2-500m-video-instruct-q8.gguf
+03-01 21:00:48.510 I/flutter (28535): [SoakTest] mmproj=/data/user/0/com.edgeveda.edge_veda_example/files/edge_veda_models/smolvlm2-500m-mmproj-f16.gguf
+03-01 21:00:50.404 I/flutter (28535): [Scheduler] Adaptive budget (balanced) set. Enforcement deferred until warm-up completes.
+03-01 21:10:50.869 I/flutter (28535): [SoakTest] frame error: TimeoutException after 0:10:00.000000: Future not completed
+03-01 21:11:55.997 I/flutter (28535): [SoakTest] frame=1 latency=64714ms encode=552586ms tokens=99
+03-01 21:21:56.287 I/flutter (28535): [SoakTest] frame error: TimeoutException after 0:10:00.000000: Future not completed
+03-01 21:23:01.756 I/flutter (28535): [SoakTest] frame=2 latency=65144ms encode=553094ms tokens=198
+03-01 21:33:02.063 I/flutter (28535): [SoakTest] frame error: TimeoutException after 0:10:00.000000: Future not completed
+03-01 21:34:03.599 I/flutter (28535): [SoakTest] frame=3 latency=61240ms encode=549121ms tokens=297
+
+== Process Stats (via adb shell top) ==
+CPU: 375-452% (4+ cores active during inference)
+RSS: 1.2 GB (model ~690 MB + KV cache + Dart overhead)
+Free RAM: 137-439 MB (device 7.8 GB total)
