@@ -7,8 +7,8 @@
 
 ### CI/CD Pipeline (#21, #49)
 
-- [ ] **CICD-01**: NDK version is consistent across ci.yml, build-android.sh, and build.gradle (currently r26c vs r27c)
-- [ ] **CICD-02**: Platform builds (iOS, Android) are clearly labeled as optional non-blocking lanes with descriptive names
+- [x] **CICD-01**: NDK version is consistent across ci.yml, build-android.sh, and build.gradle (currently r26c vs r27c)
+- [x] **CICD-02**: Platform builds (iOS, Android) are clearly labeled as optional non-blocking lanes with descriptive names
 - [ ] **CICD-03**: CI workflow documentation defines which checks are required vs optional and why
 - [ ] **CICD-04**: Integration tests execute on main branch merges with Flutter integration_test package
 
@@ -16,7 +16,7 @@
 
 - [ ] **TEST-01**: Dart unit tests cover core functionality with mocked FFI calls (model loading, memory estimation, streaming)
 - [ ] **TEST-02**: C++ core tests run and pass via ctest on both Ubuntu and macOS in CI
-- [ ] **TEST-03**: Flutter test coverage is uploaded to Codecov and visible on PRs
+- [x] **TEST-03**: Flutter test coverage is uploaded to Codecov and visible on PRs
 - [ ] **TEST-04**: Test runner scripts are documented for local development (how to run tests locally)
 
 ### Release Infrastructure (#46)
@@ -46,13 +46,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CICD-01 | Phase 5 | Pending |
-| CICD-02 | Phase 5 | Pending |
+| CICD-01 | Phase 5 | Complete |
+| CICD-02 | Phase 5 | Complete |
 | CICD-03 | Phase 5 | Pending |
 | CICD-04 | Phase 5 | Pending |
 | TEST-01 | Phase 5 | Pending |
 | TEST-02 | Phase 5 | Pending |
-| TEST-03 | Phase 5 | Pending |
+| TEST-03 | Phase 5 | Complete |
 | TEST-04 | Phase 5 | Pending |
 | RLSE-01 | Phase 6 | Pending |
 | RLSE-02 | Phase 6 | Pending |
