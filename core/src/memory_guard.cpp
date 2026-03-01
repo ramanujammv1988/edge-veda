@@ -505,9 +505,11 @@ size_t memory_guard_get_recommended_limit() {
     constexpr size_t ANDROID_DEFAULT_LIMIT = 800 * 1024 * 1024; // 800MB
 
     // If device has lots of RAM (12GB+), allow more
-    if (total >= 12ULL * 1024 * 1024 * 1024) {
+    // Cast to uint64_t for correct comparison on 32-bit ARM (armeabi-v7a)
+    uint64_t total64 = static_cast<uint64_t>(total);
+    if (total64 >= 12ULL * 1024 * 1024 * 1024) {
         return 1200 * 1024 * 1024; // 1.2GB on flagship devices
-    } else if (total >= 8ULL * 1024 * 1024 * 1024) {
+    } else if (total64 >= 8ULL * 1024 * 1024 * 1024) {
         return 1000 * 1024 * 1024; // 1GB on 8GB devices
     } else {
         return ANDROID_DEFAULT_LIMIT; // 800MB on 4-6GB devices

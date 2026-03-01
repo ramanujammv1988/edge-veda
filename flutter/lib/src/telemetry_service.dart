@@ -117,6 +117,66 @@ class TelemetryService {
     }
   }
 
+  /// Get chip/SoC name (e.g. "Snapdragon 845", "Apple A12").
+  ///
+  /// On Android returns [Build.SOC_MODEL] (API 31+) or [Build.HARDWARE].
+  /// On iOS/macOS returns "Apple Silicon". Returns empty string on error.
+  Future<String> getChipName() async {
+    try {
+      final result =
+          await _methodChannel.invokeMethod<String>('getChipName');
+      return result ?? '';
+    } on PlatformException {
+      return '';
+    } on MissingPluginException {
+      return '';
+    }
+  }
+
+  /// Get total physical RAM in bytes.
+  ///
+  /// On Android uses [ActivityManager.MemoryInfo.totalMem].
+  /// Returns 0 on error.
+  Future<int> getTotalMemory() async {
+    try {
+      final result =
+          await _methodChannel.invokeMethod<int>('getTotalMemory');
+      return result ?? 0;
+    } on PlatformException {
+      return 0;
+    } on MissingPluginException {
+      return 0;
+    }
+  }
+
+  /// Whether the device has a dedicated neural engine / NPU.
+  ///
+  /// Returns true on iOS/macOS (ANE), false on Android.
+  Future<bool> hasNeuralEngine() async {
+    try {
+      final result =
+          await _methodChannel.invokeMethod<bool>('hasNeuralEngine');
+      return result ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Get GPU backend label (e.g. "Metal GPU", "Vulkan 1.2", "CPU").
+  Future<String> getGpuBackend() async {
+    try {
+      final result =
+          await _methodChannel.invokeMethod<String>('getGpuBackend');
+      return result ?? 'CPU';
+    } on PlatformException {
+      return 'CPU';
+    } on MissingPluginException {
+      return 'CPU';
+    }
+  }
+
   /// Stream of thermal state changes pushed from iOS.
   ///
   /// Each event is a [Map] with keys:

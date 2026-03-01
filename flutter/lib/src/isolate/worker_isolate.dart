@@ -201,9 +201,11 @@ class StreamingWorker {
     _commandPort!.send(NextTokenCommand());
 
     try {
-      // Token latency can exceed 30s for long-context RAG prompts; keep a larger
-      // timeout to avoid false failures in offline/on-device mode.
-      return await completer.future.timeout(const Duration(seconds: 120));
+      // Token latency can exceed 30s for long-context RAG prompts, and prefill
+      // on slower devices (e.g. Snapdragon 845 @ ~0.1 tok/s) can exceed 2min
+      // for multi-turn conversations. Use 5-minute timeout to avoid false
+      // failures in offline/on-device mode.
+      return await completer.future.timeout(const Duration(seconds: 300));
     } finally {
       await subscription.cancel();
     }

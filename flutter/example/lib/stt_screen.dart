@@ -471,25 +471,25 @@ class _SttScreenState extends State<SttScreen>
 
   /// Empty transcript placeholder
   Widget _buildEmptyTranscript() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.mic_none,
             size: 64,
             color: AppTheme.border,
           ),
-          SizedBox(height: 16),
-          Text(
+          const SizedBox(height: 16),
+          const Text(
             'Tap to start recording',
             style: TextStyle(
               color: AppTheme.textTertiary,
               fontSize: 16,
             ),
           ),
-          SizedBox(height: 8),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Audio is processed entirely on your device',
             style: TextStyle(
               color: AppTheme.textTertiary,
@@ -649,9 +649,10 @@ class _SttScreenState extends State<SttScreen>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color:
-                            (_isRecording ? AppTheme.danger : AppTheme.accent)
-                                .withValues(alpha: 0.4),
+                        color: (_isRecording
+                                ? AppTheme.danger
+                                : AppTheme.accent)
+                            .withValues(alpha: 0.4),
                         blurRadius: _isRecording ? 20 : 12,
                         spreadRadius: _isRecording ? 2 : 0,
                       ),

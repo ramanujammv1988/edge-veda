@@ -174,8 +174,8 @@ class VisionWorker {
     );
 
     try {
-      // Vision inference can take 2-5 seconds per frame
-      return await completer.future.timeout(const Duration(seconds: 30));
+      // Vision inference can take 3-5min on CPU-only Android (first call)
+      return await completer.future.timeout(const Duration(seconds: 600));
     } finally {
       await subscription.cancel();
     }

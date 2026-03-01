@@ -1,6 +1,7 @@
 import 'dart:ffi' as ffi;
 import 'dart:io' show Platform;
 
+import 'package:edge_veda/edge_veda.dart';
 import 'package:ffi/ffi.dart';
 
 /// Shared device/platform metadata used across example screens.
@@ -9,6 +10,35 @@ class DeviceStatusInfo {
 
   static String? _cachedModel;
   static double? _cachedMemory;
+  static String? _cachedChip;
+  static bool? _cachedHasNeuralEngine;
+  static String? _cachedBackend;
+  static bool _androidInitDone = false;
+
+  /// Async initialization for Android — fetches chip, memory, neural engine,
+  /// and GPU backend via TelemetryService MethodChannel. No-op on iOS/macOS.
+  static Future<void> initAndroid() async {
+    if (_androidInitDone || !Platform.isAndroid) return;
+    _androidInitDone = true;
+    final telemetry = TelemetryService();
+    final results = await Future.wait([
+      telemetry.getChipName(),
+      telemetry.getTotalMemory(),
+      telemetry.hasNeuralEngine(),
+      telemetry.getGpuBackend(),
+    ]);
+    final chipName = results[0] as String;
+    final totalMem = results[1] as int;
+    final neural = results[2] as bool;
+    final backend = results[3] as String;
+
+    if (chipName.isNotEmpty) _cachedChip = chipName;
+    if (totalMem > 0) {
+      _cachedMemory = totalMem / (1024 * 1024 * 1024);
+    }
+    _cachedHasNeuralEngine = neural;
+    if (backend.isNotEmpty) _cachedBackend = backend;
+  }
 
   static _SysctlByNameDart? get _sysctl {
     if (!Platform.isMacOS && !Platform.isIOS) {
@@ -47,6 +77,7 @@ class DeviceStatusInfo {
       Platform.isMacOS ? '$platformLabel ($model)' : platformLabel;
 
   static String get chip {
+    if (_cachedChip != null) return _cachedChip!;
     if (Platform.isIOS || Platform.isMacOS) return 'Apple Silicon';
     return 'Unknown';
   }
@@ -68,13 +99,18 @@ class DeviceStatusInfo {
   static String get memoryString {
     final gb = memoryGB;
     if (gb <= 0) return 'Unknown';
-    return '${gb.toStringAsFixed(2)} GB';
+    return '${gb.toStringAsFixed(1)} GB';
   }
 
-  static bool get hasNeuralEngine => Platform.isIOS || Platform.isMacOS;
+  static bool get hasNeuralEngine {
+    if (_cachedHasNeuralEngine != null) return _cachedHasNeuralEngine!;
+    return Platform.isIOS || Platform.isMacOS;
+  }
 
-  static String get backendLabel =>
-      (Platform.isIOS || Platform.isMacOS) ? 'Metal GPU' : 'CPU';
+  static String get backendLabel {
+    if (_cachedBackend != null) return _cachedBackend!;
+    return (Platform.isIOS || Platform.isMacOS) ? 'Metal GPU' : 'CPU';
+  }
 
   static String _readString(String name) {
     final sysctl = _sysctl;

@@ -2,6 +2,7 @@ import 'dart:io' show File, Platform;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:edge_veda/edge_veda.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -15,6 +16,10 @@ import 'soak_test_service.dart';
 
 /// Whether the camera package is supported on this platform.
 bool get _cameraSupported => Platform.isIOS || Platform.isAndroid;
+
+/// Max pixels on the longest side before downscaling for inference.
+/// Prevents OOM on high-res phone photos (typically 4032x3024).
+const int _maxInferenceDimension = 768;
 
 /// Vision tab with continuous camera scanning and description overlay.
 ///
@@ -131,7 +136,8 @@ class _VisionScreenState extends State<VisionScreen>
         mmprojPath: _mmprojPath!,
         numThreads: 4,
         contextSize: 4096,
-        useGpu: true,
+        // Android build is CPU-only (Vulkan disabled); GPU only on iOS (Metal).
+        useGpu: Platform.isIOS,
       );
 
       if (!mounted) return;
@@ -158,9 +164,12 @@ class _VisionScreenState extends State<VisionScreen>
     }
   }
 
-  /// macOS: Pick an image file and run single-shot vision inference.
+  /// Pick an image file and run single-shot vision inference.
   Future<void> _pickAndDescribeImage() async {
     if (_isProcessingFile || !_isVisionReady) return;
+
+    // Pause camera so it doesn't compete with file inference
+    _stopCameraStream();
 
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -191,18 +200,29 @@ class _VisionScreenState extends State<VisionScreen>
 
       // byteData is RGBA, convert to RGB
       final rgba = byteData.buffer.asUint8List();
-      final rgb = Uint8List(width * height * 3);
+      var rgb = Uint8List(width * height * 3);
       for (var i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
         rgb[j] = rgba[i];
         rgb[j + 1] = rgba[i + 1];
         rgb[j + 2] = rgba[i + 2];
       }
 
+      // Downscale high-res images to avoid OOM on mobile
+      var inferWidth = width;
+      var inferHeight = height;
+      final longest = width > height ? width : height;
+      if (longest > _maxInferenceDimension) {
+        final scale = _maxInferenceDimension / longest;
+        inferWidth = (width * scale).round();
+        inferHeight = (height * scale).round();
+        rgb = CameraUtils.resizeRgb(rgb, width, height, inferWidth, inferHeight);
+      }
+
       final sw = Stopwatch()..start();
       final desc = await _visionWorker.describeFrame(
         rgb,
-        width,
-        height,
+        inferWidth,
+        inferHeight,
         prompt: ChatTemplate.format(
           template: ChatTemplateFormat.generic,
           messages: [
@@ -240,6 +260,103 @@ class _VisionScreenState extends State<VisionScreen>
       }
       debugPrint('File vision error: $e');
     }
+  }
+
+  /// Test vision with bundled evidence/1.jpeg asset (no camera needed).
+  Future<void> _testWithBundledImage() async {
+    if (_isProcessingFile || !_isVisionReady) return;
+
+    // Pause camera while testing with file
+    _stopCameraStream();
+
+    setState(() {
+      _isProcessingFile = true;
+      _description = null;
+      _statusMessage = 'Analyzing test image...';
+    });
+
+    try {
+      final byteData = await rootBundle.load('assets/test_vision.jpeg');
+      final bytes = byteData.buffer.asUint8List();
+
+      final image = await decodeImageFromList(bytes);
+      final width = image.width;
+      final height = image.height;
+
+      final imageByteData = await image.toByteData();
+      if (imageByteData == null) throw Exception('Failed to read image data');
+
+      // Convert RGBA to RGB888
+      final rgba = imageByteData.buffer.asUint8List();
+      var rgb = Uint8List(width * height * 3);
+      for (var i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+        rgb[j] = rgba[i];
+        rgb[j + 1] = rgba[i + 1];
+        rgb[j + 2] = rgba[i + 2];
+      }
+
+      // Downscale high-res images to avoid OOM on mobile
+      var inferWidth = width;
+      var inferHeight = height;
+      final longest = width > height ? width : height;
+      if (longest > _maxInferenceDimension) {
+        final scale = _maxInferenceDimension / longest;
+        inferWidth = (width * scale).round();
+        inferHeight = (height * scale).round();
+        rgb = CameraUtils.resizeRgb(rgb, width, height, inferWidth, inferHeight);
+      }
+
+      final sw = Stopwatch()..start();
+      final desc = await _visionWorker.describeFrame(
+        rgb,
+        inferWidth,
+        inferHeight,
+        prompt: ChatTemplate.format(
+          template: ChatTemplateFormat.generic,
+          messages: [
+            ChatMessage(
+              role: ChatRole.user,
+              content: 'Describe what you see in this image in one sentence.',
+              timestamp: DateTime.now(),
+            ),
+          ],
+        ),
+        maxTokens: 100,
+      );
+      sw.stop();
+      SoakTestService.instance.recordExternalInference(
+        source: 'Vision test file',
+        latencyMs: sw.elapsedMilliseconds,
+        generatedTokens: desc.generatedTokens,
+        workloadId: WorkloadId.vision,
+      );
+
+      if (mounted) {
+        setState(() {
+          _selectedImageBytes = bytes;
+          _description = desc.description;
+          _isProcessingFile = false;
+          _statusMessage = 'Test complete';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessingFile = false;
+          _statusMessage = _userFacingErrorMessage(e);
+        });
+      }
+      debugPrint('Test file vision error: $e');
+    }
+  }
+
+  /// Resume camera stream after file test.
+  void _resumeCamera() {
+    setState(() {
+      _selectedImageBytes = null;
+      _description = null;
+    });
+    _startCameraStream();
   }
 
   String _userFacingErrorMessage(Object error) {
@@ -490,8 +607,9 @@ class _VisionScreenState extends State<VisionScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // Full-screen camera preview
-          if (_cameraController != null &&
+          // Full-screen camera preview (hidden when test image is shown)
+          if (_selectedImageBytes == null &&
+              _cameraController != null &&
               _cameraController!.value.isInitialized)
             SizedBox.expand(
               child: FittedBox(
@@ -500,6 +618,18 @@ class _VisionScreenState extends State<VisionScreen>
                   width: _cameraController!.value.previewSize!.height,
                   height: _cameraController!.value.previewSize!.width,
                   child: CameraPreview(_cameraController!),
+                ),
+              ),
+            ),
+
+          // Test image preview (replaces camera when active)
+          if (_selectedImageBytes != null)
+            SizedBox.expand(
+              child: Container(
+                color: Colors.black,
+                child: Center(
+                  child: Image.memory(_selectedImageBytes!,
+                      fit: BoxFit.contain),
                 ),
               ),
             ),
@@ -524,8 +654,10 @@ class _VisionScreenState extends State<VisionScreen>
                   child: Row(
                     children: [
                       // Pulsing indicator when processing
-                      if (_frameQueue.isProcessing) const _PulsingDot(),
-                      if (_frameQueue.isProcessing) const SizedBox(width: 12),
+                      if (_frameQueue.isProcessing || _isProcessingFile)
+                        const _PulsingDot(),
+                      if (_frameQueue.isProcessing || _isProcessingFile)
+                        const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           _description!,
@@ -536,6 +668,79 @@ class _VisionScreenState extends State<VisionScreen>
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Processing indicator for file test
+          if (_isProcessingFile)
+            const Center(
+              child: CircularProgressIndicator(color: AppTheme.accent),
+            ),
+
+          // Top-right action buttons
+          if (_isVisionReady)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // "Test with File" button (visible when camera is active)
+                      if (_selectedImageBytes == null && !_isProcessingFile)
+                        ElevatedButton.icon(
+                          onPressed: _testWithBundledImage,
+                          icon: const Icon(Icons.image, size: 18),
+                          label: const Text('Test with File'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accent,
+                            foregroundColor: AppTheme.background,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      // "Pick Image" button (visible when camera is active)
+                      if (_selectedImageBytes == null && !_isProcessingFile) ...[
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: _pickAndDescribeImage,
+                          icon: const Icon(Icons.photo_library, size: 18),
+                          label: const Text('Pick Image'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accent,
+                            foregroundColor: AppTheme.background,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                      // "Resume Camera" button (visible when test image shown)
+                      if (_selectedImageBytes != null)
+                        ElevatedButton.icon(
+                          onPressed: _resumeCamera,
+                          icon: const Icon(Icons.camera_alt, size: 18),
+                          label: const Text('Resume Camera'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accent,
+                            foregroundColor: AppTheme.background,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
