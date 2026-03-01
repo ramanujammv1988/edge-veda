@@ -222,27 +222,29 @@ jobs:
         with:
           key: android-release
 
-      - name: Build Android AAR
+      - name: Build Android Shared Libraries
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: make build-android
+        run: ./scripts/build-android.sh --clean --release
 
-      - name: Check AAR Size
+      - name: Check Library Sizes
         run: |
-          if [ -f "build/android/edgeveda.aar" ]; then
-            ls -lh build/android/edgeveda.aar
-            size=$(stat -c%s build/android/edgeveda.aar)
-            if [ $size -gt 52428800 ]; then
-              echo "ERROR: AAR is too large: $size bytes (>50MB)"
+          echo "Android shared library sizes:"
+          find build/android/jniLibs -name "*.so" -exec ls -lh {} \;
+          # Fail if any .so exceeds 20MB
+          find build/android/jniLibs -name "libedge_veda.so" | while read file; do
+            size=$(stat -c%s "$file")
+            if [ $size -gt 20971520 ]; then
+              echo "ERROR: $file is too large: $size bytes (>20MB)"
               exit 1
             fi
-          fi
+          done
 
-      - name: Upload Android AAR
+      - name: Upload Android Libraries
         uses: actions/upload-artifact@v4
         with:
-          name: android-aar
-          path: build/android/edgeveda.aar
+          name: android-jnilibs
+          path: build/android/jniLibs/
           retention-days: 7
 
   # Flutter Analysis and Tests
