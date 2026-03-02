@@ -33,7 +33,7 @@ class MockTelemetryService extends TelemetryService {
   final int _freeDiskSpace;
 
   MockTelemetryService({int freeDiskSpace = -1})
-      : _freeDiskSpace = freeDiskSpace;
+    : _freeDiskSpace = freeDiskSpace;
 
   @override
   Future<int> getFreeDiskSpace() async => _freeDiskSpace;
@@ -161,45 +161,47 @@ void main() {
       manager.dispose();
     });
 
-    test('restarts download when server returns 200 despite Range header',
-        () async {
-      final manager = TestableModelManager(tmpDir);
-      manager.telemetryService = MockTelemetryService(freeDiskSpace: -1);
+    test(
+      'restarts download when server returns 200 despite Range header',
+      () async {
+        final manager = TestableModelManager(tmpDir);
+        manager.telemetryService = MockTelemetryService(freeDiskSpace: -1);
 
-      final model = _testModel(sizeBytes: 4);
-      final modelPath = await manager.getModelPath(model.id);
-      final tempFile = File('$modelPath.tmp');
+        final model = _testModel(sizeBytes: 4);
+        final modelPath = await manager.getModelPath(model.id);
+        final tempFile = File('$modelPath.tmp');
 
-      // Create a .tmp file with stale data
-      tempFile.writeAsBytesSync([0x41, 0x41, 0x41, 0x41]); // 4 bytes
+        // Create a .tmp file with stale data
+        tempFile.writeAsBytesSync([0x41, 0x41, 0x41, 0x41]); // 4 bytes
 
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      server.listen((request) {
-        // Server ignores Range header and returns full 200
-        request.response.statusCode = 200;
-        request.response.headers.contentLength = 4;
-        request.response.add([0x43, 0x43, 0x43, 0x43]); // "CCCC" fresh
-        request.response.close();
-      });
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        server.listen((request) {
+          // Server ignores Range header and returns full 200
+          request.response.statusCode = 200;
+          request.response.headers.contentLength = 4;
+          request.response.add([0x43, 0x43, 0x43, 0x43]); // "CCCC" fresh
+          request.response.close();
+        });
 
-      final localModel = _testModel(
-        sizeBytes: 4,
-        downloadUrl: 'http://localhost:${server.port}/test-model.gguf',
-      );
+        final localModel = _testModel(
+          sizeBytes: 4,
+          downloadUrl: 'http://localhost:${server.port}/test-model.gguf',
+        );
 
-      final resultPath = await manager.downloadModel(
-        localModel,
-        verifyChecksum: false,
-      );
+        final resultPath = await manager.downloadModel(
+          localModel,
+          verifyChecksum: false,
+        );
 
-      // Final file should contain only the new data (not appended)
-      final finalFile = File(resultPath);
-      final contents = finalFile.readAsBytesSync();
-      expect(contents, [0x43, 0x43, 0x43, 0x43]);
+        // Final file should contain only the new data (not appended)
+        final finalFile = File(resultPath);
+        final contents = finalFile.readAsBytesSync();
+        expect(contents, [0x43, 0x43, 0x43, 0x43]);
 
-      await server.close(force: true);
-      manager.dispose();
-    });
+        await server.close(force: true);
+        manager.dispose();
+      },
+    );
 
     test('progress includes resumed bytes', () async {
       final manager = TestableModelManager(tmpDir);
@@ -325,54 +327,57 @@ void main() {
       manager.dispose();
     });
 
-    test('checksum mismatch after resume throws ModelValidationException',
-        () async {
-      final manager = TestableModelManager(tmpDir);
-      manager.telemetryService = MockTelemetryService(freeDiskSpace: -1);
+    test(
+      'checksum mismatch after resume throws ModelValidationException',
+      () async {
+        final manager = TestableModelManager(tmpDir);
+        manager.telemetryService = MockTelemetryService(freeDiskSpace: -1);
 
-      final partA = List.filled(4, 0x41);
-      final partB = List.filled(4, 0x42);
+        final partA = List.filled(4, 0x41);
+        final partB = List.filled(4, 0x42);
 
-      final model = _testModel(sizeBytes: 8);
-      final modelPath = await manager.getModelPath(model.id);
-      final tempFile = File('$modelPath.tmp');
+        final model = _testModel(sizeBytes: 8);
+        final modelPath = await manager.getModelPath(model.id);
+        final tempFile = File('$modelPath.tmp');
 
-      tempFile.writeAsBytesSync(partA);
+        tempFile.writeAsBytesSync(partA);
 
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      // Keep server alive to handle retry attempts from _downloadWithRetry
-      server.listen((request) {
-        final rangeHeader = request.headers.value('Range');
-        if (rangeHeader != null) {
-          // Resume request
-          request.response.statusCode = 206;
-          request.response.headers.contentLength = 4;
-          request.response.add(partB);
-        } else {
-          // Fresh download (after .tmp deleted by checksum failure)
-          request.response.statusCode = 200;
-          request.response.headers.contentLength = 8;
-          request.response.add([...partA, ...partB]);
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        // Keep server alive to handle retry attempts from _downloadWithRetry
+        server.listen((request) {
+          final rangeHeader = request.headers.value('Range');
+          if (rangeHeader != null) {
+            // Resume request
+            request.response.statusCode = 206;
+            request.response.headers.contentLength = 4;
+            request.response.add(partB);
+          } else {
+            // Fresh download (after .tmp deleted by checksum failure)
+            request.response.statusCode = 200;
+            request.response.headers.contentLength = 8;
+            request.response.add([...partA, ...partB]);
+          }
+          request.response.close();
+        });
+
+        final localModel = _testModel(
+          sizeBytes: 8,
+          downloadUrl: 'http://localhost:${server.port}/test-model.gguf',
+          checksum:
+              'deadbeef0000000000000000000000000000000000000000000000000000dead',
+        );
+
+        try {
+          await manager.downloadModel(localModel);
+          fail('Should have thrown');
+        } on ModelValidationException {
+          // Expected
         }
-        request.response.close();
-      });
 
-      final localModel = _testModel(
-        sizeBytes: 8,
-        downloadUrl: 'http://localhost:${server.port}/test-model.gguf',
-        checksum: 'deadbeef0000000000000000000000000000000000000000000000000000dead',
-      );
-
-      try {
-        await manager.downloadModel(localModel);
-        fail('Should have thrown');
-      } on ModelValidationException {
-        // Expected
-      }
-
-      await server.close(force: true);
-      manager.dispose();
-    });
+        await server.close(force: true);
+        manager.dispose();
+      },
+    );
   });
 
   // ── Disk space tests ────────────────────────────────────────────────────
@@ -493,8 +498,7 @@ void main() {
   group('importModel', () {
     test('copies file to model cache atomically', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         final sourceContent = List.filled(256, 0x41);
@@ -546,8 +550,7 @@ void main() {
 
     test('verifies SHA256 checksum on success', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         final sourceContent = [0x48, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello"
@@ -575,8 +578,7 @@ void main() {
 
     test('throws ModelValidationException on checksum mismatch', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         final sourceContent = List.filled(64, 0x43);
@@ -590,10 +592,7 @@ void main() {
         );
 
         try {
-          await manager.importModel(
-            model,
-            sourcePath: sourceFile.path,
-          );
+          await manager.importModel(model, sourcePath: sourceFile.path);
           fail('Should have thrown');
         } on ModelValidationException catch (e) {
           expect(e.message, 'SHA256 checksum mismatch');
@@ -630,8 +629,7 @@ void main() {
 
     test('throws ModelValidationException on size mismatch', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         // Create source file with 100 bytes
@@ -661,8 +659,7 @@ void main() {
 
     test('reports progress via onProgress callback', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         // Create a 256KB source file
@@ -697,8 +694,7 @@ void main() {
 
     test('cleans up .tmp on checksum verification error', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         final sourceContent = List.filled(128, 0x46);
@@ -712,10 +708,7 @@ void main() {
         );
 
         try {
-          await manager.importModel(
-            model,
-            sourcePath: sourceFile.path,
-          );
+          await manager.importModel(model, sourcePath: sourceFile.path);
           fail('Should have thrown');
         } on ModelValidationException {
           // Expected
@@ -732,55 +725,52 @@ void main() {
       }
     });
 
-    test('re-validates cached model when checksum provided and cached exists',
-        () async {
-      final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+    test(
+      're-validates cached model when checksum provided and cached exists',
+      () async {
+        final manager = TestableModelManager(tmpDir);
+        final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
-      try {
-        final correctContent = [0x47, 0x6F, 0x6F, 0x64]; // "Good"
-        final correctChecksum = _sha256Hex(correctContent);
+        try {
+          final correctContent = [0x47, 0x6F, 0x6F, 0x64]; // "Good"
+          final correctChecksum = _sha256Hex(correctContent);
 
-        // Pre-create a cached model with WRONG content
-        final model = _testModel(
-          sizeBytes: correctContent.length,
-          checksum: correctChecksum,
-        );
-        final modelPath = await manager.getModelPath(model.id);
-        File(modelPath).writeAsBytesSync([0x42, 0x61, 0x64, 0x21]); // "Bad!"
+          // Pre-create a cached model with WRONG content
+          final model = _testModel(
+            sizeBytes: correctContent.length,
+            checksum: correctChecksum,
+          );
+          final modelPath = await manager.getModelPath(model.id);
+          File(modelPath).writeAsBytesSync([0x42, 0x61, 0x64, 0x21]); // "Bad!"
 
-        // Source has correct content
-        final sourceFile = File('${sourceDir.path}/model.gguf');
-        sourceFile.writeAsBytesSync(correctContent);
+          // Source has correct content
+          final sourceFile = File('${sourceDir.path}/model.gguf');
+          sourceFile.writeAsBytesSync(correctContent);
 
-        final resultPath = await manager.importModel(
-          model,
-          sourcePath: sourceFile.path,
-        );
+          final resultPath = await manager.importModel(
+            model,
+            sourcePath: sourceFile.path,
+          );
 
-        // Should have replaced bad cache with correct content
-        expect(File(resultPath).readAsBytesSync(), correctContent);
-      } finally {
-        sourceDir.deleteSync(recursive: true);
-        manager.dispose();
-      }
-    });
+          // Should have replaced bad cache with correct content
+          expect(File(resultPath).readAsBytesSync(), correctContent);
+        } finally {
+          sourceDir.deleteSync(recursive: true);
+          manager.dispose();
+        }
+      },
+    );
 
     test('saves metadata after successful import', () async {
       final manager = TestableModelManager(tmpDir);
-      final sourceDir =
-          Directory.systemTemp.createTempSync('import_source_');
+      final sourceDir = Directory.systemTemp.createTempSync('import_source_');
 
       try {
         final sourceContent = List.filled(50, 0x48);
         final sourceFile = File('${sourceDir.path}/model.gguf');
         sourceFile.writeAsBytesSync(sourceContent);
 
-        final model = _testModel(
-          id: 'import-test-model',
-          sizeBytes: 50,
-        );
+        final model = _testModel(id: 'import-test-model', sizeBytes: 50);
 
         await manager.importModel(
           model,

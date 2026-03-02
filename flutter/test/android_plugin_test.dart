@@ -36,102 +36,102 @@ void main() {
       log = [];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        log.add(call);
-        switch (call.method) {
-          case 'getThermalState':
-            return 0; // nominal (mapped from Android THERMAL_STATUS_NONE)
-          case 'getBatteryLevel':
-            return 0.72; // 72%
-          case 'getBatteryState':
-            return 2; // charging
-          case 'getMemoryRSS':
-            return 209715200; // 200 MB (from /proc/self/status VmRSS)
-          case 'getAvailableMemory':
-            return 3221225472; // 3 GB
-          case 'getFreeDiskSpace':
-            return 32212254720; // 30 GB
-          case 'isLowPowerMode':
-            return true; // battery saver enabled
-          case 'requestMicrophonePermission':
-            return true;
-          case 'checkDetectivePermissions':
-            return {'photos': 'notDetermined', 'calendar': 'notDetermined'};
-          case 'requestDetectivePermissions':
-            return {'photos': 'granted', 'calendar': 'granted'};
-          case 'getPhotoInsights':
-            return {
-              'totalPhotos': 142,
-              'dayOfWeekCounts': {
-                'Sun': 15,
-                'Mon': 20,
-                'Tue': 22,
-                'Wed': 18,
-                'Thu': 25,
-                'Fri': 30,
-                'Sat': 12,
-              },
-              'hourOfDayCounts': {'8': 10, '12': 25, '18': 40},
-              'topLocations': [
-                {'lat': 37.77, 'lon': -122.42, 'count': 50},
-              ],
-              'photosWithLocation': 80,
-              'samplePhotos': [
-                {
-                  'timestamp': 1700000000000,
-                  'hasLocation': true,
-                  'lat': 37.77,
-                  'lon': -122.42,
-                },
-              ],
-            };
-          case 'getCalendarInsights':
-            return {
-              'totalEvents': 45,
-              'dayOfWeekCounts': {
-                'Sun': 0,
-                'Mon': 8,
-                'Tue': 10,
-                'Wed': 9,
-                'Thu': 8,
-                'Fri': 7,
-                'Sat': 3,
-              },
-              'hourOfDayCounts': {'9': 15, '14': 20, '16': 10},
-              'meetingMinutesPerWeekday': {
-                'Sun': 0.0,
-                'Mon': 240.0,
-                'Tue': 300.0,
-                'Wed': 270.0,
-                'Thu': 240.0,
-                'Fri': 210.0,
-                'Sat': 90.0,
-              },
-              'averageDurationMinutes': 30,
-              'sampleEvents': [
-                {
-                  'startTimestamp': 1700000000000,
-                  'endTimestamp': 1700001800000,
-                  'title': 'Team standup',
-                  'durationMinutes': 30,
-                },
-              ],
-            };
-          case 'shareFile':
-            return true;
-          case 'getDeviceModel':
-            return 'Pixel 8 Pro';
-          case 'getChipName':
-            return 'Tensor G3';
-          case 'getTotalMemory':
-            return 12884901888; // 12 GB
-          case 'hasNeuralEngine':
-            return false;
-          case 'getGpuBackend':
-            return 'Vulkan';
-          default:
-            return null;
-        }
-      });
+            log.add(call);
+            switch (call.method) {
+              case 'getThermalState':
+                return 0; // nominal (mapped from Android THERMAL_STATUS_NONE)
+              case 'getBatteryLevel':
+                return 0.72; // 72%
+              case 'getBatteryState':
+                return 2; // charging
+              case 'getMemoryRSS':
+                return 209715200; // 200 MB (from /proc/self/status VmRSS)
+              case 'getAvailableMemory':
+                return 3221225472; // 3 GB
+              case 'getFreeDiskSpace':
+                return 32212254720; // 30 GB
+              case 'isLowPowerMode':
+                return true; // battery saver enabled
+              case 'requestMicrophonePermission':
+                return true;
+              case 'checkDetectivePermissions':
+                return {'photos': 'notDetermined', 'calendar': 'notDetermined'};
+              case 'requestDetectivePermissions':
+                return {'photos': 'granted', 'calendar': 'granted'};
+              case 'getPhotoInsights':
+                return {
+                  'totalPhotos': 142,
+                  'dayOfWeekCounts': {
+                    'Sun': 15,
+                    'Mon': 20,
+                    'Tue': 22,
+                    'Wed': 18,
+                    'Thu': 25,
+                    'Fri': 30,
+                    'Sat': 12,
+                  },
+                  'hourOfDayCounts': {'8': 10, '12': 25, '18': 40},
+                  'topLocations': [
+                    {'lat': 37.77, 'lon': -122.42, 'count': 50},
+                  ],
+                  'photosWithLocation': 80,
+                  'samplePhotos': [
+                    {
+                      'timestamp': 1700000000000,
+                      'hasLocation': true,
+                      'lat': 37.77,
+                      'lon': -122.42,
+                    },
+                  ],
+                };
+              case 'getCalendarInsights':
+                return {
+                  'totalEvents': 45,
+                  'dayOfWeekCounts': {
+                    'Sun': 0,
+                    'Mon': 8,
+                    'Tue': 10,
+                    'Wed': 9,
+                    'Thu': 8,
+                    'Fri': 7,
+                    'Sat': 3,
+                  },
+                  'hourOfDayCounts': {'9': 15, '14': 20, '16': 10},
+                  'meetingMinutesPerWeekday': {
+                    'Sun': 0.0,
+                    'Mon': 240.0,
+                    'Tue': 300.0,
+                    'Wed': 270.0,
+                    'Thu': 240.0,
+                    'Fri': 210.0,
+                    'Sat': 90.0,
+                  },
+                  'averageDurationMinutes': 30,
+                  'sampleEvents': [
+                    {
+                      'startTimestamp': 1700000000000,
+                      'endTimestamp': 1700001800000,
+                      'title': 'Team standup',
+                      'durationMinutes': 30,
+                    },
+                  ],
+                };
+              case 'shareFile':
+                return true;
+              case 'getDeviceModel':
+                return 'Pixel 8 Pro';
+              case 'getChipName':
+                return 'Tensor G3';
+              case 'getTotalMemory':
+                return 12884901888; // 12 GB
+              case 'hasNeuralEngine':
+                return false;
+              case 'getGpuBackend':
+                return 'Vulkan';
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -142,8 +142,9 @@ void main() {
     // --- Thermal ---
 
     test('getThermalState returns integer (0=nominal)', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getThermalState');
+      final result = await telemetryChannel.invokeMethod<int>(
+        'getThermalState',
+      );
       expect(result, 0);
       expect(log.last.method, 'getThermalState');
     });
@@ -151,50 +152,61 @@ void main() {
     // --- Battery ---
 
     test('getBatteryLevel returns double (0.0-1.0)', () async {
-      final result =
-          await telemetryChannel.invokeMethod<double>('getBatteryLevel');
+      final result = await telemetryChannel.invokeMethod<double>(
+        'getBatteryLevel',
+      );
       expect(result, 0.72);
       expect(log.last.method, 'getBatteryLevel');
     });
 
     test('getBatteryState returns integer (2=charging)', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getBatteryState');
+      final result = await telemetryChannel.invokeMethod<int>(
+        'getBatteryState',
+      );
       expect(result, 2);
       expect(log.last.method, 'getBatteryState');
     });
 
     // --- Memory ---
 
-    test('getMemoryRSS returns integer bytes (VmRSS from /proc/self/status)',
-        () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getMemoryRSS');
-      expect(result, 209715200); // 200 MB
-    });
+    test(
+      'getMemoryRSS returns integer bytes (VmRSS from /proc/self/status)',
+      () async {
+        final result = await telemetryChannel.invokeMethod<int>('getMemoryRSS');
+        expect(result, 209715200); // 200 MB
+      },
+    );
 
-    test('getAvailableMemory returns integer bytes (ActivityManager)', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getAvailableMemory');
-      expect(result, 3221225472); // 3 GB
-    });
+    test(
+      'getAvailableMemory returns integer bytes (ActivityManager)',
+      () async {
+        final result = await telemetryChannel.invokeMethod<int>(
+          'getAvailableMemory',
+        );
+        expect(result, 3221225472); // 3 GB
+      },
+    );
 
     // --- Disk ---
 
     test('getFreeDiskSpace returns integer bytes (StatFs)', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getFreeDiskSpace');
+      final result = await telemetryChannel.invokeMethod<int>(
+        'getFreeDiskSpace',
+      );
       expect(result, 32212254720); // 30 GB
     });
 
     // --- Power ---
 
-    test('isLowPowerMode returns bool (PowerManager.isPowerSaveMode)',
-        () async {
-      final result =
-          await telemetryChannel.invokeMethod<bool>('isLowPowerMode');
-      expect(result, true);
-    });
+    test(
+      'isLowPowerMode returns bool (PowerManager.isPowerSaveMode)',
+      () async {
+        final result = await telemetryChannel.invokeMethod<bool>(
+          'isLowPowerMode',
+        );
+        expect(result, true);
+      },
+    );
   });
 
   // =========================================================================
@@ -208,22 +220,22 @@ void main() {
       log = [];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        log.add(call);
-        switch (call.method) {
-          case 'getDeviceModel':
-            return 'Pixel 8 Pro';
-          case 'getChipName':
-            return 'Tensor G3'; // Build.SOC_MODEL on API 31+
-          case 'getTotalMemory':
-            return 12884901888; // 12 GB
-          case 'hasNeuralEngine':
-            return false; // Always false on Android
-          case 'getGpuBackend':
-            return 'Vulkan'; // Vulkan 1.2+ detected
-          default:
-            return null;
-        }
-      });
+            log.add(call);
+            switch (call.method) {
+              case 'getDeviceModel':
+                return 'Pixel 8 Pro';
+              case 'getChipName':
+                return 'Tensor G3'; // Build.SOC_MODEL on API 31+
+              case 'getTotalMemory':
+                return 12884901888; // 12 GB
+              case 'hasNeuralEngine':
+                return false; // Always false on Android
+              case 'getGpuBackend':
+                return 'Vulkan'; // Vulkan 1.2+ detected
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -232,32 +244,33 @@ void main() {
     });
 
     test('getDeviceModel returns Build.MODEL string', () async {
-      final result =
-          await telemetryChannel.invokeMethod<String>('getDeviceModel');
+      final result = await telemetryChannel.invokeMethod<String>(
+        'getDeviceModel',
+      );
       expect(result, 'Pixel 8 Pro');
     });
 
     test('getChipName returns SOC_MODEL (API 31+) or HARDWARE', () async {
-      final result =
-          await telemetryChannel.invokeMethod<String>('getChipName');
+      final result = await telemetryChannel.invokeMethod<String>('getChipName');
       expect(result, 'Tensor G3');
     });
 
     test('getTotalMemory returns MemoryInfo.totalMem in bytes', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getTotalMemory');
+      final result = await telemetryChannel.invokeMethod<int>('getTotalMemory');
       expect(result, 12884901888); // 12 GB
     });
 
     test('hasNeuralEngine always returns false on Android', () async {
-      final result =
-          await telemetryChannel.invokeMethod<bool>('hasNeuralEngine');
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'hasNeuralEngine',
+      );
       expect(result, false);
     });
 
     test('getGpuBackend returns Vulkan or CPU', () async {
-      final result =
-          await telemetryChannel.invokeMethod<String>('getGpuBackend');
+      final result = await telemetryChannel.invokeMethod<String>(
+        'getGpuBackend',
+      );
       expect(result, isIn(['Vulkan', 'CPU']));
     });
   });
@@ -270,17 +283,17 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getChipName':
-            return 'qcom'; // Build.HARDWARE fallback for API < 31
-          case 'getGpuBackend':
-            return 'CPU'; // No Vulkan 1.2
-          case 'getTotalMemory':
-            return 4294967296; // 4 GB
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getChipName':
+                return 'qcom'; // Build.HARDWARE fallback for API < 31
+              case 'getGpuBackend':
+                return 'CPU'; // No Vulkan 1.2
+              case 'getTotalMemory':
+                return 4294967296; // 4 GB
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -289,20 +302,19 @@ void main() {
     });
 
     test('getChipName falls back to Build.HARDWARE on older API', () async {
-      final result =
-          await telemetryChannel.invokeMethod<String>('getChipName');
+      final result = await telemetryChannel.invokeMethod<String>('getChipName');
       expect(result, 'qcom');
     });
 
     test('getGpuBackend returns CPU when no Vulkan 1.2', () async {
-      final result =
-          await telemetryChannel.invokeMethod<String>('getGpuBackend');
+      final result = await telemetryChannel.invokeMethod<String>(
+        'getGpuBackend',
+      );
       expect(result, 'CPU');
     });
 
     test('getTotalMemory returns smaller value on budget device', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getTotalMemory');
+      final result = await telemetryChannel.invokeMethod<int>('getTotalMemory');
       expect(result, 4294967296); // 4 GB
       expect(result! / (1024 * 1024 * 1024), closeTo(4.0, 0.01));
     });
@@ -316,13 +328,13 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'requestMicrophonePermission':
-            return true;
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'requestMicrophonePermission':
+                return true;
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -331,8 +343,9 @@ void main() {
     });
 
     test('requestMicrophonePermission returns true when granted', () async {
-      final result = await telemetryChannel
-          .invokeMethod<bool>('requestMicrophonePermission');
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'requestMicrophonePermission',
+      );
       expect(result, true);
     });
   });
@@ -341,13 +354,13 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'requestMicrophonePermission':
-            return false; // user denied
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'requestMicrophonePermission':
+                return false; // user denied
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -356,8 +369,9 @@ void main() {
     });
 
     test('requestMicrophonePermission returns false when denied', () async {
-      final result = await telemetryChannel
-          .invokeMethod<bool>('requestMicrophonePermission');
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'requestMicrophonePermission',
+      );
       expect(result, false);
     });
   });
@@ -366,15 +380,15 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'checkDetectivePermissions':
-            return {'photos': 'notDetermined', 'calendar': 'notDetermined'};
-          case 'requestDetectivePermissions':
-            return {'photos': 'granted', 'calendar': 'granted'};
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'checkDetectivePermissions':
+                return {'photos': 'notDetermined', 'calendar': 'notDetermined'};
+              case 'requestDetectivePermissions':
+                return {'photos': 'granted', 'calendar': 'granted'};
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -383,16 +397,18 @@ void main() {
     });
 
     test('checkDetectivePermissions returns status map', () async {
-      final result = await telemetryChannel
-          .invokeMethod<Map>('checkDetectivePermissions');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'checkDetectivePermissions',
+      );
       expect(result, isNotNull);
       expect(result!['photos'], 'notDetermined');
       expect(result['calendar'], 'notDetermined');
     });
 
     test('requestDetectivePermissions returns granted map', () async {
-      final result = await telemetryChannel
-          .invokeMethod<Map>('requestDetectivePermissions');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'requestDetectivePermissions',
+      );
       expect(result, isNotNull);
       expect(result!['photos'], 'granted');
       expect(result['calendar'], 'granted');
@@ -403,15 +419,15 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'checkDetectivePermissions':
-            return {'photos': 'denied', 'calendar': 'denied'};
-          case 'requestDetectivePermissions':
-            return {'photos': 'denied', 'calendar': 'denied'};
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'checkDetectivePermissions':
+                return {'photos': 'denied', 'calendar': 'denied'};
+              case 'requestDetectivePermissions':
+                return {'photos': 'denied', 'calendar': 'denied'};
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -420,19 +436,23 @@ void main() {
     });
 
     test('checkDetectivePermissions returns denied when no activity', () async {
-      final result = await telemetryChannel
-          .invokeMethod<Map>('checkDetectivePermissions');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'checkDetectivePermissions',
+      );
       expect(result!['photos'], 'denied');
       expect(result['calendar'], 'denied');
     });
 
-    test('requestDetectivePermissions returns denied when user rejects',
-        () async {
-      final result = await telemetryChannel
-          .invokeMethod<Map>('requestDetectivePermissions');
-      expect(result!['photos'], 'denied');
-      expect(result['calendar'], 'denied');
-    });
+    test(
+      'requestDetectivePermissions returns denied when user rejects',
+      () async {
+        final result = await telemetryChannel.invokeMethod<Map>(
+          'requestDetectivePermissions',
+        );
+        expect(result!['photos'], 'denied');
+        expect(result['calendar'], 'denied');
+      },
+    );
   });
 
   // =========================================================================
@@ -443,49 +463,44 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getPhotoInsights':
-            return {
-              'totalPhotos': 250,
-              'dayOfWeekCounts': {
-                'Sun': 30,
-                'Mon': 35,
-                'Tue': 40,
-                'Wed': 38,
-                'Thu': 42,
-                'Fri': 45,
-                'Sat': 20,
-              },
-              'hourOfDayCounts': {
-                '8': 15,
-                '12': 35,
-                '18': 60,
-                '20': 25,
-              },
-              'topLocations': [
-                {'lat': 37.77, 'lon': -122.42, 'count': 80},
-                {'lat': 34.05, 'lon': -118.24, 'count': 40},
-              ],
-              'photosWithLocation': 120,
-              'samplePhotos': [
-                {
-                  'timestamp': 1700000000000,
-                  'hasLocation': true,
-                  'lat': 37.77,
-                  'lon': -122.42,
-                },
-                {
-                  'timestamp': 1700100000000,
-                  'hasLocation': false,
-                  'lat': null,
-                  'lon': null,
-                },
-              ],
-            };
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getPhotoInsights':
+                return {
+                  'totalPhotos': 250,
+                  'dayOfWeekCounts': {
+                    'Sun': 30,
+                    'Mon': 35,
+                    'Tue': 40,
+                    'Wed': 38,
+                    'Thu': 42,
+                    'Fri': 45,
+                    'Sat': 20,
+                  },
+                  'hourOfDayCounts': {'8': 15, '12': 35, '18': 60, '20': 25},
+                  'topLocations': [
+                    {'lat': 37.77, 'lon': -122.42, 'count': 80},
+                    {'lat': 34.05, 'lon': -118.24, 'count': 40},
+                  ],
+                  'photosWithLocation': 120,
+                  'samplePhotos': [
+                    {
+                      'timestamp': 1700000000000,
+                      'hasLocation': true,
+                      'lat': 37.77,
+                      'lon': -122.42,
+                    },
+                    {
+                      'timestamp': 1700100000000,
+                      'hasLocation': false,
+                      'lat': null,
+                      'lon': null,
+                    },
+                  ],
+                };
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -494,32 +509,42 @@ void main() {
     });
 
     test('getPhotoInsights returns complete photo analysis', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getPhotoInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getPhotoInsights',
+      );
       expect(result, isNotNull);
       expect(result!['totalPhotos'], 250);
       expect(result['photosWithLocation'], 120);
     });
 
     test('getPhotoInsights dayOfWeekCounts has all 7 days', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getPhotoInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getPhotoInsights',
+      );
       final dow = result!['dayOfWeekCounts'] as Map;
       expect(dow.length, 7);
-      expect(dow.keys, containsAll(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']));
+      expect(
+        dow.keys,
+        containsAll(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
+      );
     });
 
     test('getPhotoInsights topLocations are sorted by count', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getPhotoInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getPhotoInsights',
+      );
       final locations = result!['topLocations'] as List;
       expect(locations.length, 2);
-      expect((locations[0] as Map)['count'], greaterThan((locations[1] as Map)['count'] as int));
+      expect(
+        (locations[0] as Map)['count'],
+        greaterThan((locations[1] as Map)['count'] as int),
+      );
     });
 
     test('getPhotoInsights samplePhotos contains location data', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getPhotoInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getPhotoInsights',
+      );
       final samples = result!['samplePhotos'] as List;
       expect(samples.length, 2);
 
@@ -537,20 +562,20 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getPhotoInsights':
-            return {
-              'totalPhotos': 0,
-              'dayOfWeekCounts': <String, int>{},
-              'hourOfDayCounts': <String, int>{},
-              'topLocations': <Map<String, dynamic>>[],
-              'photosWithLocation': 0,
-              'samplePhotos': <Map<String, dynamic>>[],
-            };
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getPhotoInsights':
+                return {
+                  'totalPhotos': 0,
+                  'dayOfWeekCounts': <String, int>{},
+                  'hourOfDayCounts': <String, int>{},
+                  'topLocations': <Map<String, dynamic>>[],
+                  'photosWithLocation': 0,
+                  'samplePhotos': <Map<String, dynamic>>[],
+                };
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -559,8 +584,9 @@ void main() {
     });
 
     test('getPhotoInsights returns empty result without permission', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getPhotoInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getPhotoInsights',
+      );
       expect(result!['totalPhotos'], 0);
       expect((result['dayOfWeekCounts'] as Map).isEmpty, true);
       expect((result['samplePhotos'] as List).isEmpty, true);
@@ -571,43 +597,43 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getCalendarInsights':
-            return {
-              'totalEvents': 60,
-              'dayOfWeekCounts': {
-                'Sun': 0,
-                'Mon': 12,
-                'Tue': 14,
-                'Wed': 12,
-                'Thu': 10,
-                'Fri': 8,
-                'Sat': 4,
-              },
-              'hourOfDayCounts': {'9': 20, '10': 15, '14': 18, '16': 7},
-              'meetingMinutesPerWeekday': {
-                'Sun': 0.0,
-                'Mon': 360.0,
-                'Tue': 420.0,
-                'Wed': 360.0,
-                'Thu': 300.0,
-                'Fri': 240.0,
-                'Sat': 120.0,
-              },
-              'averageDurationMinutes': 30,
-              'sampleEvents': [
-                {
-                  'startTimestamp': 1700000000000,
-                  'endTimestamp': 1700001800000,
-                  'title': 'Sprint planning',
-                  'durationMinutes': 30,
-                },
-              ],
-            };
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getCalendarInsights':
+                return {
+                  'totalEvents': 60,
+                  'dayOfWeekCounts': {
+                    'Sun': 0,
+                    'Mon': 12,
+                    'Tue': 14,
+                    'Wed': 12,
+                    'Thu': 10,
+                    'Fri': 8,
+                    'Sat': 4,
+                  },
+                  'hourOfDayCounts': {'9': 20, '10': 15, '14': 18, '16': 7},
+                  'meetingMinutesPerWeekday': {
+                    'Sun': 0.0,
+                    'Mon': 360.0,
+                    'Tue': 420.0,
+                    'Wed': 360.0,
+                    'Thu': 300.0,
+                    'Fri': 240.0,
+                    'Sat': 120.0,
+                  },
+                  'averageDurationMinutes': 30,
+                  'sampleEvents': [
+                    {
+                      'startTimestamp': 1700000000000,
+                      'endTimestamp': 1700001800000,
+                      'title': 'Sprint planning',
+                      'durationMinutes': 30,
+                    },
+                  ],
+                };
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -616,26 +642,28 @@ void main() {
     });
 
     test('getCalendarInsights returns complete calendar analysis', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getCalendarInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getCalendarInsights',
+      );
       expect(result, isNotNull);
       expect(result!['totalEvents'], 60);
       expect(result['averageDurationMinutes'], 30);
     });
 
     test('getCalendarInsights dayOfWeekCounts has all 7 days', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getCalendarInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getCalendarInsights',
+      );
       final dow = result!['dayOfWeekCounts'] as Map;
       expect(dow.length, 7);
       expect(dow['Sun'], 0);
       expect(dow['Mon'], greaterThan(0));
     });
 
-    test('getCalendarInsights meetingMinutesPerWeekday matches days',
-        () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getCalendarInsights');
+    test('getCalendarInsights meetingMinutesPerWeekday matches days', () async {
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getCalendarInsights',
+      );
       final minutes = result!['meetingMinutesPerWeekday'] as Map;
       expect(minutes.length, 7);
       expect(minutes['Sun'], 0.0);
@@ -643,8 +671,9 @@ void main() {
     });
 
     test('getCalendarInsights sampleEvents have required fields', () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getCalendarInsights');
+      final result = await telemetryChannel.invokeMethod<Map>(
+        'getCalendarInsights',
+      );
       final samples = result!['sampleEvents'] as List;
       expect(samples.length, 1);
       final event = samples[0] as Map;
@@ -660,20 +689,20 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getCalendarInsights':
-            return {
-              'totalEvents': 0,
-              'dayOfWeekCounts': <String, int>{},
-              'hourOfDayCounts': <String, int>{},
-              'meetingMinutesPerWeekday': <String, double>{},
-              'averageDurationMinutes': 0,
-              'sampleEvents': <Map<String, dynamic>>[],
-            };
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getCalendarInsights':
+                return {
+                  'totalEvents': 0,
+                  'dayOfWeekCounts': <String, int>{},
+                  'hourOfDayCounts': <String, int>{},
+                  'meetingMinutesPerWeekday': <String, double>{},
+                  'averageDurationMinutes': 0,
+                  'sampleEvents': <Map<String, dynamic>>[],
+                };
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -681,14 +710,17 @@ void main() {
           .setMockMethodCallHandler(telemetryChannel, null);
     });
 
-    test('getCalendarInsights returns empty result without permission',
-        () async {
-      final result =
-          await telemetryChannel.invokeMethod<Map>('getCalendarInsights');
-      expect(result!['totalEvents'], 0);
-      expect(result['averageDurationMinutes'], 0);
-      expect((result['sampleEvents'] as List).isEmpty, true);
-    });
+    test(
+      'getCalendarInsights returns empty result without permission',
+      () async {
+        final result = await telemetryChannel.invokeMethod<Map>(
+          'getCalendarInsights',
+        );
+        expect(result!['totalEvents'], 0);
+        expect(result['averageDurationMinutes'], 0);
+        expect((result['sampleEvents'] as List).isEmpty, true);
+      },
+    );
   });
 
   group('Android Share File', () {
@@ -698,16 +730,16 @@ void main() {
       log = [];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        log.add(call);
-        switch (call.method) {
-          case 'shareFile':
-            final path = call.arguments['path'] as String?;
-            if (path == null || path.isEmpty) return false;
-            return true;
-          default:
-            return null;
-        }
-      });
+            log.add(call);
+            switch (call.method) {
+              case 'shareFile':
+                final path = call.arguments['path'] as String?;
+                if (path == null || path.isEmpty) return false;
+                return true;
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -721,8 +753,10 @@ void main() {
         'mimeType': 'image/png',
       });
       expect(result, true);
-      expect(log.last.arguments['path'],
-          '/data/user/0/com.example/cache/report.png');
+      expect(
+        log.last.arguments['path'],
+        '/data/user/0/com.example/cache/report.png',
+      );
       expect(log.last.arguments['mimeType'], 'image/png');
     });
 
@@ -757,21 +791,13 @@ void main() {
       (android: 1, expected: 0, desc: 'THERMAL_STATUS_LIGHT → nominal (0)'),
       (android: 2, expected: 1, desc: 'THERMAL_STATUS_MODERATE → fair (1)'),
       (android: 3, expected: 2, desc: 'THERMAL_STATUS_SEVERE → serious (2)'),
-      (
-        android: 4,
-        expected: 3,
-        desc: 'THERMAL_STATUS_CRITICAL → critical (3)'
-      ),
+      (android: 4, expected: 3, desc: 'THERMAL_STATUS_CRITICAL → critical (3)'),
       (
         android: 5,
         expected: 3,
-        desc: 'THERMAL_STATUS_EMERGENCY → critical (3)'
+        desc: 'THERMAL_STATUS_EMERGENCY → critical (3)',
       ),
-      (
-        android: 6,
-        expected: 3,
-        desc: 'THERMAL_STATUS_SHUTDOWN → critical (3)'
-      ),
+      (android: 6, expected: 3, desc: 'THERMAL_STATUS_SHUTDOWN → critical (3)'),
     ]) {
       test(testCase.desc, () {
         // Verify the mapping matches expected iOS-compatible value
@@ -797,14 +823,16 @@ void main() {
     ]) {
       test('battery state ${testCase.state} = ${testCase.desc}', () async {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(telemetryChannel,
-                (MethodCall call) async {
-          if (call.method == 'getBatteryState') return testCase.state;
-          return null;
-        });
+            .setMockMethodCallHandler(telemetryChannel, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'getBatteryState') return testCase.state;
+              return null;
+            });
 
-        final result =
-            await telemetryChannel.invokeMethod<int>('getBatteryState');
+        final result = await telemetryChannel.invokeMethod<int>(
+          'getBatteryState',
+        );
         expect(result, testCase.state);
         expect(result, inInclusiveRange(0, 3));
 
@@ -822,13 +850,13 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getThermalState':
-            return -1; // API < 29, thermal unavailable
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getThermalState':
+                return -1; // API < 29, thermal unavailable
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -837,8 +865,9 @@ void main() {
     });
 
     test('getThermalState returns -1 on API < 29', () async {
-      final result =
-          await telemetryChannel.invokeMethod<int>('getThermalState');
+      final result = await telemetryChannel.invokeMethod<int>(
+        'getThermalState',
+      );
       expect(result, -1);
     });
   });
@@ -851,25 +880,25 @@ void main() {
     setUp(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
-        switch (call.method) {
-          case 'getThermalState':
-            return 1; // fair
-          case 'getBatteryLevel':
-            return 0.45;
-          case 'getBatteryState':
-            return 1; // unplugged
-          case 'getMemoryRSS':
-            return 524288000; // 500 MB
-          case 'getAvailableMemory':
-            return 2147483648; // 2 GB
-          case 'isLowPowerMode':
-            return false;
-          case 'getFreeDiskSpace':
-            return 10737418240; // 10 GB
-          default:
-            return null;
-        }
-      });
+            switch (call.method) {
+              case 'getThermalState':
+                return 1; // fair
+              case 'getBatteryLevel':
+                return 0.45;
+              case 'getBatteryState':
+                return 1; // unplugged
+              case 'getMemoryRSS':
+                return 524288000; // 500 MB
+              case 'getAvailableMemory':
+                return 2147483648; // 2 GB
+              case 'isLowPowerMode':
+                return false;
+              case 'getFreeDiskSpace':
+                return 10737418240; // 10 GB
+              default:
+                return null;
+            }
+          });
     });
 
     tearDown(() {
@@ -903,12 +932,14 @@ void main() {
       expect(rss, greaterThan(0));
     });
 
-    test('getAvailableMemory returns ActivityManager.MemoryInfo.availMem',
-        () async {
-      final service = TelemetryService();
-      final avail = await service.getAvailableMemory();
-      expect(avail, 2147483648);
-    });
+    test(
+      'getAvailableMemory returns ActivityManager.MemoryInfo.availMem',
+      () async {
+        final service = TelemetryService();
+        final avail = await service.getAvailableMemory();
+        expect(avail, 2147483648);
+      },
+    );
 
     test('isLowPowerMode returns PowerManager.isPowerSaveMode', () async {
       final service = TelemetryService();
@@ -1149,8 +1180,7 @@ void main() {
       expect(estimate.memoryRatio, lessThan(0.5));
     });
 
-    test('whisper model on Android: simple formula (fileSize + 100MB)',
-        () {
+    test('whisper model on Android: simple formula (fileSize + 100MB)', () {
       const model = ModelInfo(
         id: 'whisper-base-en',
         name: 'Whisper Base EN',
@@ -1245,8 +1275,10 @@ void main() {
       expect(rec.device.identifier, 'android');
       expect(rec.useCase, UseCase.chat);
       // Ranked by final score descending
-      expect(rec.ranked[0].finalScore,
-          greaterThanOrEqualTo(rec.ranked[1].finalScore));
+      expect(
+        rec.ranked[0].finalScore,
+        greaterThanOrEqualTo(rec.ranked[1].finalScore),
+      );
     });
 
     test('canRun() with explicit Android device', () {
@@ -1260,10 +1292,7 @@ void main() {
         quantization: 'Q4_K_M',
       );
 
-      final result = ModelAdvisor.canRun(
-        model: model,
-        device: androidDevice,
-      );
+      final result = ModelAdvisor.canRun(model: model, device: androidDevice);
       expect(result, true);
     });
 
@@ -1389,8 +1418,11 @@ void main() {
 
       for (final entry in mappings.entries) {
         final pressureLevel = _mapTrimLevel(entry.key);
-        expect(pressureLevel, entry.value,
-            reason: 'trim level ${entry.key} should map to ${entry.value}');
+        expect(
+          pressureLevel,
+          entry.value,
+          reason: 'trim level ${entry.key} should map to ${entry.value}',
+        );
       }
     });
   });
@@ -1423,8 +1455,7 @@ void main() {
       expect(bytes.length, 12); // 3 floats * 4 bytes
 
       // Roundtrip through byte view
-      final decoded =
-          Float32List.view(bytes.buffer, bytes.offsetInBytes, 3);
+      final decoded = Float32List.view(bytes.buffer, bytes.offsetInBytes, 3);
       expect(decoded[0], 1.0);
       expect(decoded[1], -1.0);
       expect(decoded[2], 0.5);
@@ -1469,8 +1500,7 @@ void main() {
       //         package: com.edgeveda.edge_veda
       //         pluginClass: EdgeVedaPlugin
       // This test verifies the registration exists by checking the file.
-      final pubspecFile =
-          File('${Directory.current.path}/pubspec.yaml');
+      final pubspecFile = File('${Directory.current.path}/pubspec.yaml');
       if (pubspecFile.existsSync()) {
         final content = pubspecFile.readAsStringSync();
         expect(content, contains('android:'));
@@ -1480,8 +1510,7 @@ void main() {
     });
 
     test('pubspec registers all three platforms (android, ios, macos)', () {
-      final pubspecFile =
-          File('${Directory.current.path}/pubspec.yaml');
+      final pubspecFile = File('${Directory.current.path}/pubspec.yaml');
       if (pubspecFile.existsSync()) {
         final content = pubspecFile.readAsStringSync();
         expect(content, contains('android:'));
@@ -1498,7 +1527,8 @@ void main() {
   group('AndroidManifest Permissions', () {
     test('AndroidManifest declares required permissions', () {
       final manifestFile = File(
-          '${Directory.current.path}/android/src/main/AndroidManifest.xml');
+        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+      );
       if (manifestFile.existsSync()) {
         final content = manifestFile.readAsStringSync();
         expect(content, contains('android.permission.INTERNET'));
@@ -1511,7 +1541,8 @@ void main() {
 
     test('AndroidManifest declares Vulkan as optional feature', () {
       final manifestFile = File(
-          '${Directory.current.path}/android/src/main/AndroidManifest.xml');
+        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+      );
       if (manifestFile.existsSync()) {
         final content = manifestFile.readAsStringSync();
         expect(content, contains('android.hardware.vulkan'));
@@ -1521,7 +1552,8 @@ void main() {
 
     test('AndroidManifest limits READ_EXTERNAL_STORAGE to API 32', () {
       final manifestFile = File(
-          '${Directory.current.path}/android/src/main/AndroidManifest.xml');
+        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+      );
       if (manifestFile.existsSync()) {
         final content = manifestFile.readAsStringSync();
         expect(content, contains('READ_EXTERNAL_STORAGE'));
@@ -1613,8 +1645,7 @@ void main() {
       expect(iosFramework, contains('.framework'));
     });
 
-    test('DynamicLibrary.open is ABI-agnostic — same .so name for all ABIs',
-        () {
+    test('DynamicLibrary.open is ABI-agnostic — same .so name for all ABIs', () {
       // On Android, DynamicLibrary.open('libedge_veda.so') resolves to
       // the correct ABI directory automatically (e.g. lib/arm64-v8a/,
       // lib/armeabi-v7a/, lib/x86_64/). The Dart code never specifies the ABI.
@@ -1633,8 +1664,7 @@ void main() {
 
   group('Android Multi-ABI — build.gradle abiFilters', () {
     test('build.gradle declares arm64-v8a, armeabi-v7a, and x86_64', () {
-      final gradleFile = File(
-          '${Directory.current.path}/android/build.gradle');
+      final gradleFile = File('${Directory.current.path}/android/build.gradle');
       if (gradleFile.existsSync()) {
         final content = gradleFile.readAsStringSync();
         expect(content, contains('arm64-v8a'));
@@ -1644,58 +1674,65 @@ void main() {
     });
 
     test('build.gradle abiFilters lists exactly 3 ABIs', () {
-      final gradleFile = File(
-          '${Directory.current.path}/android/build.gradle');
+      final gradleFile = File('${Directory.current.path}/android/build.gradle');
       if (gradleFile.existsSync()) {
         final content = gradleFile.readAsStringSync();
         // Match the abiFilters line
-        final match = RegExp(r"abiFilters\s+'([^']+)'(?:\s*,\s*'([^']+)')*")
-            .firstMatch(content);
+        final match = RegExp(
+          r"abiFilters\s+'([^']+)'(?:\s*,\s*'([^']+)')*",
+        ).firstMatch(content);
         expect(match, isNotNull, reason: 'abiFilters declaration not found');
 
         // Extract all quoted ABI strings from the abiFilters line
-        final abiLine = content.split('\n').firstWhere(
-            (l) => l.contains('abiFilters'), orElse: () => '');
-        final abis = RegExp(r"'([^']+)'")
-            .allMatches(abiLine)
-            .map((m) => m.group(1)!)
-            .toList();
+        final abiLine = content
+            .split('\n')
+            .firstWhere((l) => l.contains('abiFilters'), orElse: () => '');
+        final abis =
+            RegExp(
+              r"'([^']+)'",
+            ).allMatches(abiLine).map((m) => m.group(1)!).toList();
         expect(abis, hasLength(3));
         expect(abis, containsAll(['arm64-v8a', 'armeabi-v7a', 'x86_64']));
       }
     });
 
     test('build.gradle does not include x86 (32-bit Intel)', () {
-      final gradleFile = File(
-          '${Directory.current.path}/android/build.gradle');
+      final gradleFile = File('${Directory.current.path}/android/build.gradle');
       if (gradleFile.existsSync()) {
         final content = gradleFile.readAsStringSync();
-        final abiLine = content.split('\n').firstWhere(
-            (l) => l.contains('abiFilters'), orElse: () => '');
-        final abis = RegExp(r"'([^']+)'")
-            .allMatches(abiLine)
-            .map((m) => m.group(1)!)
-            .toList();
+        final abiLine = content
+            .split('\n')
+            .firstWhere((l) => l.contains('abiFilters'), orElse: () => '');
+        final abis =
+            RegExp(
+              r"'([^']+)'",
+            ).allMatches(abiLine).map((m) => m.group(1)!).toList();
         // x86_64 is included, but bare 'x86' (32-bit) should not be
         expect(abis, isNot(contains('x86')));
       }
     });
 
-    test('build.gradle does not hardcode GGML_LLAMAFILE (now ABI-conditional)',
-        () {
-      final gradleFile = File(
-          '${Directory.current.path}/android/build.gradle');
-      if (gradleFile.existsSync()) {
-        final content = gradleFile.readAsStringSync();
-        expect(content, isNot(contains('-DGGML_LLAMAFILE')),
-            reason: 'GGML_LLAMAFILE should be set in CMakeLists.txt '
-                'per-ABI, not hardcoded in build.gradle');
-      }
-    });
+    test(
+      'build.gradle does not hardcode GGML_LLAMAFILE (now ABI-conditional)',
+      () {
+        final gradleFile = File(
+          '${Directory.current.path}/android/build.gradle',
+        );
+        if (gradleFile.existsSync()) {
+          final content = gradleFile.readAsStringSync();
+          expect(
+            content,
+            isNot(contains('-DGGML_LLAMAFILE')),
+            reason:
+                'GGML_LLAMAFILE should be set in CMakeLists.txt '
+                'per-ABI, not hardcoded in build.gradle',
+          );
+        }
+      },
+    );
 
     test('packagingOptions wildcard covers all ABIs', () {
-      final gradleFile = File(
-          '${Directory.current.path}/android/build.gradle');
+      final gradleFile = File('${Directory.current.path}/android/build.gradle');
       if (gradleFile.existsSync()) {
         final content = gradleFile.readAsStringSync();
         // lib/*/ glob matches any ABI subdirectory
@@ -1709,7 +1746,8 @@ void main() {
     test('CMakeLists.txt has ABI-conditional NEON logic', () {
       // CMakeLists.txt is two directories up from the flutter/ working dir
       final cmakeFile = File(
-          '${Directory.current.path}/../core/CMakeLists.txt');
+        '${Directory.current.path}/../core/CMakeLists.txt',
+      );
       if (cmakeFile.existsSync()) {
         final content = cmakeFile.readAsStringSync();
         // Must check ANDROID_ABI for NEON
@@ -1721,7 +1759,8 @@ void main() {
 
     test('CMakeLists.txt enables NEON for ARM ABIs only', () {
       final cmakeFile = File(
-          '${Directory.current.path}/../core/CMakeLists.txt');
+        '${Directory.current.path}/../core/CMakeLists.txt',
+      );
       if (cmakeFile.existsSync()) {
         final content = cmakeFile.readAsStringSync();
         // ARM targets (arm64-v8a, armeabi-v7a) get NEON ON
@@ -1731,28 +1770,36 @@ void main() {
         final armBranch = RegExp(
           r'if\(ANDROID_ABI\s+STREQUAL\s+"arm64-v8a"\s+OR\s+ANDROID_ABI\s+STREQUAL\s+"armeabi-v7a"\)',
         ).hasMatch(content);
-        expect(armBranch, true,
-            reason: 'ARM ABI conditional for NEON not found');
+        expect(
+          armBranch,
+          true,
+          reason: 'ARM ABI conditional for NEON not found',
+        );
       }
     });
 
     test('CMakeLists.txt disables NEON for x86_64', () {
       final cmakeFile = File(
-          '${Directory.current.path}/../core/CMakeLists.txt');
+        '${Directory.current.path}/../core/CMakeLists.txt',
+      );
       if (cmakeFile.existsSync()) {
         final content = cmakeFile.readAsStringSync();
         // x86_64 branch must set NEON OFF (would fail with <arm_neon.h>)
         final x86Branch = RegExp(
           r'elseif\(ANDROID_ABI\s+STREQUAL\s+"x86_64"\)',
         ).hasMatch(content);
-        expect(x86Branch, true,
-            reason: 'x86_64 ABI conditional branch not found');
+        expect(
+          x86Branch,
+          true,
+          reason: 'x86_64 ABI conditional branch not found',
+        );
       }
     });
 
     test('CMakeLists.txt enables LLAMAFILE for x86_64 only', () {
       final cmakeFile = File(
-          '${Directory.current.path}/../core/CMakeLists.txt');
+        '${Directory.current.path}/../core/CMakeLists.txt',
+      );
       if (cmakeFile.existsSync()) {
         final content = cmakeFile.readAsStringSync();
         // LLAMAFILE provides optimized x86 SIMD kernels
@@ -1763,12 +1810,12 @@ void main() {
 
     test('CMakeLists.txt disables OpenMP for all Android ABIs', () {
       final cmakeFile = File(
-          '${Directory.current.path}/../core/CMakeLists.txt');
+        '${Directory.current.path}/../core/CMakeLists.txt',
+      );
       if (cmakeFile.existsSync()) {
         final content = cmakeFile.readAsStringSync();
         // OpenMP OFF is outside the ABI conditional — applies to all ABIs
-        expect(content,
-            contains('set(GGML_OPENMP OFF CACHE BOOL "" FORCE)'));
+        expect(content, contains('set(GGML_OPENMP OFF CACHE BOOL "" FORCE)'));
       }
     });
   });
@@ -1776,7 +1823,8 @@ void main() {
   group('Android Multi-ABI — toolchain per-ABI flags', () {
     test('android.toolchain.cmake has arm64-v8a flags', () {
       final toolchainFile = File(
-          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+        '${Directory.current.path}/../core/cmake/android.toolchain.cmake',
+      );
       if (toolchainFile.existsSync()) {
         final content = toolchainFile.readAsStringSync();
         expect(content, contains('arm64-v8a'));
@@ -1786,7 +1834,8 @@ void main() {
 
     test('android.toolchain.cmake has armeabi-v7a flags', () {
       final toolchainFile = File(
-          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+        '${Directory.current.path}/../core/cmake/android.toolchain.cmake',
+      );
       if (toolchainFile.existsSync()) {
         final content = toolchainFile.readAsStringSync();
         expect(content, contains('armeabi-v7a'));
@@ -1797,7 +1846,8 @@ void main() {
 
     test('android.toolchain.cmake has x86_64 flags', () {
       final toolchainFile = File(
-          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+        '${Directory.current.path}/../core/cmake/android.toolchain.cmake',
+      );
       if (toolchainFile.existsSync()) {
         final content = toolchainFile.readAsStringSync();
         expect(content, contains('x86_64'));
@@ -1807,22 +1857,26 @@ void main() {
 
     test('android.toolchain.cmake sets NEON define only for ARM', () {
       final toolchainFile = File(
-          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+        '${Directory.current.path}/../core/cmake/android.toolchain.cmake',
+      );
       if (toolchainFile.existsSync()) {
         final content = toolchainFile.readAsStringSync();
         // GGML_USE_NEON should appear in arm64-v8a and armeabi-v7a blocks
         expect(content, contains('GGML_USE_NEON=1'));
         // But x86_64 block should NOT have NEON defines
         final x86Block = _extractBlock(content, 'x86_64');
-        expect(x86Block, isNot(contains('NEON')),
-            reason: 'x86_64 block should not reference NEON');
+        expect(
+          x86Block,
+          isNot(contains('NEON')),
+          reason: 'x86_64 block should not reference NEON',
+        );
       }
     });
 
-    test('android.toolchain.cmake defaults to arm64-v8a when ABI not set',
-        () {
+    test('android.toolchain.cmake defaults to arm64-v8a when ABI not set', () {
       final toolchainFile = File(
-          '${Directory.current.path}/../core/cmake/android.toolchain.cmake');
+        '${Directory.current.path}/../core/cmake/android.toolchain.cmake',
+      );
       if (toolchainFile.existsSync()) {
         final content = toolchainFile.readAsStringSync();
         expect(content, contains('set(ANDROID_ABI "arm64-v8a")'));

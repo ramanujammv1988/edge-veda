@@ -649,10 +649,9 @@ class _SttScreenState extends State<SttScreen>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (_isRecording
-                                ? AppTheme.danger
-                                : AppTheme.accent)
-                            .withValues(alpha: 0.4),
+                        color:
+                            (_isRecording ? AppTheme.danger : AppTheme.accent)
+                                .withValues(alpha: 0.4),
                         blurRadius: _isRecording ? 20 : 12,
                         spreadRadius: _isRecording ? 2 : 0,
                       ),

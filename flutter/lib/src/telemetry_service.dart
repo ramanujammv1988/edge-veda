@@ -123,8 +123,7 @@ class TelemetryService {
   /// On iOS/macOS returns "Apple Silicon". Returns empty string on error.
   Future<String> getChipName() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<String>('getChipName');
+      final result = await _methodChannel.invokeMethod<String>('getChipName');
       return result ?? '';
     } on PlatformException {
       return '';
@@ -139,8 +138,7 @@ class TelemetryService {
   /// Returns 0 on error.
   Future<int> getTotalMemory() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<int>('getTotalMemory');
+      final result = await _methodChannel.invokeMethod<int>('getTotalMemory');
       return result ?? 0;
     } on PlatformException {
       return 0;
@@ -154,8 +152,7 @@ class TelemetryService {
   /// Returns true on iOS/macOS (ANE), false on Android.
   Future<bool> hasNeuralEngine() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<bool>('hasNeuralEngine');
+      final result = await _methodChannel.invokeMethod<bool>('hasNeuralEngine');
       return result ?? false;
     } on PlatformException {
       return false;
@@ -167,8 +164,7 @@ class TelemetryService {
   /// Get GPU backend label (e.g. "Metal GPU", "Vulkan 1.2", "CPU").
   Future<String> getGpuBackend() async {
     try {
-      final result =
-          await _methodChannel.invokeMethod<String>('getGpuBackend');
+      final result = await _methodChannel.invokeMethod<String>('getGpuBackend');
       return result ?? 'CPU';
     } on PlatformException {
       return 'CPU';

@@ -215,7 +215,8 @@ class _VisionScreenState extends State<VisionScreen>
         final scale = _maxInferenceDimension / longest;
         inferWidth = (width * scale).round();
         inferHeight = (height * scale).round();
-        rgb = CameraUtils.resizeRgb(rgb, width, height, inferWidth, inferHeight);
+        rgb =
+            CameraUtils.resizeRgb(rgb, width, height, inferWidth, inferHeight);
       }
 
       final sw = Stopwatch()..start();
@@ -303,7 +304,8 @@ class _VisionScreenState extends State<VisionScreen>
         final scale = _maxInferenceDimension / longest;
         inferWidth = (width * scale).round();
         inferHeight = (height * scale).round();
-        rgb = CameraUtils.resizeRgb(rgb, width, height, inferWidth, inferHeight);
+        rgb =
+            CameraUtils.resizeRgb(rgb, width, height, inferWidth, inferHeight);
       }
 
       final sw = Stopwatch()..start();
@@ -628,8 +630,8 @@ class _VisionScreenState extends State<VisionScreen>
               child: Container(
                 color: Colors.black,
                 child: Center(
-                  child: Image.memory(_selectedImageBytes!,
-                      fit: BoxFit.contain),
+                  child:
+                      Image.memory(_selectedImageBytes!, fit: BoxFit.contain),
                 ),
               ),
             ),
@@ -708,7 +710,8 @@ class _VisionScreenState extends State<VisionScreen>
                           ),
                         ),
                       // "Pick Image" button (visible when camera is active)
-                      if (_selectedImageBytes == null && !_isProcessingFile) ...[
+                      if (_selectedImageBytes == null &&
+                          !_isProcessingFile) ...[
                         const SizedBox(height: 8),
                         ElevatedButton.icon(
                           onPressed: _pickAndDescribeImage,

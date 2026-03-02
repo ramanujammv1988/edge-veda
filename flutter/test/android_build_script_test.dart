@@ -15,7 +15,9 @@ void main() {
   final projectRoot =
       Directory.current.path.endsWith('flutter')
           ? Directory.current.parent.path
-          : Directory('${Directory.current.path}/..').resolveSymbolicLinksSync();
+          : Directory(
+            '${Directory.current.path}/..',
+          ).resolveSymbolicLinksSync();
 
   final scriptFile = File('$projectRoot/scripts/build-android.sh');
   final iosScriptFile = File('$projectRoot/scripts/build-ios.sh');
@@ -27,8 +29,11 @@ void main() {
 
   group('build-android.sh — existence and structure', () {
     test('script exists at scripts/build-android.sh', () {
-      expect(scriptFile.existsSync(), true,
-          reason: 'scripts/build-android.sh must exist');
+      expect(
+        scriptFile.existsSync(),
+        true,
+        reason: 'scripts/build-android.sh must exist',
+      );
     });
 
     test('script starts with bash shebang', () {
@@ -65,10 +70,12 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final lines = f.readAsLinesSync();
-        expect(lines[0], '#!/bin/bash',
-            reason: '${f.path} must start with bash shebang');
-        expect(lines[1], 'set -e',
-            reason: '${f.path} must use set -e');
+        expect(
+          lines[0],
+          '#!/bin/bash',
+          reason: '${f.path} must start with bash shebang',
+        );
+        expect(lines[1], 'set -e', reason: '${f.path} must use set -e');
       }
     });
 
@@ -76,10 +83,16 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('SCRIPT_DIR='),
-            reason: '${f.path} must define SCRIPT_DIR');
-        expect(content, contains('PROJECT_ROOT='),
-            reason: '${f.path} must define PROJECT_ROOT');
+        expect(
+          content,
+          contains('SCRIPT_DIR='),
+          reason: '${f.path} must define SCRIPT_DIR',
+        );
+        expect(
+          content,
+          contains('PROJECT_ROOT='),
+          reason: '${f.path} must define PROJECT_ROOT',
+        );
       }
     });
 
@@ -87,8 +100,11 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('--clean'),
-            reason: '${f.path} must support --clean');
+        expect(
+          content,
+          contains('--clean'),
+          reason: '${f.path} must support --clean',
+        );
       }
     });
 
@@ -96,10 +112,16 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('--debug'),
-            reason: '${f.path} must support --debug');
-        expect(content, contains('--release'),
-            reason: '${f.path} must support --release');
+        expect(
+          content,
+          contains('--debug'),
+          reason: '${f.path} must support --debug',
+        );
+        expect(
+          content,
+          contains('--release'),
+          reason: '${f.path} must support --release',
+        );
       }
     });
 
@@ -107,10 +129,12 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('--help'),
-            reason: '${f.path} must support --help');
-        expect(content, contains('-h'),
-            reason: '${f.path} must support -h');
+        expect(
+          content,
+          contains('--help'),
+          reason: '${f.path} must support --help',
+        );
+        expect(content, contains('-h'), reason: '${f.path} must support -h');
       }
     });
 
@@ -118,8 +142,11 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('check_tools'),
-            reason: '${f.path} must have check_tools');
+        expect(
+          content,
+          contains('check_tools'),
+          reason: '${f.path} must have check_tools',
+        );
       }
     });
 
@@ -127,8 +154,11 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('git submodule update --init --recursive'),
-            reason: '${f.path} must check for submodules');
+        expect(
+          content,
+          contains('git submodule update --init --recursive'),
+          reason: '${f.path} must check for submodules',
+        );
       }
     });
 
@@ -136,10 +166,16 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('Edge Veda'),
-            reason: '${f.path} must print Edge Veda banner');
-        expect(content, contains('Build type:'),
-            reason: '${f.path} must print build type');
+        expect(
+          content,
+          contains('Edge Veda'),
+          reason: '${f.path} must print Edge Veda banner',
+        );
+        expect(
+          content,
+          contains('Build type:'),
+          reason: '${f.path} must print build type',
+        );
       }
     });
 
@@ -147,8 +183,11 @@ void main() {
       for (final f in [scriptFile, iosScriptFile, macosScriptFile]) {
         if (!f.existsSync()) continue;
         final content = f.readAsStringSync();
-        expect(content, contains('ev_'),
-            reason: '${f.path} must verify ev_* symbols');
+        expect(
+          content,
+          contains('ev_'),
+          reason: '${f.path} must verify ev_* symbols',
+        );
       }
     });
   });
@@ -176,20 +215,27 @@ void main() {
           .firstWhere((l) => l.startsWith('ABIS='), orElse: () => '');
       if (abiLine.isNotEmpty) {
         // x86_64 is fine, but bare x86 at word boundary is not
-        final abis = abiLine.split('"').length > 1
-            ? abiLine.split('"')[1]
-            : abiLine.split('=').last;
+        final abis =
+            abiLine.split('"').length > 1
+                ? abiLine.split('"')[1]
+                : abiLine.split('=').last;
         final abiList = abis.trim().split(RegExp(r'\s+'));
-        expect(abiList, isNot(contains('x86')),
-            reason: 'Script should not include bare x86 (32-bit)');
+        expect(
+          abiList,
+          isNot(contains('x86')),
+          reason: 'Script should not include bare x86 (32-bit)',
+        );
       }
     });
 
     test('script supports --abi override flag', () {
       if (!scriptFile.existsSync()) return;
       final content = scriptFile.readAsStringSync();
-      expect(content, contains('--abi'),
-          reason: 'Script must accept --abi for custom ABI list');
+      expect(
+        content,
+        contains('--abi'),
+        reason: 'Script must accept --abi for custom ABI list',
+      );
     });
 
     test('build.gradle and script agree on ABIs', () {
@@ -204,15 +250,18 @@ void main() {
       final gradleAbiLine = gradleContent
           .split('\n')
           .firstWhere((l) => l.contains('abiFilters'), orElse: () => '');
-      final gradleAbis = RegExp(r"'([^']+)'")
-          .allMatches(gradleAbiLine)
-          .map((m) => m.group(1)!)
-          .toSet();
+      final gradleAbis =
+          RegExp(
+            r"'([^']+)'",
+          ).allMatches(gradleAbiLine).map((m) => m.group(1)!).toSet();
 
       // Verify each gradle ABI is in the script default
       for (final abi in gradleAbis) {
-        expect(scriptContent, contains(abi),
-            reason: 'Script must include $abi from build.gradle');
+        expect(
+          scriptContent,
+          contains(abi),
+          reason: 'Script must include $abi from build.gradle',
+        );
       }
     });
   });
@@ -263,17 +312,23 @@ void main() {
       if (!scriptFile.existsSync()) return;
       final content = scriptFile.readAsStringSync();
       // NEON is set ABI-conditionally in core/CMakeLists.txt, not the script
-      expect(content, isNot(contains('-DGGML_NEON=')),
-          reason:
-              'GGML_NEON should be set in CMakeLists.txt per-ABI, not in the build script');
+      expect(
+        content,
+        isNot(contains('-DGGML_NEON=')),
+        reason:
+            'GGML_NEON should be set in CMakeLists.txt per-ABI, not in the build script',
+      );
     });
 
     test('does NOT hardcode GGML_LLAMAFILE (handled in CMakeLists.txt)', () {
       if (!scriptFile.existsSync()) return;
       final content = scriptFile.readAsStringSync();
-      expect(content, isNot(contains('-DGGML_LLAMAFILE=')),
-          reason:
-              'GGML_LLAMAFILE should be set in CMakeLists.txt per-ABI, not in the build script');
+      expect(
+        content,
+        isNot(contains('-DGGML_LLAMAFILE=')),
+        reason:
+            'GGML_LLAMAFILE should be set in CMakeLists.txt per-ABI, not in the build script',
+      );
     });
 
     test('uses Ninja generator', () {
@@ -329,8 +384,11 @@ void main() {
       expect(content, contains('ev_'));
       // Check for the threshold
       final hasThreshold = content.contains('-lt 20');
-      expect(hasThreshold, true,
-          reason: 'Script must verify >= 20 ev_* symbols');
+      expect(
+        hasThreshold,
+        true,
+        reason: 'Script must verify >= 20 ev_* symbols',
+      );
     });
 
     test('checks llama_* symbol count (>= 50)', () {
@@ -338,8 +396,11 @@ void main() {
       final content = scriptFile.readAsStringSync();
       expect(content, contains('llama_'));
       final hasThreshold = content.contains('-lt 50');
-      expect(hasThreshold, true,
-          reason: 'Script must verify >= 50 llama_* symbols');
+      expect(
+        hasThreshold,
+        true,
+        reason: 'Script must verify >= 50 llama_* symbols',
+      );
     });
 
     test('checks whisper_* symbols', () {
@@ -381,8 +442,11 @@ void main() {
       final ciFile = File('$projectRoot/.github/workflows/ci.yml');
       if (!ciFile.existsSync()) return;
       final content = ciFile.readAsStringSync();
-      expect(content, contains('./scripts/build-android.sh'),
-          reason: 'CI must use build-android.sh, not make build-android');
+      expect(
+        content,
+        contains('./scripts/build-android.sh'),
+        reason: 'CI must use build-android.sh, not make build-android',
+      );
     });
 
     test('ci.yml passes --clean --release to the script', () {
