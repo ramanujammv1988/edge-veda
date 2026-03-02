@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
-/// Service for querying iOS thermal, battery, and memory telemetry.
+/// Cross-platform service for querying thermal, battery, and memory telemetry.
 ///
-/// Uses MethodChannel for on-demand polling and EventChannel for push
-/// thermal state change notifications. Gracefully returns defaults on
-/// non-iOS platforms (catches [MissingPluginException]).
+/// Supported on iOS (Metal), Android (CPU/Vulkan), and macOS. Uses
+/// MethodChannel for on-demand polling and EventChannel for push thermal
+/// state change notifications. Gracefully returns defaults on unsupported
+/// platforms (catches [MissingPluginException]).
 class TelemetryService {
   static const _methodChannel = MethodChannel(
     'com.edgeveda.edge_veda/telemetry',
@@ -17,9 +18,10 @@ class TelemetryService {
 
   Stream<Map<String, dynamic>>? _thermalStream;
 
-  /// Get current iOS thermal state: 0=nominal, 1=fair, 2=serious, 3=critical.
+  /// Get current thermal state: 0=nominal, 1=fair, 2=serious, 3=critical.
   ///
-  /// Returns -1 on non-iOS platforms or error.
+  /// On iOS/macOS uses ProcessInfo.thermalState, on Android (API 29+) uses
+  /// PowerManager.currentThermalStatus. Returns -1 on unsupported platforms.
   Future<int> getThermalState() async {
     try {
       final result = await _methodChannel.invokeMethod<int>('getThermalState');
@@ -27,7 +29,7 @@ class TelemetryService {
     } on PlatformException {
       return -1;
     } on MissingPluginException {
-      return -1; // Non-iOS platform
+      return -1; // Unsupported platform
     }
   }
 
@@ -73,9 +75,10 @@ class TelemetryService {
     }
   }
 
-  /// Get available memory in bytes (iOS 13+ via os_proc_available_memory).
+  /// Get available memory in bytes.
   ///
-  /// Returns 0 on error.
+  /// On iOS/macOS uses os_proc_available_memory, on Android uses
+  /// ActivityManager.MemoryInfo.availMem. Returns 0 on error.
   Future<int> getAvailableMemory() async {
     try {
       final result = await _methodChannel.invokeMethod<int>(
@@ -89,9 +92,10 @@ class TelemetryService {
     }
   }
 
-  /// Get free disk space in bytes via NSFileManager.
+  /// Get free disk space in bytes.
   ///
-  /// Returns -1 on non-iOS platforms or error.
+  /// On iOS/macOS uses NSFileManager, on Android uses StatFs. Returns -1
+  /// on unsupported platforms or error.
   Future<int> getFreeDiskSpace() async {
     try {
       final result = await _methodChannel.invokeMethod<int>('getFreeDiskSpace');
@@ -103,9 +107,10 @@ class TelemetryService {
     }
   }
 
-  /// Whether iOS Low Power Mode is enabled.
+  /// Whether power-saving mode is enabled.
   ///
-  /// Returns false on non-iOS platforms.
+  /// On iOS checks Low Power Mode, on Android checks Battery Saver.
+  /// Returns false on unsupported platforms.
   Future<bool> isLowPowerMode() async {
     try {
       final result = await _methodChannel.invokeMethod<bool>('isLowPowerMode');
@@ -173,13 +178,13 @@ class TelemetryService {
     }
   }
 
-  /// Stream of thermal state changes pushed from iOS.
+  /// Stream of thermal state changes pushed from the native platform.
   ///
   /// Each event is a [Map] with keys:
   /// - `'thermalState'` ([int]): 0=nominal, 1=fair, 2=serious, 3=critical
   /// - `'timestamp'` ([double]): milliseconds since epoch
   ///
-  /// On non-iOS platforms, this stream will emit an error and then close.
+  /// On unsupported platforms, this stream will emit an error and then close.
   /// Callers should handle errors gracefully.
   Stream<Map<String, dynamic>> get thermalStateChanges {
     _thermalStream ??= _thermalEventChannel.receiveBroadcastStream().map(
@@ -212,7 +217,7 @@ class TelemetryService {
 
 /// A point-in-time snapshot of all telemetry values.
 class TelemetrySnapshot {
-  /// iOS thermal state: 0=nominal, 1=fair, 2=serious, 3=critical, -1=unknown
+  /// Thermal state: 0=nominal, 1=fair, 2=serious, 3=critical, -1=unknown
   final int thermalState;
 
   /// Battery level: 0.0 to 1.0, or -1.0 if unknown
@@ -221,10 +226,10 @@ class TelemetrySnapshot {
   /// Process resident set size in bytes, or 0 if unavailable
   final int memoryRssBytes;
 
-  /// Available memory in bytes (os_proc_available_memory), or 0 if unavailable
+  /// Available memory in bytes, or 0 if unavailable
   final int availableMemoryBytes;
 
-  /// Whether iOS Low Power Mode is enabled
+  /// Whether power-saving mode is enabled (iOS Low Power / Android Battery Saver)
   final bool isLowPowerMode;
 
   /// When this snapshot was taken

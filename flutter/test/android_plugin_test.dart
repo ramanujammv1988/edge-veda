@@ -1634,22 +1634,52 @@ void main() {
   // 20. AndroidManifest Permissions
   // =========================================================================
 
-  group('AndroidManifest Permissions', () {
-    test('AndroidManifest declares required permissions', () {
+  group('AndroidManifest Permissions — least-privilege', () {
+    test('plugin manifest only declares network permissions', () {
       final manifestFile = File(
         '${Directory.current.path}/android/src/main/AndroidManifest.xml',
       );
       if (manifestFile.existsSync()) {
         final content = manifestFile.readAsStringSync();
+        // Network permissions are required by all consumers (model downloads)
         expect(content, contains('android.permission.INTERNET'));
         expect(content, contains('android.permission.ACCESS_NETWORK_STATE'));
-        expect(content, contains('android.permission.RECORD_AUDIO'));
-        expect(content, contains('android.permission.READ_MEDIA_IMAGES'));
-        expect(content, contains('android.permission.READ_CALENDAR'));
       }
     });
 
-    test('AndroidManifest declares Vulkan as optional feature', () {
+    test('plugin manifest does NOT declare RECORD_AUDIO', () {
+      final manifestFile = File(
+        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+      );
+      if (manifestFile.existsSync()) {
+        final content = manifestFile.readAsStringSync();
+        expect(content, isNot(contains('RECORD_AUDIO')));
+      }
+    });
+
+    test('plugin manifest does NOT declare media read permissions', () {
+      final manifestFile = File(
+        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+      );
+      if (manifestFile.existsSync()) {
+        final content = manifestFile.readAsStringSync();
+        expect(content, isNot(contains('READ_MEDIA_IMAGES')));
+        expect(content, isNot(contains('READ_MEDIA_VIDEO')));
+        expect(content, isNot(contains('READ_EXTERNAL_STORAGE')));
+      }
+    });
+
+    test('plugin manifest does NOT declare READ_CALENDAR', () {
+      final manifestFile = File(
+        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+      );
+      if (manifestFile.existsSync()) {
+        final content = manifestFile.readAsStringSync();
+        expect(content, isNot(contains('READ_CALENDAR')));
+      }
+    });
+
+    test('plugin manifest declares Vulkan as optional feature', () {
       final manifestFile = File(
         '${Directory.current.path}/android/src/main/AndroidManifest.xml',
       );
@@ -1660,14 +1690,17 @@ void main() {
       }
     });
 
-    test('AndroidManifest limits READ_EXTERNAL_STORAGE to API 32', () {
+    test('example app manifest declares sensitive permissions', () {
       final manifestFile = File(
-        '${Directory.current.path}/android/src/main/AndroidManifest.xml',
+        '${Directory.current.path}/example/android/app/src/main/AndroidManifest.xml',
       );
       if (manifestFile.existsSync()) {
         final content = manifestFile.readAsStringSync();
+        // Example app needs these for its demo features
+        expect(content, contains('RECORD_AUDIO'));
+        expect(content, contains('READ_MEDIA_IMAGES'));
+        expect(content, contains('READ_CALENDAR'));
         expect(content, contains('READ_EXTERNAL_STORAGE'));
-        expect(content, contains('android:maxSdkVersion="32"'));
       }
     });
   });
@@ -2194,6 +2227,181 @@ void main() {
       );
       expect(result, isTrue);
       expect(log.length, 1);
+    });
+  });
+
+  // =========================================================================
+  // TelemetryService docs — platform-neutral language
+  // =========================================================================
+
+  group('TelemetryService docs are platform-neutral', () {
+    test('class doc does not say "iOS" only', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Class-level doc should mention Android (not iOS-only)
+        // Extract the class doc comment (lines before "class TelemetryService")
+        final classDocMatch = RegExp(
+          r'(///[^\n]*\n)+(?=class TelemetryService)',
+        ).firstMatch(content);
+        expect(classDocMatch, isNotNull, reason: 'class doc should exist');
+        final classDoc = classDocMatch!.group(0)!;
+        // Should not be iOS-only
+        expect(
+          classDoc,
+          isNot(contains('iOS thermal, battery')),
+          reason: 'class doc should not be iOS-specific',
+        );
+        // Should mention cross-platform or Android
+        expect(
+          classDoc.contains('Android') || classDoc.contains('cross-platform'),
+          isTrue,
+          reason: 'class doc should mention Android support',
+        );
+      }
+    });
+
+    test('getThermalState doc is platform-neutral', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Extract doc comment before getThermalState
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*Future<int> getThermalState',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        expect(
+          doc,
+          isNot(contains('non-iOS')),
+          reason: 'should not say "non-iOS"',
+        );
+      }
+    });
+
+    test('getAvailableMemory doc does not reference iOS 13', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*Future<int> getAvailableMemory',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        expect(
+          doc,
+          isNot(contains('iOS 13')),
+          reason: 'should not reference iOS 13',
+        );
+      }
+    });
+
+    test('getFreeDiskSpace doc does not reference NSFileManager', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*Future<int> getFreeDiskSpace',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        expect(
+          doc,
+          isNot(contains('NSFileManager')),
+          reason: 'should not reference iOS-only API',
+        );
+      }
+    });
+
+    test('isLowPowerMode doc is platform-neutral', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*Future<bool> isLowPowerMode',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        expect(
+          doc,
+          isNot(contains('iOS Low Power Mode')),
+          reason: 'should use platform-neutral language',
+        );
+      }
+    });
+
+    test('thermalStateChanges doc is platform-neutral', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*Stream<Map<String, dynamic>> get thermalStateChanges',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        expect(
+          doc,
+          isNot(contains('non-iOS')),
+          reason: 'should not say "non-iOS"',
+        );
+        expect(
+          doc,
+          isNot(contains('pushed from iOS')),
+          reason: 'should not be iOS-centric',
+        );
+      }
+    });
+
+    test('TelemetrySnapshot thermalState doc is platform-neutral', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Field doc for thermalState in TelemetrySnapshot
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*final int thermalState',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        expect(
+          doc,
+          isNot(contains('iOS thermal')),
+          reason: 'should be platform-neutral',
+        );
+      }
+    });
+
+    test('TelemetrySnapshot isLowPowerMode doc mentions Android', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/telemetry_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        final match = RegExp(
+          r'(///[^\n]*\n)+\s*final bool isLowPowerMode',
+        ).firstMatch(content);
+        expect(match, isNotNull);
+        final doc = match!.group(0)!;
+        // Should mention Android, not be iOS-only
+        expect(
+          doc.contains('Android'),
+          isTrue,
+          reason: 'should mention Android support',
+        );
+      }
     });
   });
 }

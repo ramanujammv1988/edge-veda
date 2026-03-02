@@ -1,7 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Audio capture for speech-to-text demo -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- Photo access for detective/vision demo features -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+
+    <!-- Calendar access for detective demo features -->
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
     <application
         android:label="Edge Veda Example"
         android:name="${applicationName}"
