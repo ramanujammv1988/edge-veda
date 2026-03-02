@@ -188,6 +188,21 @@ for abi in $ABIS; do
     mkdir -p "$STAGING_DIR"
     cp "$ABI_LIB" "$STAGING_DIR/libedge_veda.so"
 
+    # Strip debug sections to reduce binary size (saves ~30-50%)
+    # NDK's llvm-strip removes .debug_*, .comment, and other non-essential sections
+    STRIP_TOOL=""
+    if [ -n "$ANDROID_NDK" ]; then
+        STRIP_TOOL=$(find "$ANDROID_NDK/toolchains/llvm/prebuilt" -name "llvm-strip" 2>/dev/null | head -1)
+    fi
+    if [ -n "$STRIP_TOOL" ] && [ -x "$STRIP_TOOL" ]; then
+        BEFORE_SIZE=$(du -h "$STAGING_DIR/libedge_veda.so" | cut -f1)
+        "$STRIP_TOOL" --strip-unneeded "$STAGING_DIR/libedge_veda.so"
+        AFTER_SIZE=$(du -h "$STAGING_DIR/libedge_veda.so" | cut -f1)
+        echo "Stripped: $BEFORE_SIZE → $AFTER_SIZE"
+    else
+        echo "WARNING: llvm-strip not found in NDK, skipping strip"
+    fi
+
     BUILT_ABIS+=("$abi")
 done
 
@@ -222,11 +237,11 @@ for abi in "${BUILT_ABIS[@]}"; do
     echo ""
     echo "--- $abi ---"
 
-    # File size check (warn if > 20MB per ABI)
+    # File size check (warn if > 35MB per ABI — 3 engines: llama + whisper + SD)
     SO_SIZE_KB=$(du -k "$SO_FILE" | cut -f1)
-    MAX_SIZE_KB=20480  # 20MB
+    MAX_SIZE_KB=35840  # 35MB
     if [ "$SO_SIZE_KB" -gt "$MAX_SIZE_KB" ]; then
-        echo "  WARNING: libedge_veda.so (${SO_SIZE_KB}KB) exceeds 20MB"
+        echo "  WARNING: libedge_veda.so (${SO_SIZE_KB}KB) exceeds 35MB"
     fi
     echo "  Size: ${SO_SIZE_KB}KB (warning threshold: ${MAX_SIZE_KB}KB)"
 
