@@ -1466,7 +1466,7 @@ void main() {
       // 4800 samples / 16000 Hz = 0.3 seconds = 300ms
       const sampleRate = 16000;
       const chunkSamples = 4800;
-      final durationMs = (chunkSamples / sampleRate) * 1000;
+      const durationMs = (chunkSamples / sampleRate) * 1000;
       expect(durationMs, 300.0);
     });
 
@@ -1481,7 +1481,7 @@ void main() {
       expect(bytesPerSample, 4);
 
       // Bytes per second
-      final bytesPerSecond = sampleRate * channels * bytesPerSample;
+      const bytesPerSecond = sampleRate * channels * bytesPerSample;
       expect(bytesPerSecond, 64000); // 64 KB/s
     });
   });
@@ -1736,8 +1736,8 @@ void main() {
       if (gradleFile.existsSync()) {
         final content = gradleFile.readAsStringSync();
         // lib/*/ glob matches any ABI subdirectory
-        expect(content, contains("lib/*/libedge_veda.so"));
-        expect(content, contains("lib/*/libc++_shared.so"));
+        expect(content, contains('lib/*/libedge_veda.so'));
+        expect(content, contains('lib/*/libc++_shared.so'));
       }
     });
   });
