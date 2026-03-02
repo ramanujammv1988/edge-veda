@@ -1316,8 +1316,118 @@ void main() {
 
       expect(score.recommendedConfig.numThreads, greaterThan(0));
       expect(score.recommendedConfig.contextLength, greaterThan(0));
-      expect(score.recommendedConfig.useGpu, true);
+      // Android is CPU-only (no Metal); useGpu must be false
+      expect(score.recommendedConfig.useGpu, isFalse);
       expect(score.recommendedConfig.maxMemoryMb, greaterThan(0));
+    });
+
+    test('useGpu is false for all use cases on Android', () {
+      const model = ModelInfo(
+        id: 'llama-3.2-1b-instruct-q4',
+        name: 'Llama 3.2 1B Instruct',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+
+      for (final useCase in UseCase.values) {
+        final score = ModelAdvisor.score(
+          model: model,
+          device: androidDevice,
+          useCase: useCase,
+        );
+        expect(
+          score.recommendedConfig.useGpu,
+          isFalse,
+          reason: 'useGpu should be false for $useCase on Android CPU-only',
+        );
+      }
+    });
+
+    test('useGpu is true for iOS devices', () {
+      const iosDevice = DeviceProfile(
+        identifier: 'iPhone17,1',
+        deviceName: 'iPhone 16 Pro',
+        totalRamGB: 8.0,
+        chipName: 'A18 Pro',
+        tier: DeviceTier.high,
+      );
+
+      const model = ModelInfo(
+        id: 'llama-3.2-1b-instruct-q4',
+        name: 'Llama 3.2 1B Instruct',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+
+      final score = ModelAdvisor.score(
+        model: model,
+        device: iosDevice,
+        useCase: UseCase.chat,
+      );
+
+      // iOS has Metal GPU — useGpu should be true
+      // Note: this test runs on the host platform; the _recommendedConfig
+      // logic uses Platform.isAndroid, so on non-Android hosts this is true.
+      expect(score.recommendedConfig.useGpu, isTrue);
+    });
+
+    test(
+      'recommended maxMemoryMb uses Android 50% budget for android devices',
+      () {
+        const model = ModelInfo(
+          id: 'llama-3.2-1b-instruct-q4',
+          name: 'Llama 3.2 1B Instruct',
+          sizeBytes: 700 * 1024 * 1024,
+          downloadUrl: 'https://example.com/llama.gguf',
+          family: 'llama3',
+          parametersB: 1.0,
+          quantization: 'Q4_K_M',
+        );
+
+        final score = ModelAdvisor.score(
+          model: model,
+          device: androidDevice,
+          useCase: UseCase.chat,
+        );
+
+        // 8 GB * 1024 * 0.50 = 4096 MB (Android 50% budget)
+        expect(score.recommendedConfig.maxMemoryMb, 4096);
+      },
+    );
+
+    test('recommended maxMemoryMb uses 60% budget for iOS devices', () {
+      const iosDevice = DeviceProfile(
+        identifier: 'iPhone17,1',
+        deviceName: 'iPhone 16 Pro',
+        totalRamGB: 8.0,
+        chipName: 'A18 Pro',
+        tier: DeviceTier.high,
+      );
+
+      const model = ModelInfo(
+        id: 'llama-3.2-1b-instruct-q4',
+        name: 'Llama 3.2 1B Instruct',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+
+      final score = ModelAdvisor.score(
+        model: model,
+        device: iosDevice,
+        useCase: UseCase.chat,
+      );
+
+      // 8 GB * 1024 * 0.60 = 4915 MB (iOS 60% budget)
+      expect(score.recommendedConfig.maxMemoryMb, 4915);
     });
   });
 

@@ -937,13 +937,17 @@ class ModelAdvisor {
       contextLength = min(contextLength, 2048);
     }
     final threads = device.tier.index >= DeviceTier.high.index ? 6 : 4;
-    final maxMemoryMb = (device.totalRamGB * 1024 * 0.6).round();
+    // Android is CPU-only (no Metal); use 50% memory budget.
+    // iOS/macOS have Metal GPU; use 60% memory budget.
+    final isAndroid = device.identifier == 'android';
+    final memoryRatio = isAndroid ? 0.50 : 0.60;
+    final maxMemoryMb = (device.totalRamGB * 1024 * memoryRatio).round();
 
     return EdgeVedaConfig(
       modelPath: '',
       numThreads: threads,
       contextLength: contextLength,
-      useGpu: true,
+      useGpu: !isAndroid,
       maxMemoryMb: maxMemoryMb,
       kvCacheTypeK: 8,
       kvCacheTypeV: 8,
