@@ -197,7 +197,7 @@ Vision soak test traces can be analyzed with:
 python3 tools/analyze_trace.py soak_trace_latest.jsonl
 ```
 
-Generates p50/p95/p99 stats, throughput charts, thermal overlays, and memory slope analysis.
+Generates p50/p95/p99 stats, throughput charts, thermal overlays, and memory slope analysis. Experiment results (hypothesis verdicts, charts) are written to `evidence/` for consolidated auditability.
 
 ---
 

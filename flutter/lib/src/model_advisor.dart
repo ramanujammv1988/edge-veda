@@ -938,10 +938,20 @@ class ModelAdvisor {
     if (device.tier == DeviceTier.low) {
       contextLength = min(contextLength, 2048);
     }
-    final threads = device.tier.index >= DeviceTier.high.index ? 6 : 4;
+    // Adaptive thread count with thermal-safe cap.
+    // Android CPU-only: big.LITTLE SoCs throttle hard under sustained load,
+    // so cap at 4 threads max. Low/minimum-tier devices get 2 threads to
+    // preserve headroom for OS and UI.
+    // iOS/macOS: Metal GPU handles most inference; threads for prompt eval.
+    final isAndroid = device.identifier == 'android';
+    int threads;
+    if (isAndroid) {
+      threads = device.tier.index >= DeviceTier.medium.index ? 4 : 2;
+    } else {
+      threads = device.tier.index >= DeviceTier.high.index ? 6 : 4;
+    }
     // Android is CPU-only (no Metal); use 50% memory budget.
     // iOS/macOS have Metal GPU; use 60% memory budget.
-    final isAndroid = device.identifier == 'android';
     final memoryRatio = isAndroid ? 0.50 : 0.60;
     final maxMemoryMb = (device.totalRamGB * 1024 * memoryRatio).round();
 

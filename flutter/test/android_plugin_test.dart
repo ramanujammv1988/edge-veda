@@ -2653,6 +2653,286 @@ void main() {
       }
     });
   });
+
+  // =========================================================================
+  // Evidence location consolidation (tools/ → evidence/)
+  // =========================================================================
+
+  group('Evidence location consolidation', () {
+    test('analyze_trace.py writes experiment DB to evidence/ not tools/', () {
+      final file = File('${Directory.current.path}/../tools/analyze_trace.py');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Experiment output must go to evidence/ for auditability
+        expect(
+          content,
+          contains('evidence_dir'),
+          reason:
+              'analyze_trace.py should resolve experiment DB path to evidence/',
+        );
+        // Should NOT hardcode tools_dir for experiment output
+        expect(
+          content,
+          isNot(contains("os.path.join(tools_dir, 'experiments.json')")),
+          reason: 'experiments.json should be in evidence/, not tools/',
+        );
+        expect(
+          content,
+          isNot(contains("os.path.join(tools_dir, 'EXPERIMENTS.md')")),
+          reason: 'EXPERIMENTS.md should be in evidence/, not tools/',
+        );
+      }
+    });
+
+    test('.gitignore does not list tools/experiments.json separately', () {
+      final file = File('${Directory.current.path}/../.gitignore');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // evidence/ covers all experiment artifacts now
+        expect(
+          content,
+          isNot(contains('tools/experiments.json')),
+          reason: 'experiments.json is in evidence/ now (covered by evidence/)',
+        );
+        expect(
+          content,
+          isNot(contains('tools/EXPERIMENTS.md')),
+          reason: 'EXPERIMENTS.md is in evidence/ now (covered by evidence/)',
+        );
+        // evidence/ directory itself should still be gitignored
+        expect(content, contains('evidence/'));
+      }
+    });
+  });
+
+  // =========================================================================
+  // Adaptive numThreads with thermal-safe cap
+  // =========================================================================
+
+  group('Adaptive numThreads — ModelAdvisor', () {
+    test('Android minimum tier gets 2 threads', () {
+      const device = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Budget Android',
+        totalRamGB: 4.0,
+        chipName: 'ARM64',
+        tier: DeviceTier.minimum,
+      );
+      const model = ModelInfo(
+        id: 'llama-1b',
+        name: 'Llama 1B',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+      final score = ModelAdvisor.score(
+        model: model,
+        device: device,
+        useCase: UseCase.chat,
+      );
+      expect(
+        score.recommendedConfig.numThreads,
+        2,
+        reason: 'Android minimum tier should use 2 threads for thermal safety',
+      );
+    });
+
+    test('Android low tier gets 2 threads', () {
+      const device = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Low Android',
+        totalRamGB: 4.0,
+        chipName: 'ARM64',
+        tier: DeviceTier.low,
+      );
+      const model = ModelInfo(
+        id: 'llama-1b',
+        name: 'Llama 1B',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+      final score = ModelAdvisor.score(
+        model: model,
+        device: device,
+        useCase: UseCase.chat,
+      );
+      expect(
+        score.recommendedConfig.numThreads,
+        2,
+        reason: 'Android low tier should use 2 threads for thermal safety',
+      );
+    });
+
+    test('Android medium tier gets 4 threads', () {
+      const device = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Mid Android',
+        totalRamGB: 6.0,
+        chipName: 'ARM64',
+        tier: DeviceTier.medium,
+      );
+      const model = ModelInfo(
+        id: 'llama-1b',
+        name: 'Llama 1B',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+      final score = ModelAdvisor.score(
+        model: model,
+        device: device,
+        useCase: UseCase.chat,
+      );
+      expect(
+        score.recommendedConfig.numThreads,
+        4,
+        reason: 'Android medium tier should use 4 threads',
+      );
+    });
+
+    test('Android high tier gets 4 threads (thermal-safe cap)', () {
+      const device = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Flagship Android',
+        totalRamGB: 12.0,
+        chipName: 'Snapdragon 8 Gen 3',
+        tier: DeviceTier.high,
+      );
+      const model = ModelInfo(
+        id: 'llama-1b',
+        name: 'Llama 1B',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+      final score = ModelAdvisor.score(
+        model: model,
+        device: device,
+        useCase: UseCase.chat,
+      );
+      expect(
+        score.recommendedConfig.numThreads,
+        4,
+        reason:
+            'Android high tier capped at 4 threads to prevent thermal throttle',
+      );
+    });
+
+    test('iOS high tier still gets 6 threads', () {
+      const device = DeviceProfile(
+        identifier: 'iPhone17,1',
+        deviceName: 'iPhone 16 Pro',
+        totalRamGB: 8.0,
+        chipName: 'A18 Pro',
+        tier: DeviceTier.high,
+      );
+      const model = ModelInfo(
+        id: 'llama-1b',
+        name: 'Llama 1B',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+      final score = ModelAdvisor.score(
+        model: model,
+        device: device,
+        useCase: UseCase.chat,
+      );
+      expect(
+        score.recommendedConfig.numThreads,
+        6,
+        reason: 'iOS high tier should use 6 threads (Metal handles GPU work)',
+      );
+    });
+
+    test('iOS low tier gets 4 threads', () {
+      const device = DeviceProfile(
+        identifier: 'iPhone14,4',
+        deviceName: 'iPhone 13 mini',
+        totalRamGB: 4.0,
+        chipName: 'A15 Bionic',
+        tier: DeviceTier.minimum,
+      );
+      const model = ModelInfo(
+        id: 'llama-1b',
+        name: 'Llama 1B',
+        sizeBytes: 700 * 1024 * 1024,
+        downloadUrl: 'https://example.com/llama.gguf',
+        family: 'llama3',
+        parametersB: 1.0,
+        quantization: 'Q4_K_M',
+      );
+      final score = ModelAdvisor.score(
+        model: model,
+        device: device,
+        useCase: UseCase.chat,
+      );
+      expect(
+        score.recommendedConfig.numThreads,
+        4,
+        reason: 'iOS low tier should use 4 threads',
+      );
+    });
+  });
+
+  // =========================================================================
+  // SoakTestService default duration — 35 min behavior change
+  // =========================================================================
+
+  group('SoakTestService default duration', () {
+    test('soak_test_service.dart defines _testDuration as 35 minutes', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content,
+          contains('Duration(minutes: 35)'),
+          reason: 'soak test default should be 35 minutes',
+        );
+      }
+    });
+
+    test('CONTRIBUTING.md references 35 min device session', () {
+      final file = File('${Directory.current.path}/../CONTRIBUTING.md');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content,
+          contains('35 min'),
+          reason: 'CONTRIBUTING.md should reference 35 min (not 30 min)',
+        );
+      }
+    });
+
+    test('soak_test_service documents 30→35 min behavior change', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Should document the duration change
+        expect(
+          content.contains('30') && content.contains('35'),
+          isTrue,
+          reason:
+              'soak_test_service should document the 30→35 min behavior change',
+        );
+      }
+    });
+  });
 }
 
 // =========================================================================

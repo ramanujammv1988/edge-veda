@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show File, Platform;
+import 'dart:math' show min;
 import 'package:camera/camera.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screen_capturer/screen_capturer.dart';
 
 /// App-level soak runner that keeps running even when the Soak screen is closed.
+///
+/// **Behavior change (v2.1.0):** Default soak duration increased from 30 to
+/// 35 minutes across all platforms. The extra 5 minutes improves thermal
+/// steady-state coverage — SD845 testing showed thermal ramp-up can take
+/// 25+ minutes before reaching steady state.
 ///
 /// **Known limitation (CPU-only Android):** On devices without Vulkan GPU
 /// support (e.g. Snapdragon 845), soak tests run CPU-only with very low
@@ -127,7 +133,7 @@ class SoakTestService extends ChangeNotifier {
         await _visionWorker.initVision(
           modelPath: _modelPath!,
           mmprojPath: _mmprojPath!,
-          numThreads: Platform.isMacOS ? 6 : 4,
+          numThreads: _adaptiveThreadCount(),
           contextSize: 4096,
           useGpu: Platform.isIOS,
         );
@@ -662,6 +668,20 @@ class SoakTestService extends ChangeNotifier {
     } catch (_) {
       // Ignore telemetry poll errors to keep soak running.
     }
+  }
+
+  /// Adaptive thread count based on platform and available cores.
+  ///
+  /// Android CPU-only: cap at half-cores (max 4) to prevent thermal throttle
+  /// on big.LITTLE SoCs. macOS: up to 6 for screen capture inference.
+  /// iOS: up to 4 (Metal handles GPU work).
+  static int _adaptiveThreadCount() {
+    final cores = Platform.numberOfProcessors;
+    if (Platform.isMacOS) {
+      return min(cores, 6);
+    }
+    // Android/iOS: cap at half of available cores, max 4 for thermal safety
+    return min((cores / 2).ceil(), 4);
   }
 
   String _formatBytes(int bytes) {

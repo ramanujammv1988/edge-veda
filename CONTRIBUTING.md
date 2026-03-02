@@ -44,7 +44,7 @@ PRs are categorized by risk level. Each tier requires different evidence:
 |------|-------|-------------------|
 | **Smoke** | UI, docs, config, strings | `flutter test` + `dart analyze` output |
 | **Standard** | Features, bug fixes, audio/STT/TTS | Smoke + 10 min device test session |
-| **Core** | Inference, FFI, Scheduler, Isolate workers, memory | Standard + 30 min device session + A/B comparison |
+| **Core** | Inference, FFI, Scheduler, Isolate workers, memory | Standard + 35 min device session + A/B comparison |
 
 ### Workflow
 
