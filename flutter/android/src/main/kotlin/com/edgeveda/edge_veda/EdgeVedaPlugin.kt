@@ -68,9 +68,9 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
     private var thermalStreamHandler: ThermalStreamHandler? = null
     private var audioCaptureStreamHandler: AudioCaptureStreamHandler? = null
 
-    // Permission request tracking
-    private var pendingPermissionResult: MethodChannel.Result? = null
-    private var pendingPermissionType: String? = null // "microphone", "detective"
+    // Permission request tracking — keyed by request code to prevent race conditions.
+    // Concurrent requests for different permission types are handled independently.
+    private val pendingPermissions = mutableMapOf<Int, MethodChannel.Result>()
 
     companion object {
         private const val TAG = "EdgeVeda"
@@ -326,8 +326,11 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
             return
         }
         val act = activity ?: run { result.success(false); return }
-        pendingPermissionResult = result
-        pendingPermissionType = "microphone"
+        // Reject any already-pending microphone request to avoid leaking its Result
+        pendingPermissions.remove(REQUEST_CODE_MICROPHONE)?.error(
+            "CANCELLED", "Superseded by a new microphone permission request", null
+        )
+        pendingPermissions[REQUEST_CODE_MICROPHONE] = result
         ActivityCompat.requestPermissions(
             act, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_CODE_MICROPHONE
         )
@@ -369,8 +372,11 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
             return
         }
 
-        pendingPermissionResult = result
-        pendingPermissionType = "detective"
+        // Reject any already-pending detective request to avoid leaking its Result
+        pendingPermissions.remove(REQUEST_CODE_DETECTIVE)?.error(
+            "CANCELLED", "Superseded by a new detective permission request", null
+        )
+        pendingPermissions[REQUEST_CODE_DETECTIVE] = result
         ActivityCompat.requestPermissions(act, permsNeeded.toTypedArray(), REQUEST_CODE_DETECTIVE)
     }
 
@@ -400,13 +406,12 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
         permissions: Array<out String>,
         grantResults: IntArray
     ): Boolean {
+        val pendingResult = pendingPermissions.remove(requestCode) ?: return false
         when (requestCode) {
             REQUEST_CODE_MICROPHONE -> {
                 val granted = grantResults.isNotEmpty() &&
                         grantResults[0] == PackageManager.PERMISSION_GRANTED
-                pendingPermissionResult?.success(granted)
-                pendingPermissionResult = null
-                pendingPermissionType = null
+                pendingResult.success(granted)
                 return true
             }
             REQUEST_CODE_DETECTIVE -> {
@@ -417,16 +422,14 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
                             ctx, Manifest.permission.READ_CALENDAR
                         ) == PackageManager.PERMISSION_GRANTED
                     ) "granted" else "denied"
-                    pendingPermissionResult?.success(
+                    pendingResult.success(
                         mapOf("photos" to photoStatus, "calendar" to calStatus)
                     )
                 } else {
-                    pendingPermissionResult?.success(
+                    pendingResult.success(
                         mapOf("photos" to "denied", "calendar" to "denied")
                     )
                 }
-                pendingPermissionResult = null
-                pendingPermissionType = null
                 return true
             }
         }

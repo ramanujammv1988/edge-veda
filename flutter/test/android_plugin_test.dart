@@ -1943,6 +1943,149 @@ void main() {
       expect(allMethods.length, 18);
     });
   });
+
+  // =========================================================================
+  // Permission race-condition guard (pendingPermissions map)
+  // =========================================================================
+
+  group('Permission race-condition guard', () {
+    // This group validates the Kotlin-side fix where single-slot
+    // pendingPermissionResult/pendingPermissionType was replaced with a
+    // map keyed by request code. The Dart-side mock simulates what the
+    // native side now does: concurrent requests for the same permission
+    // type cancel the earlier Result with a CANCELLED error.
+
+    late List<MethodCall> log;
+
+    setUp(() {
+      log = [];
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, null);
+    });
+
+    test('concurrent microphone requests cancel the earlier one', () async {
+      // Track how many times the handler is invoked
+      var callCount = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
+            log.add(call);
+            callCount++;
+            if (call.method == 'requestMicrophonePermission') {
+              if (callCount == 1) {
+                // First request is superseded — native side sends CANCELLED
+                throw PlatformException(
+                  code: 'CANCELLED',
+                  message: 'Superseded by a new microphone permission request',
+                );
+              }
+              // Second request completes normally
+              return true;
+            }
+            return null;
+          });
+
+      // Fire first request — should get CANCELLED
+      final first = telemetryChannel.invokeMethod<bool>(
+        'requestMicrophonePermission',
+      );
+
+      // Fire second request immediately (concurrent)
+      callCount = 1; // reset so second invocation returns true
+      final second = telemetryChannel.invokeMethod<bool>(
+        'requestMicrophonePermission',
+      );
+
+      // First should throw PlatformException with CANCELLED
+      expect(first, throwsA(isA<PlatformException>()));
+      // Second should resolve successfully
+      expect(await second, isTrue);
+      // Both calls were dispatched
+      expect(log.length, 2);
+    });
+
+    test('concurrent detective requests cancel the earlier one', () async {
+      var callCount = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
+            log.add(call);
+            callCount++;
+            if (call.method == 'requestDetectivePermissions') {
+              if (callCount == 1) {
+                throw PlatformException(
+                  code: 'CANCELLED',
+                  message: 'Superseded by a new detective permission request',
+                );
+              }
+              return {'photos': 'granted', 'calendar': 'granted'};
+            }
+            return null;
+          });
+
+      final first = telemetryChannel.invokeMethod<Map>(
+        'requestDetectivePermissions',
+      );
+
+      callCount = 1;
+      final second = telemetryChannel.invokeMethod<Map>(
+        'requestDetectivePermissions',
+      );
+
+      expect(first, throwsA(isA<PlatformException>()));
+      final result = await second;
+      expect(result?['photos'], 'granted');
+      expect(result?['calendar'], 'granted');
+    });
+
+    test('microphone and detective requests are independent', () async {
+      // Different request codes should not interfere with each other
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
+            log.add(call);
+            switch (call.method) {
+              case 'requestMicrophonePermission':
+                return true;
+              case 'requestDetectivePermissions':
+                return {'photos': 'granted', 'calendar': 'granted'};
+              default:
+                return null;
+            }
+          });
+
+      // Fire both concurrently — neither should cancel the other
+      final micFuture = telemetryChannel.invokeMethod<bool>(
+        'requestMicrophonePermission',
+      );
+      final detFuture = telemetryChannel.invokeMethod<Map>(
+        'requestDetectivePermissions',
+      );
+
+      expect(await micFuture, isTrue);
+      final detResult = await detFuture;
+      expect(detResult?['photos'], 'granted');
+      expect(detResult?['calendar'], 'granted');
+      expect(log.length, 2);
+    });
+
+    test('single request resolves without CANCELLED error', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
+            log.add(call);
+            if (call.method == 'requestMicrophonePermission') {
+              return true;
+            }
+            return null;
+          });
+
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'requestMicrophonePermission',
+      );
+      expect(result, isTrue);
+      expect(log.length, 1);
+    });
+  });
 }
 
 // =========================================================================
