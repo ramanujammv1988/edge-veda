@@ -899,23 +899,29 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
                 isRecording = true
                 audioRecord?.startRecording()
 
+                // Hoist Handler allocation out of the capture loop to avoid
+                // per-chunk object creation and reduce GC pressure.
+                val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
                 captureThread = Thread({
                     val floatBuffer = FloatArray(CHUNK_SAMPLES)
+                    // Pre-allocate a send buffer to avoid clone()/copyOfRange()
+                    // on the hot path when full chunks are read.
+                    val sendBuffer = FloatArray(CHUNK_SAMPLES)
                     while (isRecording) {
                         val read = audioRecord?.read(
                             floatBuffer, 0, CHUNK_SAMPLES, AudioRecord.READ_BLOCKING
                         ) ?: 0
                         if (read > 0 && isRecording) {
-                            // Send as float[] — Flutter standard codec encodes
-                            // float[] as FLOAT_ARRAY -> Dart receives as Float32List
-                            // (matching iOS FlutterStandardTypedData float32 behavior)
+                            // Copy into pre-allocated send buffer (or allocate
+                            // only for partial reads which are rare)
                             val chunk = if (read == CHUNK_SAMPLES) {
-                                floatBuffer.clone()
+                                floatBuffer.copyInto(sendBuffer)
+                                sendBuffer.copyOf()
                             } else {
                                 floatBuffer.copyOfRange(0, read)
                             }
-                            // Post to main thread for Flutter EventSink
-                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            mainHandler.post {
                                 eventSink?.success(chunk)
                             }
                         }

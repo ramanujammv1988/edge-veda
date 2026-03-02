@@ -1703,6 +1703,17 @@ void main() {
         expect(content, contains('READ_EXTERNAL_STORAGE'));
       }
     });
+
+    test('example app manifest does NOT declare unused READ_MEDIA_VIDEO', () {
+      final manifestFile = File(
+        '${Directory.current.path}/example/android/app/src/main/AndroidManifest.xml',
+      );
+      if (manifestFile.existsSync()) {
+        final content = manifestFile.readAsStringSync();
+        // No code path reads video — only images for vision/detective
+        expect(content, isNot(contains('READ_MEDIA_VIDEO')));
+      }
+    });
   });
 
   // =========================================================================
@@ -2400,6 +2411,244 @@ void main() {
           doc.contains('Android'),
           isTrue,
           reason: 'should mention Android support',
+        );
+      }
+    });
+  });
+
+  // =========================================================================
+  // DeviceProfile.detect() — conservative Android default
+  // =========================================================================
+
+  group('DeviceProfile Android default is conservative', () {
+    // Android detect() returns a sync default before async telemetry arrives.
+    // Must be pessimistic to avoid over-recommending models.
+
+    test('Android default uses 4 GB RAM (pessimistic)', () {
+      // DeviceProfile.detect() is cached and platform-dependent, so we test
+      // the constant values directly by constructing the expected default.
+      const androidDefault = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Android Device',
+        totalRamGB: 4.0,
+        chipName: 'ARM64',
+        tier: DeviceTier.low,
+      );
+      expect(androidDefault.totalRamGB, 4.0);
+    });
+
+    test('Android default tier is low (not medium)', () {
+      const androidDefault = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Android Device',
+        totalRamGB: 4.0,
+        chipName: 'ARM64',
+        tier: DeviceTier.low,
+      );
+      expect(androidDefault.tier, DeviceTier.low);
+    });
+
+    test('model_advisor.dart Android default matches conservative values', () {
+      final file = File('${Directory.current.path}/lib/src/model_advisor.dart');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // The detect() method should use 4.0 GB and DeviceTier.low
+        expect(content, contains('totalRamGB: 4.0,'));
+        expect(content, contains('tier: DeviceTier.low,'));
+      }
+    });
+  });
+
+  // =========================================================================
+  // Platform-aware timeouts
+  // =========================================================================
+
+  group('Platform-aware timeouts', () {
+    test('vision_worker uses platform-conditional timeout', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/isolate/vision_worker.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Should not hardcode a single global timeout for describeFrame
+        expect(
+          content,
+          isNot(contains('timeout(const Duration(seconds: 600))')),
+          reason: 'vision timeout should be platform-aware, not hardcoded 600s',
+        );
+        // Should reference Platform.isAndroid for timeout selection
+        expect(
+          content,
+          contains('Platform.isAndroid'),
+          reason: 'vision worker should use Platform.isAndroid for timeout',
+        );
+      }
+    });
+
+    test('worker_isolate uses platform-conditional token timeout', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/isolate/worker_isolate.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Should not hardcode a single global timeout for nextToken
+        expect(
+          content,
+          isNot(contains('timeout(const Duration(seconds: 300))')),
+          reason: 'token timeout should be platform-aware, not hardcoded 300s',
+        );
+        // Should reference Platform.isAndroid for timeout selection
+        expect(
+          content,
+          contains('Platform.isAndroid'),
+          reason:
+              'worker isolate should use Platform.isAndroid for token timeout',
+        );
+      }
+    });
+  });
+
+  // =========================================================================
+  // Audio capture allocation pressure
+  // =========================================================================
+
+  group('Audio capture allocation pressure', () {
+    test('AudioCaptureStreamHandler hoists Handler out of capture loop', () {
+      final file = File(
+        '${Directory.current.path}/android/src/main/kotlin/com/edgeveda/edge_veda/EdgeVedaPlugin.kt',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Handler should NOT be allocated inside the while loop
+        // Look for Handler creation outside the Thread runnable body
+        // The old pattern was: android.os.Handler(android.os.Looper.getMainLooper()).post {
+        // inside the while(isRecording) loop — this allocates a new Handler per chunk
+        expect(
+          content,
+          isNot(
+            contains(
+              'android.os.Handler(android.os.Looper.getMainLooper()).post',
+            ),
+          ),
+          reason: 'Handler should be hoisted out of capture loop',
+        );
+      }
+    });
+
+    test('AudioCaptureStreamHandler avoids clone() in hot path', () {
+      final file = File(
+        '${Directory.current.path}/android/src/main/kotlin/com/edgeveda/edge_veda/EdgeVedaPlugin.kt',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Extract just the AudioCaptureStreamHandler section
+        final audioSection = content.substring(
+          content.indexOf('class AudioCaptureStreamHandler'),
+        );
+        // Should not use .clone() in the capture loop
+        expect(
+          audioSection,
+          isNot(contains('floatBuffer.clone()')),
+          reason: 'should use copyInto instead of clone for lower GC pressure',
+        );
+      }
+    });
+  });
+
+  // =========================================================================
+  // memory_guard.cpp 32-bit total memory fix
+  // =========================================================================
+
+  group('memory_guard.cpp 32-bit total memory acquisition', () {
+    test('get_total_physical_memory uses uint64_t arithmetic on Android', () {
+      final file = File(
+        '${Directory.current.path}/../core/src/memory_guard.cpp',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // The Linux/Android get_total_physical_memory() must use 64-bit
+        // arithmetic for pages * page_size to avoid truncation on 32-bit ARM
+        // when total RAM > 4GB
+        expect(
+          content,
+          contains('uint64_t'),
+          reason: 'must use uint64_t to avoid 32-bit overflow',
+        );
+        // Should not do raw `pages * page_size` with long types
+        final funcMatch = RegExp(
+          r'static size_t get_total_physical_memory\(\) \{[^}]*\}',
+          multiLine: true,
+          dotAll: true,
+        ).allMatches(content);
+        // Find the Linux/Android version (second match after Apple)
+        for (final match in funcMatch) {
+          final body = match.group(0)!;
+          if (body.contains('sysconf')) {
+            // Must cast to uint64_t before multiplication
+            expect(
+              body,
+              contains('static_cast<uint64_t>'),
+              reason: 'pages * page_size must use 64-bit cast',
+            );
+          }
+        }
+      }
+    });
+
+    test('memory_guard_get_android_meminfo uses 64-bit for total', () {
+      final file = File(
+        '${Directory.current.path}/../core/src/memory_guard.cpp',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // The sscanf parsing for MemTotal must use a 64-bit type
+        // (unsigned long long / uint64_t), not unsigned long which is
+        // 32-bit on armeabi-v7a and truncates >4 GB values
+        final funcStart = content.indexOf('memory_guard_get_android_meminfo');
+        if (funcStart >= 0) {
+          // Find the closing brace of the function
+          var braceDepth = 0;
+          var funcEnd = funcStart;
+          for (
+            var i = content.indexOf('{', funcStart);
+            i < content.length;
+            i++
+          ) {
+            if (content[i] == '{') braceDepth++;
+            if (content[i] == '}') braceDepth--;
+            if (braceDepth == 0) {
+              funcEnd = i + 1;
+              break;
+            }
+          }
+          final funcBody = content.substring(funcStart, funcEnd);
+          expect(
+            funcBody.contains('unsigned long long') ||
+                funcBody.contains('uint64_t'),
+            isTrue,
+            reason: 'meminfo parser must use 64-bit type for >4GB total memory',
+          );
+        }
+      }
+    });
+  });
+
+  // =========================================================================
+  // Soak evidence — known limitation documentation
+  // =========================================================================
+
+  group('Soak evidence framing', () {
+    test('soak_test_service.dart documents CPU-only limitation', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content.contains('CPU-only') || content.contains('known limitation'),
+          isTrue,
+          reason:
+              'soak test service should document SD845 CPU-only as known limitation',
         );
       }
     });

@@ -145,13 +145,22 @@ static size_t get_platform_memory_usage() {
 
 /**
  * Get total available physical memory on Linux/Android
+ *
+ * Uses uint64_t arithmetic to avoid overflow on 32-bit ARM (armeabi-v7a)
+ * where long is 32-bit and pages * page_size truncates above 4 GB.
+ * The result is clamped to SIZE_MAX on 32-bit platforms.
  */
 static size_t get_total_physical_memory() {
     long pages = sysconf(_SC_PHYS_PAGES);
     long page_size = sysconf(_SC_PAGESIZE);
 
     if (pages > 0 && page_size > 0) {
-        return static_cast<size_t>(pages * page_size);
+        uint64_t total = static_cast<uint64_t>(pages) * static_cast<uint64_t>(page_size);
+        // On 32-bit ARM, size_t is 32-bit; clamp to SIZE_MAX (~4 GB)
+        if (total > SIZE_MAX) {
+            return SIZE_MAX;
+        }
+        return static_cast<size_t>(total);
     }
 
     return 0;
@@ -554,14 +563,19 @@ void memory_guard_get_android_meminfo(
 
     char line[256];
     while (fgets(line, sizeof(line), file)) {
-        unsigned long value;
+        // Use unsigned long long to avoid truncation on 32-bit ARM
+        // where unsigned long is 32-bit and MemTotal can exceed 4 GB
+        unsigned long long value;
 
-        if (total && sscanf(line, "MemTotal: %lu kB", &value) == 1) {
-            *total = value * 1024;
-        } else if (available && sscanf(line, "MemAvailable: %lu kB", &value) == 1) {
-            *available = value * 1024;
-        } else if (free && sscanf(line, "MemFree: %lu kB", &value) == 1) {
-            *free = value * 1024;
+        if (total && sscanf(line, "MemTotal: %llu kB", &value) == 1) {
+            uint64_t bytes = value * 1024ULL;
+            *total = (bytes > SIZE_MAX) ? SIZE_MAX : static_cast<size_t>(bytes);
+        } else if (available && sscanf(line, "MemAvailable: %llu kB", &value) == 1) {
+            uint64_t bytes = value * 1024ULL;
+            *available = (bytes > SIZE_MAX) ? SIZE_MAX : static_cast<size_t>(bytes);
+        } else if (free && sscanf(line, "MemFree: %llu kB", &value) == 1) {
+            uint64_t bytes = value * 1024ULL;
+            *free = (bytes > SIZE_MAX) ? SIZE_MAX : static_cast<size_t>(bytes);
         }
     }
 

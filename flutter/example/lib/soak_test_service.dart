@@ -9,6 +9,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screen_capturer/screen_capturer.dart';
 
 /// App-level soak runner that keeps running even when the Soak screen is closed.
+///
+/// **Known limitation (CPU-only Android):** On devices without Vulkan GPU
+/// support (e.g. Snapdragon 845), soak tests run CPU-only with very low
+/// throughput (~0.05 tok/s, 60+ second latency per frame). The SD845
+/// evidence shows 2/6 criteria PASS (no crash, no memory leak) while
+/// thermal monitoring and battery drain assertions fail due to sustained
+/// CPU load. This is an expected hardware constraint, not a software bug.
+/// Full soak parity requires Vulkan GPU acceleration (Phase 7).
 class SoakTestService extends ChangeNotifier {
   SoakTestService._();
 

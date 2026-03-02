@@ -5,9 +5,8 @@
     <!-- Audio capture for speech-to-text demo -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
-    <!-- Photo access for detective/vision demo features -->
+    <!-- Photo access for detective/vision demo features (images only, no video) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
 
     <!-- Calendar access for detective demo features -->

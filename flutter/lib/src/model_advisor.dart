@@ -111,15 +111,17 @@ class DeviceProfile {
   static DeviceProfile detect() {
     if (_cached != null) return _cached!;
 
-    // Android: no sysctlbyname — return conservative default.
+    // Android: no sysctlbyname — return pessimistic default.
     // Real device info is fetched async via TelemetryService MethodChannel.
+    // Use 4 GB / low tier to avoid over-recommending models before true
+    // telemetry arrives (many budget Android devices have 3-4 GB RAM).
     if (Platform.isAndroid) {
       _cached = const DeviceProfile(
         identifier: 'android',
         deviceName: 'Android Device',
-        totalRamGB: 6.0,
+        totalRamGB: 4.0,
         chipName: 'ARM64',
-        tier: DeviceTier.medium,
+        tier: DeviceTier.low,
       );
       return _cached!;
     }
