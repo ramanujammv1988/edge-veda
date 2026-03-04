@@ -1705,10 +1705,14 @@ def main() -> None:
         _print_help()
         sys.exit(0 if args["help"] else 1)
 
-    # Resolve paths for experiment files
+    # Resolve paths for experiment files — write to evidence/ (not tools/)
+    # for consolidated auditability. evidence/ is gitignored; tools/ holds
+    # only the analysis script itself.
     tools_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(tools_dir, "experiments.json")
-    md_path = os.path.join(tools_dir, "EXPERIMENTS.md")
+    evidence_dir = os.path.join(os.path.dirname(tools_dir), "evidence")
+    os.makedirs(evidence_dir, exist_ok=True)
+    db_path = os.path.join(evidence_dir, "experiments.json")
+    md_path = os.path.join(evidence_dir, "EXPERIMENTS.md")
 
     # --list mode
     if args["list"]:

@@ -128,7 +128,8 @@ class ModelManager {
         final requiredMB = (model.sizeBytes / (1024 * 1024)).round();
         throw DownloadException(
           'Insufficient disk space',
-          details: '${freeMB}MB free, ${requiredMB}MB required for ${model.name}',
+          details:
+              '${freeMB}MB free, ${requiredMB}MB required for ${model.name}',
         );
       }
     }
@@ -225,8 +226,7 @@ class ModelManager {
     if (model.sizeBytes > 0 && sourceSize != model.sizeBytes) {
       throw ModelValidationException(
         'Source file size mismatch',
-        details:
-            'Expected ${model.sizeBytes} bytes, got $sourceSize bytes',
+        details: 'Expected ${model.sizeBytes} bytes, got $sourceSize bytes',
       );
     }
 
@@ -439,21 +439,24 @@ class ModelManager {
       // Compute total bytes correctly for resumed vs fresh downloads.
       // For 206, Content-Length is the remaining bytes, not the total.
       final contentLength = response.contentLength ?? 0;
-      final totalBytes = response.statusCode == 206
-          ? resumeOffset + contentLength
-          : (contentLength > 0 ? contentLength : model.sizeBytes);
+      final totalBytes =
+          response.statusCode == 206
+              ? resumeOffset + contentLength
+              : (contentLength > 0 ? contentLength : model.sizeBytes);
 
       final startTime = DateTime.now();
 
       // Emit initial progress immediately on resume so UI shows
       // the already-downloaded portion right away.
       if (resumeOffset > 0 && response.statusCode == 206) {
-        _progressController.add(DownloadProgress(
-          totalBytes: totalBytes,
-          downloadedBytes: resumeOffset,
-          speedBytesPerSecond: 0,
-          estimatedSecondsRemaining: null,
-        ));
+        _progressController.add(
+          DownloadProgress(
+            totalBytes: totalBytes,
+            downloadedBytes: resumeOffset,
+            speedBytesPerSecond: 0,
+            estimatedSecondsRemaining: null,
+          ),
+        );
       }
 
       // At this point sink is guaranteed non-null: the 416 and error

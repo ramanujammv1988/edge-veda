@@ -50,9 +50,9 @@ android {
         minSdkVersion 24
         targetSdkVersion 34
 
-        // NDK configuration - arm64 only for v1.1 scope
+        // NDK configuration - all supported ABIs
         ndk {
-            abiFilters 'arm64-v8a'  // v1.1 scope: arm64 only, no 32-bit
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
         }
 
         externalNativeBuild {
@@ -62,8 +62,7 @@ android {
                           "-DANDROID_PLATFORM=android-24",
                           "-DEDGE_VEDA_ENABLE_VULKAN=OFF",
                           "-DEDGE_VEDA_ENABLE_CPU=ON",
-                          "-DGGML_OPENMP=OFF",
-                          "-DGGML_LLAMAFILE=OFF"
+                          "-DGGML_OPENMP=OFF"
             }
         }
     }
@@ -108,6 +107,7 @@ android {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation 'androidx.annotation:annotation:1.7.0'
+    implementation 'androidx.core:core:1.12.0'
     // Vulkan support deferred to Phase 7
 }
 

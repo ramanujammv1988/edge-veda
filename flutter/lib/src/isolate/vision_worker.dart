@@ -17,6 +17,7 @@ library;
 
 import 'dart:async';
 import 'dart:ffi' as ffi;
+import 'dart:io' show Platform;
 import 'dart:isolate';
 import 'dart:typed_data';
 
@@ -174,8 +175,10 @@ class VisionWorker {
     );
 
     try {
-      // Vision inference can take 2-5 seconds per frame
-      return await completer.future.timeout(const Duration(seconds: 30));
+      // Android CPU-only inference can take 3-5min; iOS Metal is much faster.
+      // Use platform-aware timeout to avoid masking hangs on faster paths.
+      final timeout = Duration(seconds: Platform.isAndroid ? 600 : 120);
+      return await completer.future.timeout(timeout);
     } finally {
       await subscription.cancel();
     }

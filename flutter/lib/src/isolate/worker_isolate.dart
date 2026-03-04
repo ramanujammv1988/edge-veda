@@ -16,6 +16,7 @@ library;
 
 import 'dart:async';
 import 'dart:ffi' as ffi;
+import 'dart:io' show Platform;
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
@@ -201,9 +202,11 @@ class StreamingWorker {
     _commandPort!.send(NextTokenCommand());
 
     try {
-      // Token latency can exceed 30s for long-context RAG prompts; keep a larger
-      // timeout to avoid false failures in offline/on-device mode.
-      return await completer.future.timeout(const Duration(seconds: 120));
+      // Android CPU-only: prefill on SD845 @ ~0.1 tok/s can exceed 2min
+      // for multi-turn conversations. iOS Metal is much faster.
+      // Use platform-aware timeout to avoid masking hangs on faster paths.
+      final timeout = Duration(seconds: Platform.isAndroid ? 300 : 60);
+      return await completer.future.timeout(timeout);
     } finally {
       await subscription.cancel();
     }

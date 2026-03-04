@@ -28,6 +28,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Model recommendation use case selector
   UseCase _selectedUseCase = UseCase.chat;
 
+  @override
+  void initState() {
+    super.initState();
+    // Fetch chip, memory, neural engine info from Android plugin
+    DeviceStatusInfo.initAndroid().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   String get _detectiveTitle {
     if (DeviceStatusInfo.platformLabel == 'macOS') return 'macOS Detective';
     if (DeviceStatusInfo.platformLabel == 'iOS' ||

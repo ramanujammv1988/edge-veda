@@ -350,10 +350,21 @@ Answer:
     if (_checkingInternet) return;
     _checkingInternet = true;
     try {
-      final result = await InternetAddress.lookup(
-        'example.com',
-      ).timeout(const Duration(seconds: 2));
-      final reachable = result.any((entry) => entry.rawAddress.isNotEmpty);
+      // Try multiple domains — some Android devices fail DNS for certain hosts
+      bool reachable = false;
+      for (final host in ['example.com', 'google.com', 'huggingface.co']) {
+        try {
+          final result = await InternetAddress.lookup(
+            host,
+          ).timeout(const Duration(seconds: 2));
+          if (result.any((entry) => entry.rawAddress.isNotEmpty)) {
+            reachable = true;
+            break;
+          }
+        } catch (_) {
+          continue;
+        }
+      }
       if (mounted) {
         setState(() {
           _isInternetReachable = reachable;
@@ -377,6 +388,10 @@ Answer:
           ? 'Offline model mode enabled'
           : 'Auto mode enabled (uses local model, network-aware downloads)';
     });
+    // Re-attempt model download when switching to Auto mode
+    if (!_preferOfflineModel && !_isInitialized && !_isDownloading) {
+      _checkAndDownloadModel();
+    }
   }
 
   Future<void> _checkAndDownloadModel() async {
@@ -1771,8 +1786,9 @@ Context:
       );
 
       setState(
-        () => _statusMessage =
-            'Loading model in worker isolate (30-60s first time)...',
+        () => _statusMessage = _isInitialized
+            ? 'Generating response...'
+            : 'Loading model in worker isolate (30-60s first time)...',
       );
 
       // Check if summarization happened

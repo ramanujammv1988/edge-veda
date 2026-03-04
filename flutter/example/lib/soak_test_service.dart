@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show File, Platform;
+import 'dart:math' show min;
 import 'package:camera/camera.dart';
 import 'package:edge_veda/edge_veda.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,19 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screen_capturer/screen_capturer.dart';
 
 /// App-level soak runner that keeps running even when the Soak screen is closed.
+///
+/// **Behavior change (v2.1.0):** Default soak duration increased from 30 to
+/// 35 minutes across all platforms. The extra 5 minutes improves thermal
+/// steady-state coverage — SD845 testing showed thermal ramp-up can take
+/// 25+ minutes before reaching steady state.
+///
+/// **Known limitation (CPU-only Android):** On devices without Vulkan GPU
+/// support (e.g. Snapdragon 845), soak tests run CPU-only with very low
+/// throughput (~0.05 tok/s, 60+ second latency per frame). The SD845
+/// evidence shows 2/6 criteria PASS (no crash, no memory leak) while
+/// thermal monitoring and battery drain assertions fail due to sustained
+/// CPU load. This is an expected hardware constraint, not a software bug.
+/// Full soak parity requires Vulkan GPU acceleration (Phase 7).
 class SoakTestService extends ChangeNotifier {
   SoakTestService._();
 
@@ -55,7 +69,7 @@ class SoakTestService extends ChangeNotifier {
   DateTime? _startTime;
   bool _isManaged = true;
 
-  static const _testDuration = Duration(minutes: 30);
+  static const _testDuration = Duration(minutes: 35);
   static const _telemetryInterval = Duration(seconds: 2);
   static const _telemetryChannel =
       MethodChannel('com.edgeveda.edge_veda/telemetry');
@@ -119,9 +133,9 @@ class SoakTestService extends ChangeNotifier {
         await _visionWorker.initVision(
           modelPath: _modelPath!,
           mmprojPath: _mmprojPath!,
-          numThreads: Platform.isMacOS ? 6 : 4,
+          numThreads: _adaptiveThreadCount(),
           contextSize: 4096,
-          useGpu: true,
+          useGpu: Platform.isIOS,
         );
         if (Platform.isMacOS) {
           _statusMessage = 'Initializing screen capture...';
@@ -453,6 +467,11 @@ class SoakTestService extends ChangeNotifier {
     _screenCaptureTimer = null;
   }
 
+  /// Grab-and-stop: start the camera stream, capture ONE frame, immediately
+  /// stop the stream to eliminate GC pressure during inference. On CPU-only
+  /// devices the camera plugin delivers 30 CameraImage objects/sec even when
+  /// frames are unused; each ~500 KB YUV allocation triggers GC that competes
+  /// with the native inference thread for CPU time.
   void _startCameraStream() {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
@@ -461,7 +480,7 @@ class SoakTestService extends ChangeNotifier {
     _cameraController!.startImageStream((CameraImage image) {
       if (!_isRunning) return;
 
-      final rgb = Platform.isIOS
+      var rgb = Platform.isIOS
           ? CameraUtils.convertBgraToRgb(
               image.planes[0].bytes,
               image.width,
@@ -478,7 +497,27 @@ class SoakTestService extends ChangeNotifier {
               image.planes[1].bytesPerPixel ?? 1,
             );
 
-      _frameQueue.enqueue(rgb, image.width, image.height);
+      // Stop the camera stream immediately after grabbing one frame.
+      // This frees CPU and eliminates GC pressure while inference runs.
+      _stopCameraStream();
+
+      // Downscale to 128px longest side for CPU-only devices.
+      // CLIP patch count scales quadratically (720x480 → ~1734 patches;
+      // 128x85 → ~54 patches → ~1000x faster attention on CPU).
+      var frameWidth = image.width;
+      var frameHeight = image.height;
+      const maxDim = 128;
+      final longest = frameWidth > frameHeight ? frameWidth : frameHeight;
+      if (longest > maxDim) {
+        final scale = maxDim / longest;
+        final newW = (frameWidth * scale).round();
+        final newH = (frameHeight * scale).round();
+        rgb = CameraUtils.resizeRgb(rgb, frameWidth, frameHeight, newW, newH);
+        frameWidth = newW;
+        frameHeight = newH;
+      }
+
+      _frameQueue.enqueue(rgb, frameWidth, frameHeight);
       unawaited(_processNextFrame());
     });
   }
@@ -578,13 +617,18 @@ class SoakTestService extends ChangeNotifier {
       _totalLatencyMs += totalInferenceMs;
       _avgLatencyMs = _totalLatencyMs / _frameCount;
       _lastDescription = result.description;
+      debugPrint('[SoakTest] frame=$_frameCount '
+          'latency=${totalInferenceMs.toStringAsFixed(0)}ms '
+          'encode=${result.imageEncodeMs.toStringAsFixed(0)}ms '
+          'tokens=${result.generatedTokens}');
       notifyListeners();
-    } catch (_) {
-      // Ignore transient per-frame failures while keeping soak active.
+    } catch (e) {
+      debugPrint('[SoakTest] frame error: $e');
     } finally {
       _frameQueue.markDone();
-      if (_frameQueue.hasPending && _isRunning) {
-        unawaited(_processNextFrame());
+      if (_isRunning) {
+        // Restart camera to grab the next frame (grab-and-stop pattern).
+        _startCameraStream();
       }
     }
   }
@@ -624,6 +668,20 @@ class SoakTestService extends ChangeNotifier {
     } catch (_) {
       // Ignore telemetry poll errors to keep soak running.
     }
+  }
+
+  /// Adaptive thread count based on platform and available cores.
+  ///
+  /// Android CPU-only: cap at half-cores (max 4) to prevent thermal throttle
+  /// on big.LITTLE SoCs. macOS: up to 6 for screen capture inference.
+  /// iOS: up to 4 (Metal handles GPU work).
+  static int _adaptiveThreadCount() {
+    final cores = Platform.numberOfProcessors;
+    if (Platform.isMacOS) {
+      return min(cores, 6);
+    }
+    // Android/iOS: cap at half of available cores, max 4 for thermal safety
+    return min((cores / 2).ceil(), 4);
   }
 
   String _formatBytes(int bytes) {
