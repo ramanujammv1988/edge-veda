@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Night theme colors -->
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="black">#FF000000</color>
+    <color name="teal_200">#FF03DAC5</color>
+    
+    <!-- Keep the same colors as day theme for consistency -->
+    <color name="background">#FF000000</color>
+    <color name="surface">#FF0A0A0F</color>
+    <color name="accent">#FF00BCD4</color>
+    <color name="brand_red">#FFE50914</color>
+    <color name="text_primary">#FFF5F5F5</color>
+    <color name="text_secondary">#FF8A8A9A</color>
+</resources>
