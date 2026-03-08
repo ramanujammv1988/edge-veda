@@ -1,4 +1,5 @@
-import 'dart:io' show Platform;
+import 'dart:async';
+import 'dart:io' show InternetAddress, Platform;
 
 import 'package:flutter/material.dart';
 import 'package:edge_veda/edge_veda.dart';
@@ -809,6 +810,15 @@ class _ModelRowState extends State<_ModelRow> {
   bool _isDeleting = false;
   bool _isDownloading = false;
   bool? _isDownloaded;
+  double _downloadProgress = 0.0;
+  String _downloadStatusText = '';
+  StreamSubscription<DownloadProgress>? _downloadSubscription;
+
+  @override
+  void dispose() {
+    _downloadSubscription?.cancel();
+    super.dispose();
+  }
 
   String _formatSize(int bytes) {
     final mb = bytes / (1024 * 1024);
@@ -816,6 +826,15 @@ class _ModelRowState extends State<_ModelRow> {
       return '~${(mb / 1024).toStringAsFixed(1)} GB';
     }
     return '~${mb.round()} MB';
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
   IconData _modelIcon() {
@@ -843,10 +862,70 @@ class _ModelRowState extends State<_ModelRow> {
     return Icons.smart_toy;
   }
 
+  Future<bool> _checkInternetReachable() async {
+    for (final host in ['example.com', 'google.com', 'huggingface.co']) {
+      try {
+        final result = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 2));
+        if (result.any((entry) => entry.rawAddress.isNotEmpty)) return true;
+      } catch (_) {
+        continue;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _showNoInternetDialog() {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        icon: const Icon(Icons.wifi_off, color: AppTheme.warning, size: 48),
+        title: const Text('No Internet Connection',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Please connect to the internet to download this model. '
+          'Once downloaded, models run entirely offline.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child:
+                const Text('OK', style: TextStyle(color: AppTheme.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _startDownload() async {
-    setState(() => _isDownloading = true);
+    final reachable = await _checkInternetReachable();
+    if (!reachable) {
+      _showNoInternetDialog();
+      return;
+    }
+
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+      _downloadStatusText = '';
+    });
+
+    final modelManager = ModelManager();
+
+    _downloadSubscription = modelManager.downloadProgress.listen((progress) {
+      if (mounted) {
+        setState(() {
+          _downloadProgress = progress.progress;
+          _downloadStatusText =
+              '${progress.progressPercent}% — ${_formatBytes(progress.downloadedBytes)}/${_formatBytes(progress.totalBytes)}';
+        });
+      }
+    });
+
     try {
-      await ModelManager().downloadModel(widget.model);
+      await modelManager.downloadModel(widget.model);
       if (mounted) {
         setState(() {
           _isDownloading = false;
@@ -863,6 +942,9 @@ class _ModelRowState extends State<_ModelRow> {
           ),
         );
       }
+    } finally {
+      _downloadSubscription?.cancel();
+      _downloadSubscription = null;
     }
   }
 
@@ -969,18 +1051,35 @@ class _ModelRowState extends State<_ModelRow> {
                         fontSize: 12,
                       ),
                     ),
+                    if (_isDownloading) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _downloadProgress > 0
+                              ? _downloadProgress
+                              : null,
+                          color: AppTheme.accent,
+                          backgroundColor: AppTheme.surfaceVariant,
+                          minHeight: 6,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _downloadStatusText.isNotEmpty
+                            ? _downloadStatusText
+                            : 'Starting download…',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               if (_isDownloading)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.accent,
-                  ),
-                )
+                const SizedBox(width: 20)
               else if (snapshot.connectionState == ConnectionState.waiting ||
                   _isDeleting)
                 const SizedBox(

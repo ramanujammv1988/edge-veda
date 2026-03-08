@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:edge_veda/edge_veda.dart';
 
+import 'adaptive_stt_service.dart';
 import 'app_theme.dart';
 import 'model_selector.dart';
 import 'soak_test_service.dart';
@@ -52,7 +54,14 @@ class _SttScreenState extends State<SttScreen>
   WhisperSession? _session;
   StreamSubscription<Float32List>? _audioSubscription;
   StreamSubscription<WhisperSegment>? _segmentSubscription;
+  StreamSubscription<String>? _errorSubscription;
   StreamSubscription<DownloadProgress>? _downloadSubscription;
+
+  // Adaptive STT (Android fallback)
+  final AdaptiveSttService _adaptiveStt = AdaptiveSttService();
+  SttEngine _activeEngine = SttEngine.whisper;
+  StreamSubscription<SttEngine>? _engineSubscription;
+  StreamSubscription<WhisperSegment>? _systemSttSegmentSubscription;
 
   // Pulsing animation for recording indicator
   late AnimationController _pulseController;
@@ -65,6 +74,17 @@ class _SttScreenState extends State<SttScreen>
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
     _checkModel();
+    _initAdaptiveStt();
+  }
+
+  Future<void> _initAdaptiveStt() async {
+    if (!Platform.isAndroid) return;
+    await _adaptiveStt.init();
+    _engineSubscription = _adaptiveStt.onEngineChanged.listen((engine) {
+      if (mounted) {
+        setState(() => _activeEngine = engine);
+      }
+    });
   }
 
   @override
@@ -72,8 +92,11 @@ class _SttScreenState extends State<SttScreen>
     _durationTimer?.cancel();
     _pulseController.dispose();
     _downloadSubscription?.cancel();
+    _engineSubscription?.cancel();
+    _systemSttSegmentSubscription?.cancel();
     _stopRecording();
     _session?.dispose();
+    _adaptiveStt.dispose();
     super.dispose();
   }
 
@@ -140,6 +163,10 @@ class _SttScreenState extends State<SttScreen>
     }
   }
 
+  /// Minimum available memory (in bytes) needed for whisper inference.
+  /// whisper-tiny.en needs ~120 MB working memory on top of the model file.
+  static const int _minMemoryForStt = 200 * 1024 * 1024; // 200 MB
+
   Future<void> _startRecording() async {
     // Request microphone permission
     final granted = await WhisperSession.requestMicrophonePermission();
@@ -155,6 +182,59 @@ class _SttScreenState extends State<SttScreen>
       return;
     }
 
+    // Check available memory before loading the whisper model.
+    // On low-RAM devices the native inference will time out or OOM.
+    final telemetry = TelemetryService();
+    final availableMemory = await telemetry.getAvailableMemory();
+    if (availableMemory > 0 && availableMemory < _minMemoryForStt && mounted) {
+      final availMB = (availableMemory / (1024 * 1024)).round();
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Row(
+            children: [
+              Icon(Icons.memory, color: AppTheme.warning, size: 24),
+              SizedBox(width: 10),
+              Text(
+                'Low Memory',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Text(
+            'Only $availMB MB of memory available. '
+            'Speech-to-text needs at least ${_minMemoryForStt ~/ (1024 * 1024)} MB '
+            'to work reliably.\n\n'
+            'Try closing other apps or tabs to free up memory. '
+            'Proceeding may result in very slow transcription or failure.',
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text(
+                'Try Anyway',
+                style: TextStyle(color: AppTheme.warning),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
     setState(() {
       _isInitializing = true;
     });
@@ -165,9 +245,45 @@ class _SttScreenState extends State<SttScreen>
       final sel = await ModelSelector.bestWhisper(modelManager);
       final modelPath = await modelManager.getModelPath(sel.model.id);
 
-      // Start whisper session
-      _session = WhisperSession(modelPath: modelPath);
+      // Start whisper session with adaptive config for Android
+      final adaptiveConfig = _adaptiveStt.getWhisperConfig();
+      final useGpu = await InferenceConfig.useGpu();
+      _session = WhisperSession(
+        modelPath: modelPath,
+        useGpu: useGpu,
+        chunkSizeMs: Platform.isAndroid ? adaptiveConfig.chunkSizeMs : 3000,
+        transcriptionTimeout: Platform.isAndroid
+            ? adaptiveConfig.timeout
+            : const Duration(seconds: 30),
+        onFallbackNeeded: Platform.isAndroid ? _onWhisperFallbackNeeded : null,
+      );
       await _session!.start();
+
+      // Listen for system STT segments (only active when fallback engaged)
+      _systemSttSegmentSubscription =
+          _adaptiveStt.onSegment.listen((segment) {
+        if (mounted) {
+          setState(() {
+            _segments.add(segment);
+            _transcript =
+                _segments.map((s) => s.text).join(' ').trim();
+          });
+        }
+      });
+
+      // Listen for transcription errors (e.g. native OOM, model failure)
+      _errorSubscription = _session!.onError.listen((error) {
+        if (mounted) {
+          _stopRecording();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Transcription failed: $error'),
+              backgroundColor: AppTheme.danger,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
 
       // Listen for segments
       _segmentSubscription = _session!.onSegment.listen((segment) {
@@ -217,9 +333,17 @@ class _SttScreenState extends State<SttScreen>
             _recordingDuration =
                 DateTime.now().difference(_recordingStartTime!);
             if (_segments.isEmpty && _recordingDuration.inSeconds >= 6) {
-              _recordingHint = _audioChunksReceived == 0
-                  ? 'No microphone audio detected. Check macOS Input device.'
-                  : 'Audio detected. Transcribing in the background...';
+              if (_audioChunksReceived == 0) {
+                _recordingHint =
+                    'No microphone audio detected. Check input device.';
+              } else if (_session != null && _session!.isActive) {
+                final bufSec =
+                    (_audioSamplesReceived / 16000).toStringAsFixed(0);
+                _recordingHint =
+                    'Processing ${bufSec}s of audio — this may take a moment on this device...';
+              } else {
+                _recordingHint = 'Audio detected. Waiting for transcription...';
+              }
             } else {
               _recordingHint = null;
             }
@@ -253,35 +377,65 @@ class _SttScreenState extends State<SttScreen>
   }
 
   Future<void> _stopRecording() async {
+    // Update UI immediately so the stop button feels responsive,
+    // even on slow devices where flush/stop may take seconds.
+    final hadSegments = _segments.isNotEmpty;
+    final chunksReceived = _audioChunksReceived;
+
     _durationTimer?.cancel();
     _durationTimer = null;
 
     _audioSubscription?.cancel();
     _audioSubscription = null;
 
-    await _session?.flush();
-    await _session?.stop();
-
     _segmentSubscription?.cancel();
     _segmentSubscription = null;
+    _errorSubscription?.cancel();
+    _errorSubscription = null;
+    _systemSttSegmentSubscription?.cancel();
+    _systemSttSegmentSubscription = null;
+
+    // Stop system STT if it was active
+    if (_activeEngine == SttEngine.systemStt) {
+      _adaptiveStt.stopSystemStt();
+    }
 
     if (mounted) {
       setState(() {
         _isRecording = false;
+        _recordingHint = null;
       });
-
-      if (_segments.isEmpty) {
-        final message = _audioChunksReceived == 0
-            ? 'No microphone audio received. Check macOS input source and mic permission.'
-            : 'No speech recognized yet. Try speaking louder/closer to the mic and retry.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: AppTheme.warning,
-          ),
-        );
-      }
     }
+
+    // Async cleanup — UI is already updated above
+    try {
+      await _session?.flush();
+    } catch (_) {
+      // Don't block stop on flush errors
+    }
+    try {
+      await _session?.stop();
+    } catch (_) {
+      // Don't block stop on dispose errors
+    }
+
+    if (mounted && !hadSegments) {
+      final message = chunksReceived == 0
+          ? 'No microphone audio received. Check input source and mic permission.'
+          : 'No speech recognized. Try speaking louder/closer to the mic and retry.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+    }
+  }
+
+  /// Called when Whisper repeatedly fails — switch to system STT.
+  void _onWhisperFallbackNeeded(int failures) {
+    debugPrint('EdgeVeda: Whisper fallback needed ($failures failures)');
+    _adaptiveStt.handleWhisperFallback(failures);
   }
 
   void _clearTranscript() {
@@ -696,6 +850,31 @@ class _SttScreenState extends State<SttScreen>
         ),
         backgroundColor: AppTheme.background,
         actions: [
+          // Engine indicator chip (Android only, shown during recording)
+          if (_isRecording && Platform.isAndroid)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+              child: Chip(
+                label: Text(
+                  _activeEngine == SttEngine.whisper
+                      ? 'Whisper (Local)'
+                      : 'System STT',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _activeEngine == SttEngine.whisper
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFFFFC107),
+                  ),
+                ),
+                backgroundColor: (_activeEngine == SttEngine.whisper
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFFFFC107))
+                    .withValues(alpha: 0.15),
+                side: BorderSide.none,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+              ),
+            ),
           // Copy transcript
           if (_transcript.isNotEmpty)
             IconButton(

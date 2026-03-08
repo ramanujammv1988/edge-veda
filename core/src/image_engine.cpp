@@ -11,10 +11,13 @@
  */
 
 #include "edge_veda.h"
+#include "memory_guard.h"
+#include "thread_utils.h"
 #include <cstring>
 #include <cstdlib>
 #include <string>
 #include <mutex>
+#include <atomic>
 
 #ifdef __APPLE__
 #include <TargetConditionals.h>
@@ -48,6 +51,9 @@ struct ev_image_context_impl {
     ev_image_progress_cb progress_cb;
     void* progress_user_data;
 
+    // Cancel flag (checked in progress callback bridge)
+    std::atomic<bool> cancelled{false};
+
     // Thread safety
     std::mutex mutex;
 
@@ -75,7 +81,12 @@ static thread_local ev_image_context_impl* g_active_image_ctx = nullptr;
 
 static void sd_progress_bridge(int step, int steps, float time, void* /* data */) {
     ev_image_context_impl* ctx = g_active_image_ctx;
-    if (ctx && ctx->progress_cb) {
+    if (!ctx) return;
+
+    // Stop forwarding progress if cancelled
+    if (ctx->cancelled.load(std::memory_order_acquire)) return;
+
+    if (ctx->progress_cb) {
         ctx->progress_cb(step, steps, time, ctx->progress_user_data);
     }
 }
@@ -107,6 +118,24 @@ static enum scheduler_t map_schedule(ev_image_schedule_t schedule) {
     }
 }
 #endif
+
+/* ============================================================================
+ * Memory Guard Eviction Callback
+ * ========================================================================= */
+
+// Called from the monitor thread when image engine is selected for LRU eviction.
+static void image_evict_cb(void* user_data) {
+    ev_image_context ctx = static_cast<ev_image_context>(user_data);
+    if (!ctx) return;
+
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    if (!ctx->model_loaded) return;
+
+#ifdef EDGE_VEDA_SD_ENABLED
+    if (ctx->sd_ctx) { free_sd_ctx(ctx->sd_ctx); ctx->sd_ctx = nullptr; }
+    ctx->model_loaded = false;
+#endif
+}
 
 /* ============================================================================
  * Image Configuration
@@ -160,7 +189,8 @@ ev_image_context ev_image_init(
     }
 
     ctx->model_path = config->model_path;
-    ctx->default_threads = config->num_threads > 0 ? config->num_threads : 4;
+    ctx->default_threads = config->num_threads > 0 ? config->num_threads
+                                                     : static_cast<int>(ev_default_thread_count());
 
 #ifdef EDGE_VEDA_SD_ENABLED
     // Configure sd.cpp context parameters
@@ -204,6 +234,11 @@ ev_image_context ev_image_init(
     }
 
     ctx->model_loaded = true;
+
+    // Register with process-wide memory guard for cross-engine coordination.
+    // SD doesn't expose model size; pass 0 (LRU eviction still works via RSS).
+    memory_guard_register_engine(MG_ENGINE_IMAGE, 0, image_evict_cb, ctx);
+
     if (error) *error = EV_SUCCESS;
     return ctx;
 #else
@@ -217,20 +252,22 @@ ev_image_context ev_image_init(
 void ev_image_free(ev_image_context ctx) {
     if (!ctx) return;
 
-    std::lock_guard<std::mutex> lock(ctx->mutex);
+    // Unregister before acquiring ctx->mutex to prevent ABBA deadlock
+    memory_guard_unregister_engine(MG_ENGINE_IMAGE);
+
+    {
+        std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_SD_ENABLED
-    if (ctx->sd_ctx) {
-        free_sd_ctx(ctx->sd_ctx);
-        ctx->sd_ctx = nullptr;
-    }
+        if (ctx->sd_ctx) {
+            free_sd_ctx(ctx->sd_ctx);
+            ctx->sd_ctx = nullptr;
+        }
 #endif
 
-    ctx->model_loaded = false;
-
-    // Note: unlock before delete (lock_guard will unlock in its destructor,
-    // but the mutex is part of ctx which we're about to delete).
-    // This is safe because we hold the only reference.
+        ctx->model_loaded = false;
+    }
+    // lock_guard destructor has run, mutex is unlocked before delete
     delete ctx;
 }
 
@@ -266,7 +303,11 @@ ev_error_t ev_image_generate(
         return EV_ERROR_CONTEXT_INVALID;
     }
 
+    memory_guard_touch_engine(MG_ENGINE_IMAGE);
     std::lock_guard<std::mutex> lock(ctx->mutex);
+
+    // Clear cancel flag for this generation
+    ctx->cancelled.store(false, std::memory_order_release);
 
     // Initialize result
     std::memset(result, 0, sizeof(ev_image_result));
@@ -299,6 +340,16 @@ ev_error_t ev_image_generate(
 
     // Clear active context
     g_active_image_ctx = nullptr;
+
+    // Check if generation was cancelled
+    if (ctx->cancelled.load(std::memory_order_acquire)) {
+        if (images) {
+            if (images[0].data) free(images[0].data);
+            free(images);
+        }
+        ctx->last_error = "Image generation cancelled";
+        return EV_ERROR_INFERENCE_FAILED;
+    }
 
     if (!images || !images[0].data) {
         ctx->last_error = "Image generation failed";
@@ -343,6 +394,11 @@ ev_error_t ev_image_generate(
 /* ============================================================================
  * Result Cleanup
  * ========================================================================= */
+
+void ev_image_cancel(ev_image_context ctx) {
+    if (!ctx) return;
+    ctx->cancelled.store(true, std::memory_order_release);
+}
 
 void ev_image_free_result(ev_image_result* result) {
     if (!result) return;

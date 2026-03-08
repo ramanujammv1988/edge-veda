@@ -360,6 +360,19 @@ class DeviceProfile {
     'Mac16,8': ('Mac mini M4', 16, 'M4', DeviceTier.ultra),
   };
 
+  /// Returns true on Android devices with <4 GB total RAM or <500 MB available.
+  ///
+  /// Used to apply aggressive inference caps (smaller context, fewer threads,
+  /// shorter timeout) that keep vision inference within RAM on budget tablets.
+  static Future<bool> isLowEndAndroid(TelemetryService telemetry) async {
+    if (!Platform.isAndroid) return false;
+    final totalMem = await telemetry.getTotalMemory();
+    final availMem = await telemetry.getAvailableMemory();
+    if (totalMem > 0 && totalMem < 4 * 1024 * 1024 * 1024) return true;
+    if (availMem > 0 && availMem < 500 * 1024 * 1024) return true;
+    return false;
+  }
+
   @override
   String toString() =>
       'DeviceProfile($deviceName, ${totalRamGB}GB, $chipName, $tier)';

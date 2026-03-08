@@ -11,6 +11,8 @@
  */
 
 #include "edge_veda.h"
+#include "memory_guard.h"
+#include "thread_utils.h"
 #include <cstring>
 #include <cstdlib>
 #include <string>
@@ -65,6 +67,24 @@ struct ev_whisper_context_impl {
 };
 
 /* ============================================================================
+ * Memory Guard Eviction Callback
+ * ========================================================================= */
+
+// Called from the monitor thread when whisper engine is selected for LRU eviction.
+static void whisper_evict_cb(void* user_data) {
+    ev_whisper_context ctx = static_cast<ev_whisper_context>(user_data);
+    if (!ctx) return;
+
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    if (!ctx->model_loaded) return;
+
+#ifdef EDGE_VEDA_WHISPER_ENABLED
+    if (ctx->wctx) { whisper_free(ctx->wctx); ctx->wctx = nullptr; }
+    ctx->model_loaded = false;
+#endif
+}
+
+/* ============================================================================
  * Whisper Configuration
  * ========================================================================= */
 
@@ -99,7 +119,8 @@ ev_whisper_context ev_whisper_init(
     }
 
     ctx->model_path = config->model_path;
-    ctx->default_threads = config->num_threads > 0 ? config->num_threads : 4;
+    ctx->default_threads = config->num_threads > 0 ? config->num_threads
+                                                     : static_cast<int>(ev_default_thread_count());
 
 #ifdef EDGE_VEDA_WHISPER_ENABLED
     // Configure whisper context parameters
@@ -125,6 +146,11 @@ ev_whisper_context ev_whisper_init(
     }
 
     ctx->model_loaded = true;
+
+    // Register with process-wide memory guard for cross-engine coordination.
+    // Whisper doesn't expose model size; pass 0 (LRU eviction still works via RSS).
+    memory_guard_register_engine(MG_ENGINE_WHISPER, 0, whisper_evict_cb, ctx);
+
     if (error) *error = EV_SUCCESS;
     return ctx;
 #else
@@ -138,20 +164,22 @@ ev_whisper_context ev_whisper_init(
 void ev_whisper_free(ev_whisper_context ctx) {
     if (!ctx) return;
 
-    std::lock_guard<std::mutex> lock(ctx->mutex);
+    // Unregister before acquiring ctx->mutex to prevent ABBA deadlock
+    memory_guard_unregister_engine(MG_ENGINE_WHISPER);
+
+    {
+        std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_WHISPER_ENABLED
-    if (ctx->wctx) {
-        whisper_free(ctx->wctx);
-        ctx->wctx = nullptr;
-    }
+        if (ctx->wctx) {
+            whisper_free(ctx->wctx);
+            ctx->wctx = nullptr;
+        }
 #endif
 
-    ctx->model_loaded = false;
-
-    // Note: unlock before delete (lock_guard will unlock in its destructor,
-    // but the mutex is part of ctx which we're about to delete).
-    // This is safe because we hold the only reference.
+        ctx->model_loaded = false;
+    }
+    // lock_guard destructor has run, mutex is unlocked before delete
     delete ctx;
 }
 
@@ -181,6 +209,7 @@ ev_error_t ev_whisper_transcribe(
         return EV_ERROR_CONTEXT_INVALID;
     }
 
+    memory_guard_touch_engine(MG_ENGINE_WHISPER);
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
     // Clear previous results

@@ -1,4 +1,5 @@
-import 'dart:io' show File, Platform;
+import 'dart:async' show TimeoutException;
+import 'dart:io' show File, InternetAddress, Platform;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:flutter/material.dart';
@@ -16,10 +17,6 @@ import 'soak_test_service.dart';
 
 /// Whether the camera package is supported on this platform.
 bool get _cameraSupported => Platform.isIOS || Platform.isAndroid;
-
-/// Max pixels on the longest side before downscaling for inference.
-/// Prevents OOM on high-res phone photos (typically 4032x3024).
-const int _maxInferenceDimension = 768;
 
 /// Vision tab with continuous camera scanning and description overlay.
 ///
@@ -44,6 +41,7 @@ class _VisionScreenState extends State<VisionScreen>
   final VisionWorker _visionWorker = VisionWorker();
   final FrameQueue _frameQueue = FrameQueue();
   final ModelManager _modelManager = ModelManager();
+  late final AdaptiveVisionConfig _adaptiveConfig = AdaptiveVisionConfig.auto();
 
   // Vision state
   bool _isVisionReady = false;
@@ -130,14 +128,14 @@ class _VisionScreenState extends State<VisionScreen>
 
       // Step 3: Spawn persistent vision worker and load model once
       setState(() => _statusMessage = 'Loading vision model...');
+      final useGpu = await InferenceConfig.useGpu();
       await _visionWorker.spawn();
       await _visionWorker.initVision(
         modelPath: _modelPath!,
         mmprojPath: _mmprojPath!,
         numThreads: 4,
         contextSize: 4096,
-        // Android build is CPU-only (Vulkan disabled); GPU only on iOS (Metal).
-        useGpu: Platform.isIOS,
+        useGpu: useGpu,
       );
 
       if (!mounted) return;
@@ -211,8 +209,8 @@ class _VisionScreenState extends State<VisionScreen>
       var inferWidth = width;
       var inferHeight = height;
       final longest = width > height ? width : height;
-      if (longest > _maxInferenceDimension) {
-        final scale = _maxInferenceDimension / longest;
+      if (longest > _adaptiveConfig.maxDimension) {
+        final scale = _adaptiveConfig.maxDimension / longest;
         inferWidth = (width * scale).round();
         inferHeight = (height * scale).round();
         rgb =
@@ -237,6 +235,7 @@ class _VisionScreenState extends State<VisionScreen>
         maxTokens: 100,
       );
       sw.stop();
+      _adaptiveConfig.recordSuccess();
       SoakTestService.instance.recordExternalInference(
         source: 'Vision file',
         latencyMs: sw.elapsedMilliseconds,
@@ -250,6 +249,16 @@ class _VisionScreenState extends State<VisionScreen>
           _description = desc.description;
           _isProcessingFile = false;
           _statusMessage = 'Vision ready — pick another image';
+        });
+      }
+    } on TimeoutException {
+      _adaptiveConfig.recordTimeout();
+      if (mounted) {
+        setState(() {
+          _isProcessingFile = false;
+          _statusMessage = _adaptiveConfig.isDegraded
+              ? 'Timeout — resolution lowered to ${_adaptiveConfig.maxDimension}px'
+              : 'Vision timed out. Please try again.';
         });
       }
     } catch (e) {
@@ -300,8 +309,8 @@ class _VisionScreenState extends State<VisionScreen>
       var inferWidth = width;
       var inferHeight = height;
       final longest = width > height ? width : height;
-      if (longest > _maxInferenceDimension) {
-        final scale = _maxInferenceDimension / longest;
+      if (longest > _adaptiveConfig.maxDimension) {
+        final scale = _adaptiveConfig.maxDimension / longest;
         inferWidth = (width * scale).round();
         inferHeight = (height * scale).round();
         rgb =
@@ -326,6 +335,7 @@ class _VisionScreenState extends State<VisionScreen>
         maxTokens: 100,
       );
       sw.stop();
+      _adaptiveConfig.recordSuccess();
       SoakTestService.instance.recordExternalInference(
         source: 'Vision test file',
         latencyMs: sw.elapsedMilliseconds,
@@ -339,6 +349,16 @@ class _VisionScreenState extends State<VisionScreen>
           _description = desc.description;
           _isProcessingFile = false;
           _statusMessage = 'Test complete';
+        });
+      }
+    } on TimeoutException {
+      _adaptiveConfig.recordTimeout();
+      if (mounted) {
+        setState(() {
+          _isProcessingFile = false;
+          _statusMessage = _adaptiveConfig.isDegraded
+              ? 'Timeout — resolution lowered to ${_adaptiveConfig.maxDimension}px'
+              : 'Vision timed out. Please try again.';
         });
       }
     } catch (e) {
@@ -379,11 +399,58 @@ class _VisionScreenState extends State<VisionScreen>
     return 'Vision error. Please try again.';
   }
 
+  Future<bool> _checkInternetReachable() async {
+    for (final host in ['example.com', 'google.com', 'huggingface.co']) {
+      try {
+        final result = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 2));
+        if (result.any((entry) => entry.rawAddress.isNotEmpty)) return true;
+      } catch (_) {
+        continue;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _showNoInternetDialog() {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        icon: const Icon(Icons.wifi_off, color: AppTheme.warning, size: 48),
+        title: const Text('No Internet Connection',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Please connect to the internet to download this model. '
+          'Once downloaded, models run entirely offline.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child:
+                const Text('OK', style: TextStyle(color: AppTheme.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Use the best already-downloaded vision model pair; downloads SmolVLM2 as fallback.
   Future<void> _ensureModelsDownloaded() async {
     final selection = await ModelSelector.bestVision(_modelManager);
 
     if (selection.needsDownload) {
+      final reachable = await _checkInternetReachable();
+      if (!reachable) {
+        _showNoInternetDialog();
+        setState(() {
+          _isDownloading = false;
+          _statusMessage = 'No internet connection';
+        });
+        return;
+      }
+
       setState(() {
         _isDownloading = true;
         _statusMessage =
@@ -525,6 +592,7 @@ class _VisionScreenState extends State<VisionScreen>
         maxTokens: 100,
       );
       sw.stop();
+      _adaptiveConfig.recordSuccess();
       SoakTestService.instance.recordExternalInference(
         source: 'Vision camera',
         latencyMs: sw.elapsedMilliseconds,
@@ -534,6 +602,9 @@ class _VisionScreenState extends State<VisionScreen>
       if (mounted) {
         setState(() => _description = result.description);
       }
+    } on TimeoutException {
+      _adaptiveConfig.recordTimeout();
+      debugPrint('Vision camera timeout — max dimension now ${_adaptiveConfig.maxDimension}px');
     } catch (e) {
       debugPrint('Vision inference error: $e');
     } finally {

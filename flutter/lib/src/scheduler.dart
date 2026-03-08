@@ -135,10 +135,14 @@ class Scheduler {
   ///
   /// The workload starts at [QoSLevel.full]. If a workload with the same
   /// [id] is already registered, it is replaced.
-  void registerWorkload(WorkloadId id, {required WorkloadPriority priority}) {
+  void registerWorkload(
+    WorkloadId id, {
+    required WorkloadPriority priority,
+    int minWarmupSamples = 20,
+  }) {
     _workloads[id] = _WorkloadState(
       priority: priority,
-      latencyTracker: LatencyTracker(),
+      latencyTracker: LatencyTracker(minSamplesForEnforcement: minWarmupSamples),
     );
   }
 

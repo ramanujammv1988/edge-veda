@@ -42,6 +42,7 @@ import 'package:flutter/services.dart';
 
 import 'budget.dart';
 import 'chat_session.dart';
+import 'inference_config.dart' show InferenceConfig;
 import 'scheduler.dart';
 import 'text_cleaner.dart';
 import 'tts_service.dart';
@@ -154,6 +155,18 @@ class VoicePipelineConfig {
   /// Optional system prompt for the ChatSession.
   final String? systemPrompt;
 
+  /// Timeout for each Whisper transcription chunk.
+  ///
+  /// On low-end (CPU-only) devices, increase to 60-90 seconds.
+  /// Defaults to 30 seconds.
+  final Duration whisperTimeout;
+
+  /// Duration of each audio chunk in milliseconds for Whisper.
+  ///
+  /// Shorter chunks (e.g. 2000ms) reduce per-chunk inference time
+  /// on slow devices. Defaults to 3000ms (3 seconds).
+  final int whisperChunkSizeMs;
+
   const VoicePipelineConfig({
     this.silenceDuration = const Duration(milliseconds: 1000),
     this.thresholdMultiplier = 2.5,
@@ -163,6 +176,8 @@ class VoicePipelineConfig {
     this.ttsRate = 0.5,
     this.maxResponseTokens = 256,
     this.systemPrompt,
+    this.whisperTimeout = const Duration(seconds: 30),
+    this.whisperChunkSizeMs = 3000,
   });
 }
 
@@ -298,7 +313,13 @@ class VoicePipeline {
       await _configureAudioSession();
 
       // Create and start WhisperSession (no scheduler -- pipeline manages its own)
-      _whisperSession = WhisperSession(modelPath: _whisperModelPath);
+      final useGpu = await InferenceConfig.useGpu();
+      _whisperSession = WhisperSession(
+        modelPath: _whisperModelPath,
+        useGpu: useGpu,
+        chunkSizeMs: config.whisperChunkSizeMs,
+        transcriptionTimeout: config.whisperTimeout,
+      );
       await _whisperSession!.start();
 
       // Register voice pipeline workload with Scheduler at high priority

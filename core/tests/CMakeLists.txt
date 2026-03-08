@@ -32,6 +32,45 @@ set_target_properties(test_api_guards PROPERTIES
 # ctest discovery
 add_test(NAME api_guards COMMAND test_api_guards)
 
+# Collect feature defines that match what edge_veda_static was built with
+set(EV_TEST_FEATURE_DEFINES)
+if(LLAMA_CPP_AVAILABLE)
+    list(APPEND EV_TEST_FEATURE_DEFINES EDGE_VEDA_LLAMA_ENABLED)
+endif()
+if(WHISPER_CPP_AVAILABLE)
+    list(APPEND EV_TEST_FEATURE_DEFINES EDGE_VEDA_WHISPER_ENABLED)
+endif()
+if(SD_CPP_AVAILABLE)
+    list(APPEND EV_TEST_FEATURE_DEFINES EDGE_VEDA_SD_ENABLED)
+endif()
+
+# CI-safe memory guard and backend lifecycle unit tests (no model needed)
+add_executable(test_memory_guard test_memory_guard.cpp)
+target_link_libraries(test_memory_guard PRIVATE edge_veda_static)
+target_compile_definitions(test_memory_guard PRIVATE EDGE_VEDA_TEST_HOOKS ${EV_TEST_FEATURE_DEFINES})
+target_include_directories(test_memory_guard PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+set_target_properties(test_memory_guard PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME memory_guard COMMAND test_memory_guard)
+
+# CI-safe concurrency regression tests (no model needed)
+add_executable(test_concurrency test_concurrency.cpp)
+target_link_libraries(test_concurrency PRIVATE edge_veda_static)
+target_compile_definitions(test_concurrency PRIVATE EDGE_VEDA_TEST_HOOKS ${EV_TEST_FEATURE_DEFINES})
+target_include_directories(test_concurrency PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+set_target_properties(test_concurrency PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME concurrency COMMAND test_concurrency)
+set_tests_properties(concurrency PROPERTIES TIMEOUT 30)
+
 # Model-backed tests (require -DEDGE_VEDA_TEST_MODEL_PATH=<path>)
 if(DEFINED EDGE_VEDA_TEST_MODEL_PATH AND EXISTS "${EDGE_VEDA_TEST_MODEL_PATH}")
     message(STATUS "Model-backed tests enabled: ${EDGE_VEDA_TEST_MODEL_PATH}")

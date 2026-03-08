@@ -11,6 +11,9 @@
 
     <!-- Calendar access for detective demo features -->
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
+
+    <!-- Write to Downloads for trace export (API < 29 only; scoped storage handles 29+) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <application
         android:label="Edge Veda Example"
         android:name="${applicationName}"

@@ -54,6 +54,27 @@ class WhisperSession {
   /// Language code for transcription: "en", "auto", etc.
   final String language;
 
+  /// Duration of each audio chunk in milliseconds.
+  ///
+  /// Defaults to 3000ms (3 seconds). On low-end devices, shorter chunks
+  /// (e.g. 2000ms) reduce per-chunk inference time at the cost of more
+  /// frequent transcription calls.
+  final int chunkSizeMs;
+
+  /// Timeout for each transcription call.
+  ///
+  /// Defaults to 30 seconds. On slow (CPU-only) devices, increase to
+  /// 60-90 seconds to avoid premature timeout during inference.
+  final Duration transcriptionTimeout;
+
+  /// Callback fired when consecutive transcription failures suggest
+  /// the device cannot keep up with Whisper inference.
+  ///
+  /// The parameter is the current consecutive failure count. Fires at
+  /// 2 failures (before [onError] fires at 3) to give the caller time
+  /// to switch to a fallback STT engine.
+  final void Function(int consecutiveFailures)? onFallbackNeeded;
+
   /// Optional Scheduler for budget enforcement.
   ///
   /// When provided, STT workload is registered on [start] and
@@ -67,9 +88,7 @@ class WhisperSession {
   // Audio accumulation buffer
   final List<double> _audioBuffer = [];
   static const int _sampleRate = 16000;
-  static const int _chunkSizeMs = 3000; // 3 seconds per chunk
-  static const int _chunkSizeSamples =
-      _sampleRate * _chunkSizeMs ~/ 1000; // 48000 samples
+  late final int _chunkSizeSamples = _sampleRate * chunkSizeMs ~/ 1000;
 
   // Guard against re-entrant _processChunk calls.
   // Only one transcription can be in-flight at a time because
@@ -77,14 +96,27 @@ class WhisperSession {
   // that races when multiple callers listen concurrently.
   bool _isProcessing = false;
 
+  // Track consecutive transcription failures so callers can surface errors.
+  int _consecutiveFailures = 0;
+  static const int _maxConsecutiveFailures = 3;
+
   final StreamController<WhisperSegment> _segmentController =
       StreamController<WhisperSegment>.broadcast();
+
+  final StreamController<String> _errorController =
+      StreamController<String>.broadcast();
 
   /// Whether the session is active and ready for audio input.
   bool get isActive => _isActive;
 
   /// Stream of transcription segments as they are produced.
   Stream<WhisperSegment> get onSegment => _segmentController.stream;
+
+  /// Stream of transcription error messages.
+  Stream<String> get onError => _errorController.stream;
+
+  /// Number of consecutive transcription failures.
+  int get consecutiveFailures => _consecutiveFailures;
 
   /// Accumulated full transcript (all segments concatenated).
   String get transcript => _segments.map((s) => s.text).join(' ').trim();
@@ -200,6 +232,9 @@ class WhisperSession {
     this.numThreads = 4,
     this.useGpu = true,
     this.language = 'en',
+    this.chunkSizeMs = 3000,
+    this.transcriptionTimeout = const Duration(seconds: 30),
+    this.onFallbackNeeded,
     this.scheduler,
   });
 
@@ -231,7 +266,7 @@ class WhisperSession {
   /// Feed raw PCM audio samples for transcription.
   ///
   /// Samples must be 16kHz mono float32 (values between -1.0 and 1.0).
-  /// Audio is accumulated internally and transcribed in 3-second chunks.
+  /// Audio is accumulated internally and transcribed in [chunkSizeMs]-ms chunks.
   /// If the Scheduler has paused the STT workload, audio is buffered but
   /// not transcribed until QoS is restored.
   void feedAudio(Float32List samples) {
@@ -251,14 +286,20 @@ class WhisperSession {
   /// Force transcription of any remaining buffered audio.
   ///
   /// Useful when recording stops and you want the last partial chunk.
-  /// Waits for any in-flight transcription to complete first.
-  Future<void> flush() async {
+  /// Waits up to [timeout] for any in-flight transcription to complete.
+  Future<void> flush({Duration timeout = const Duration(seconds: 5)}) async {
     if (!_isActive || _audioBuffer.isEmpty) return;
-    // Wait for in-flight transcription to complete before flushing
-    while (_isProcessing) {
+    // Wait for in-flight transcription to complete, with a hard timeout
+    // to prevent the stop button from hanging indefinitely.
+    final deadline = DateTime.now().add(timeout);
+    while (_isProcessing && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
-    if (_audioBuffer.isNotEmpty) {
+    if (_isProcessing) {
+      debugPrint('EdgeVeda: flush() timed out waiting for in-flight transcription');
+      _isProcessing = false;
+    }
+    if (_isActive && _audioBuffer.isNotEmpty) {
       await _processChunk();
     }
   }
@@ -294,6 +335,7 @@ class WhisperSession {
       final response = await _worker!.transcribeChunk(
         chunk,
         language: language,
+        timeout: transcriptionTimeout,
       );
       stopwatch.stop();
 
@@ -303,12 +345,22 @@ class WhisperSession {
         stopwatch.elapsedMilliseconds.toDouble(),
       );
 
+      _consecutiveFailures = 0; // Reset on success
       for (final segment in response.segments) {
         _segments.add(segment);
         _segmentController.add(segment);
       }
-    } catch (_) {
-      // Swallow -- audio capture should continue even if one chunk fails
+    } catch (e) {
+      _consecutiveFailures++;
+      final msg = 'Whisper transcription failed: $e';
+      debugPrint('EdgeVeda: $msg (failure $_consecutiveFailures/$_maxConsecutiveFailures)');
+      // Fire fallback hint at 2 failures (before error stream fires at 3)
+      if (_consecutiveFailures == 2 && onFallbackNeeded != null) {
+        onFallbackNeeded!(_consecutiveFailures);
+      }
+      if (_consecutiveFailures >= _maxConsecutiveFailures) {
+        _errorController.add(msg);
+      }
     } finally {
       _isProcessing = false;
 
@@ -321,23 +373,28 @@ class WhisperSession {
 
   /// Stop the transcription session and release resources.
   ///
-  /// Flushes any remaining audio before stopping. Unregisters
-  /// [WorkloadId.stt] from the [Scheduler].
+  /// Immediately cancels any in-flight work and disposes the worker.
+  /// The caller should call [flush] before [stop] if they want to
+  /// process remaining audio; [stop] itself will not wait.
   Future<void> stop() async {
     if (!_isActive) return;
 
-    // Note: flush() should be called before stop() to process remaining
-    // audio. We set _isActive = false here which prevents further
-    // processing. The caller (stt_screen) calls flush() then stop().
     _isActive = false;
     _isProcessing = false;
-
+    _consecutiveFailures = 0;
     _audioBuffer.clear();
 
     // Unregister STT workload from Scheduler
     scheduler?.unregisterWorkload(WorkloadId.stt);
 
-    await _worker?.dispose();
+    // Dispose worker with a safety timeout so stop() never hangs
+    // even if the native whisper context is stuck.
+    try {
+      await _worker?.dispose().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      debugPrint('EdgeVeda: Worker dispose timed out, force-killing isolate');
+      _worker = null;
+    }
     _worker = null;
   }
 
@@ -351,5 +408,6 @@ class WhisperSession {
   Future<void> dispose() async {
     await stop();
     _segmentController.close();
+    _errorController.close();
   }
 }

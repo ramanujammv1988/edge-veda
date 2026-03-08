@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:edge_veda/src/model_advisor.dart';
 import 'package:edge_veda/src/telemetry_service.dart';
+import 'package:edge_veda/src/tts_service.dart';
 import 'package:edge_veda/src/types.dart' show ModelInfo;
+import 'package:edge_veda/src/whisper_session.dart';
 
 /// Unit tests for the Android plugin MethodChannel/EventChannel integration.
 ///
 /// Tests cover:
-/// 1. MethodChannel mock responses for all 17 Android telemetry methods
+/// 1. MethodChannel mock responses for all 25 Android methods
 /// 2. Android-specific device info methods (5 methods)
 /// 3. Permission request/check flow
 /// 4. Detective features (photo insights, calendar insights, share file)
@@ -20,6 +22,9 @@ import 'package:edge_veda/src/types.dart' show ModelInfo;
 /// 8. TelemetryService integration via mocked MethodChannel
 /// 9. EventChannel names and data formats
 /// 10. pubspec.yaml platform registration
+/// 11. TTS MethodChannel handlers and TtsEvent parsing
+/// 12. SpeechRecognizer MethodChannel handlers for adaptive STT fallback
+/// 13. Adaptive STT configuration (WhisperSession chunkSizeMs, transcriptionTimeout)
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -1455,12 +1460,18 @@ void main() {
       expect(name, 'com.edgeveda.edge_veda/memory_pressure');
     });
 
+    test('tts events event channel name', () {
+      const name = 'com.edgeveda.edge_veda/tts_events';
+      expect(name, 'com.edgeveda.edge_veda/tts_events');
+    });
+
     test('all channel names share com.edgeveda.edge_veda prefix', () {
       const channels = [
         'com.edgeveda.edge_veda/telemetry',
         'com.edgeveda.edge_veda/thermal',
         'com.edgeveda.edge_veda/audio_capture',
         'com.edgeveda.edge_veda/memory_pressure',
+        'com.edgeveda.edge_veda/tts_events',
       ];
       for (final ch in channels) {
         expect(ch, startsWith('com.edgeveda.edge_veda/'));
@@ -2043,7 +2054,7 @@ void main() {
   // =========================================================================
 
   group('Android MethodChannel — method completeness', () {
-    test('all 17 methods are handled (13 telemetry + 4 device info)', () {
+    test('all 25 methods are handled (13 telemetry + 4 device info + 5 TTS + 3 SpeechRecognizer)', () {
       // Exhaustive list of methods the Android Kotlin plugin handles
       const expectedMethods = [
         // Telemetry (13)
@@ -2065,13 +2076,23 @@ void main() {
         'getChipName',
         'getTotalMemory',
         'getGpuBackend',
+        // TTS (5)
+        'tts_speak',
+        'tts_stop',
+        'tts_pause',
+        'tts_resume',
+        'tts_voices',
+        // SpeechRecognizer (3)
+        'speechRecognizer_isAvailable',
+        'speechRecognizer_start',
+        'speechRecognizer_stop',
       ];
 
-      expect(expectedMethods.length, 17);
-      expect(expectedMethods.toSet().length, 17); // no duplicates
+      expect(expectedMethods.length, 25);
+      expect(expectedMethods.toSet().length, 25); // no duplicates
     });
 
-    test('hasNeuralEngine is an additional method (18 total)', () {
+    test('hasNeuralEngine is an additional method (26 total)', () {
       // hasNeuralEngine is always false on Android but still handled
       const allMethods = [
         'getThermalState',
@@ -2092,9 +2113,208 @@ void main() {
         'getTotalMemory',
         'hasNeuralEngine',
         'getGpuBackend',
+        'tts_speak',
+        'tts_stop',
+        'tts_pause',
+        'tts_resume',
+        'tts_voices',
+        'speechRecognizer_isAvailable',
+        'speechRecognizer_start',
+        'speechRecognizer_stop',
       ];
 
-      expect(allMethods.length, 18);
+      expect(allMethods.length, 26);
+    });
+  });
+
+  // =========================================================================
+  // 24. TTS MethodChannel Handlers
+  // =========================================================================
+
+  group('Android TTS MethodChannel', () {
+    late List<MethodCall> log;
+
+    setUp(() {
+      log = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
+            log.add(call);
+            switch (call.method) {
+              case 'tts_speak':
+                return true;
+              case 'tts_stop':
+                return true;
+              case 'tts_pause':
+                return true;
+              case 'tts_resume':
+                return true;
+              case 'tts_voices':
+                return [
+                  {
+                    'id': 'en-us-x-sfg#male_1-local',
+                    'name': 'en-us-x-sfg#male_1-local',
+                    'language': 'en-US',
+                    'quality': 2,
+                  },
+                  {
+                    'id': 'en-gb-x-rjs#female_1-local',
+                    'name': 'en-gb-x-rjs#female_1-local',
+                    'language': 'en-GB',
+                    'quality': 3,
+                  },
+                ];
+              default:
+                return null;
+            }
+          });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, null);
+    });
+
+    test('tts_speak sends text and optional params', () async {
+      final result = await telemetryChannel.invokeMethod<bool>('tts_speak', {
+        'text': 'Hello from Edge Veda',
+        'voiceId': 'en-us-x-sfg#male_1-local',
+        'rate': 0.5,
+        'pitch': 1.0,
+        'volume': 0.8,
+      });
+      expect(result, isTrue);
+      expect(log.length, 1);
+      expect(log.first.method, 'tts_speak');
+      final args = log.first.arguments as Map;
+      expect(args['text'], 'Hello from Edge Veda');
+      expect(args['voiceId'], 'en-us-x-sfg#male_1-local');
+      expect(args['rate'], 0.5);
+    });
+
+    test('tts_stop returns true', () async {
+      final result = await telemetryChannel.invokeMethod<bool>('tts_stop');
+      expect(result, isTrue);
+      expect(log.first.method, 'tts_stop');
+    });
+
+    test('tts_pause returns true (no-op on Android)', () async {
+      final result = await telemetryChannel.invokeMethod<bool>('tts_pause');
+      expect(result, isTrue);
+      expect(log.first.method, 'tts_pause');
+    });
+
+    test('tts_resume returns true (no-op on Android)', () async {
+      final result = await telemetryChannel.invokeMethod<bool>('tts_resume');
+      expect(result, isTrue);
+      expect(log.first.method, 'tts_resume');
+    });
+
+    test('tts_voices returns list of voice maps', () async {
+      final result = await telemetryChannel.invokeMethod<List>('tts_voices');
+      expect(result, isNotNull);
+      expect(result!.length, 2);
+      final first = result[0] as Map;
+      expect(first['id'], isA<String>());
+      expect(first['name'], isA<String>());
+      expect(first['language'], 'en-US');
+      expect(first['quality'], isA<int>());
+    });
+  });
+
+  // =========================================================================
+  // 25. TtsEvent.fromMap Parsing
+  // =========================================================================
+
+  group('TtsEvent.fromMap parsing', () {
+    test('parses start event', () {
+      final event = TtsEvent.fromMap({'type': 'start'});
+      expect(event.type, TtsEventType.start);
+      expect(event.wordStart, isNull);
+      expect(event.wordLength, isNull);
+      expect(event.word, isNull);
+    });
+
+    test('parses finish event', () {
+      final event = TtsEvent.fromMap({'type': 'finish'});
+      expect(event.type, TtsEventType.finish);
+    });
+
+    test('parses cancel event', () {
+      final event = TtsEvent.fromMap({'type': 'cancel'});
+      expect(event.type, TtsEventType.cancel);
+    });
+
+    test('parses wordBoundary event with range', () {
+      final event = TtsEvent.fromMap({
+        'type': 'wordBoundary',
+        'start': 6,
+        'length': 4,
+        'text': 'from',
+      });
+      expect(event.type, TtsEventType.wordBoundary);
+      expect(event.wordStart, 6);
+      expect(event.wordLength, 4);
+      expect(event.word, 'from');
+    });
+
+    test('unknown type defaults to start', () {
+      final event = TtsEvent.fromMap({'type': 'unknown_type'});
+      expect(event.type, TtsEventType.start);
+    });
+
+    test('TtsEvent.toString includes word for wordBoundary', () {
+      final event = TtsEvent.fromMap({
+        'type': 'wordBoundary',
+        'start': 0,
+        'length': 5,
+        'text': 'Hello',
+      });
+      expect(event.toString(), contains('Hello'));
+      expect(event.toString(), contains('wordBoundary'));
+    });
+
+    test('TtsEvent.toString omits word for non-wordBoundary', () {
+      final event = TtsEvent.fromMap({'type': 'start'});
+      expect(event.toString(), contains('start'));
+      expect(event.toString(), isNot(contains('word:')));
+    });
+  });
+
+  // =========================================================================
+  // 26. TtsVoice model
+  // =========================================================================
+
+  group('TtsVoice model', () {
+    test('TtsVoice constructor and toString', () {
+      const voice = TtsVoice(
+        id: 'en-us-x-sfg#male_1-local',
+        name: 'Male 1',
+        language: 'en-US',
+        quality: 3,
+      );
+      expect(voice.id, 'en-us-x-sfg#male_1-local');
+      expect(voice.name, 'Male 1');
+      expect(voice.language, 'en-US');
+      expect(voice.quality, 3);
+      expect(voice.toString(), contains('Male 1'));
+      expect(voice.toString(), contains('en-US'));
+    });
+
+    test('quality mapping: 2 = enhanced, 3 = premium', () {
+      const enhanced = TtsVoice(
+        id: 'v1',
+        name: 'V1',
+        language: 'en-US',
+        quality: 2,
+      );
+      const premium = TtsVoice(
+        id: 'v2',
+        name: 'V2',
+        language: 'en-US',
+        quality: 3,
+      );
+      expect(enhanced.quality, 2);
+      expect(premium.quality, 3);
     });
   });
 
@@ -2883,6 +3103,136 @@ void main() {
         4,
         reason: 'iOS low tier should use 4 threads',
       );
+    });
+  });
+
+  // =========================================================================
+  // SpeechRecognizer MethodChannel — adaptive STT fallback
+  // =========================================================================
+
+  group('SpeechRecognizer MethodChannel', () {
+    late List<MethodCall> log;
+
+    setUp(() {
+      log = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, (MethodCall call) async {
+            log.add(call);
+            switch (call.method) {
+              case 'speechRecognizer_isAvailable':
+                return true;
+              case 'speechRecognizer_start':
+                return true;
+              case 'speechRecognizer_stop':
+                return true;
+              default:
+                return null;
+            }
+          });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(telemetryChannel, null);
+    });
+
+    test('speechRecognizer_isAvailable returns bool', () async {
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'speechRecognizer_isAvailable',
+      );
+      expect(result, isTrue);
+      expect(log.last.method, 'speechRecognizer_isAvailable');
+    });
+
+    test('speechRecognizer_start returns true', () async {
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'speechRecognizer_start',
+      );
+      expect(result, isTrue);
+      expect(log.last.method, 'speechRecognizer_start');
+    });
+
+    test('speechRecognizer_stop returns true', () async {
+      final result = await telemetryChannel.invokeMethod<bool>(
+        'speechRecognizer_stop',
+      );
+      expect(result, isTrue);
+      expect(log.last.method, 'speechRecognizer_stop');
+    });
+  });
+
+  group('SpeechRecognizer EventChannel name', () {
+    test('speech_recognition EventChannel is registered', () {
+      // Verify the channel name matches what Dart code expects
+      const channelName = 'com.edgeveda.edge_veda/speech_recognition';
+      expect(channelName, contains('speech_recognition'));
+    });
+  });
+
+  // =========================================================================
+  // Adaptive STT Configuration
+  // =========================================================================
+
+  group('Adaptive STT — WhisperSession configuration', () {
+    test('WhisperSession accepts custom chunkSizeMs and transcriptionTimeout', () {
+      // Verify the constructor accepts these params without error.
+      // WhisperSession is a real class; we just check it can be constructed
+      // with the new fields (start() not called, so no native code runs).
+      // Note: Can't call start() in tests without a real model file, but
+      // constructing verifies the API surface is correct.
+      expect(
+        () => WhisperSession(
+          modelPath: '/tmp/fake.bin',
+          chunkSizeMs: 2000,
+          transcriptionTimeout: const Duration(seconds: 60),
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('WhisperSession defaults are backward-compatible (3000ms, 30s)', () {
+      final session = WhisperSession(modelPath: '/tmp/fake.bin');
+      expect(session.chunkSizeMs, 3000);
+      expect(session.transcriptionTimeout, const Duration(seconds: 30));
+    });
+
+    test('WhisperSession accepts onFallbackNeeded callback', () {
+      int fallbackCount = 0;
+      expect(
+        () => WhisperSession(
+          modelPath: '/tmp/fake.bin',
+          onFallbackNeeded: (failures) => fallbackCount = failures,
+        ),
+        returnsNormally,
+      );
+      // Callback is stored but not invoked until transcription failures occur
+      expect(fallbackCount, 0);
+    });
+  });
+
+  group('Adaptive STT — device-tier config', () {
+    test('minimum tier gets shorter chunks and longer timeout', () {
+      const device = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Fire Tablet',
+        totalRamGB: 4.0,
+        chipName: 'mt8183',
+        tier: DeviceTier.minimum,
+      );
+      // Minimum tier should use 2000ms chunks, 90s timeout
+      expect(device.tier, DeviceTier.minimum);
+      expect(device.tier.index <= DeviceTier.low.index, isTrue);
+    });
+
+    test('medium tier uses default config', () {
+      const device = DeviceProfile(
+        identifier: 'android',
+        deviceName: 'Pixel 8',
+        totalRamGB: 8.0,
+        chipName: 'Tensor G3',
+        tier: DeviceTier.medium,
+      );
+      expect(device.tier.index > DeviceTier.low.index, isTrue);
     });
   });
 

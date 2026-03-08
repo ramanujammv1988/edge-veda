@@ -11,11 +11,14 @@
 
 #include "edge_veda.h"
 #include "backend_lifecycle.h"
+#include "memory_guard.h"
+#include "thread_utils.h"
 #include <cstring>
 #include <cstdlib>
 #include <string>
 #include <vector>
 #include <mutex>
+#include <atomic>
 #include <time.h>
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
@@ -105,6 +108,27 @@ static llama_sampler* vision_create_sampler(const ev_generation_params& params) 
 #endif
 
 /* ============================================================================
+ * Memory Guard Eviction Callback
+ * ========================================================================= */
+
+// Called from the monitor thread when vision engine is selected for LRU eviction.
+static void vision_evict_cb(void* user_data) {
+    ev_vision_context ctx = static_cast<ev_vision_context>(user_data);
+    if (!ctx) return;
+
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    if (!ctx->model_loaded) return; // Already evicted or freed
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    if (ctx->mtmd_ctx) { mtmd_free(ctx->mtmd_ctx); ctx->mtmd_ctx = nullptr; }
+    if (ctx->llama_ctx) { llama_free(ctx->llama_ctx); ctx->llama_ctx = nullptr; }
+    if (ctx->model) { llama_model_free(ctx->model); ctx->model = nullptr; }
+    ctx->model_loaded = false;
+    // Note: edge_veda_backend_release() is deferred to ev_vision_free()
+#endif
+}
+
+/* ============================================================================
  * Vision Configuration
  * ========================================================================= */
 
@@ -183,7 +207,7 @@ ev_vision_context ev_vision_init(
         : 512;
     ctx_params.n_threads = config->num_threads > 0
         ? static_cast<uint32_t>(config->num_threads)
-        : 4;
+        : ev_default_thread_count();
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
     // Create llama context
@@ -202,7 +226,8 @@ ev_vision_context ev_vision_init(
     mtmd_context_params mparams = mtmd_context_params_default();
     mparams.use_gpu = (config->gpu_layers != 0);
     mparams.print_timings = false;
-    mparams.n_threads = config->num_threads > 0 ? config->num_threads : 4;
+    mparams.n_threads = config->num_threads > 0 ? config->num_threads
+                                                  : static_cast<int>(ev_default_thread_count());
     mparams.warmup = true;  // Run warmup pass for optimal first-inference latency
 
     ctx->mtmd_ctx = mtmd_init_from_file(
@@ -238,6 +263,22 @@ ev_vision_context ev_vision_init(
     }
 
     ctx->model_loaded = true;
+
+    // If caller provides an explicit memory limit, override the guard's default
+    // before registration.  On low-end Android the auto-recommended 800 MB is
+    // too tight for even a 500 M-param Q8 model once Flutter runtime overhead
+    // is included, so the Dart layer passes a higher limit to prevent
+    // immediate eviction.
+    if (config->memory_limit_bytes > 0) {
+        memory_guard_set_limit(static_cast<size_t>(config->memory_limit_bytes));
+    }
+
+    // Register with process-wide memory guard for cross-engine coordination
+    {
+        size_t footprint = llama_model_size(ctx->model);
+        memory_guard_register_engine(MG_ENGINE_VISION, footprint, vision_evict_cb, ctx);
+    }
+
     if (error) *error = EV_SUCCESS;
     return ctx;
 #else
@@ -251,24 +292,29 @@ ev_vision_context ev_vision_init(
 void ev_vision_free(ev_vision_context ctx) {
     if (!ctx) return;
 
-    std::lock_guard<std::mutex> lock(ctx->mutex);
+    // Unregister before acquiring ctx->mutex to prevent ABBA deadlock
+    memory_guard_unregister_engine(MG_ENGINE_VISION);
+
+    {
+        std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    if (ctx->mtmd_ctx) {
-        mtmd_free(ctx->mtmd_ctx);
-        ctx->mtmd_ctx = nullptr;
-    }
-    if (ctx->llama_ctx) {
-        llama_free(ctx->llama_ctx);
-        ctx->llama_ctx = nullptr;
-    }
-    if (ctx->model) {
-        llama_model_free(ctx->model);
-        ctx->model = nullptr;
-    }
-    edge_veda_backend_release();
+        if (ctx->mtmd_ctx) {
+            mtmd_free(ctx->mtmd_ctx);
+            ctx->mtmd_ctx = nullptr;
+        }
+        if (ctx->llama_ctx) {
+            llama_free(ctx->llama_ctx);
+            ctx->llama_ctx = nullptr;
+        }
+        if (ctx->model) {
+            llama_model_free(ctx->model);
+            ctx->model = nullptr;
+        }
+        edge_veda_backend_release();
 #endif
-
+    }
+    // lock_guard destructor has run, mutex is unlocked before delete
     delete ctx;
 }
 
@@ -300,6 +346,7 @@ ev_error_t ev_vision_describe(
         return EV_ERROR_CONTEXT_INVALID;
     }
 
+    memory_guard_touch_engine(MG_ENGINE_VISION);
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
     // Resolve generation parameters
@@ -482,4 +529,292 @@ ev_error_t ev_vision_get_last_timings(ev_vision_context ctx, ev_timings_data* ti
 #endif
 
     return EV_SUCCESS;
+}
+
+/* ============================================================================
+ * Vision Streaming API
+ * ========================================================================= */
+
+struct ev_vision_stream_impl {
+    ev_vision_context ctx;          // Parent context (shared, NOT owned)
+    ev_generation_params params;    // Generation parameters
+    bool ended;                     // Stream completion flag
+    std::atomic<bool> cancelled{false};
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    llama_sampler* sampler = nullptr;
+    int n_generated = 0;           // Number of tokens generated so far
+#endif
+
+    std::mutex mutex;
+
+    ev_vision_stream_impl(ev_vision_context context, const ev_generation_params* prms)
+        : ctx(context), ended(false) {
+        if (prms) {
+            params = *prms;
+        } else {
+            ev_generation_params_default(&params);
+        }
+    }
+
+    ~ev_vision_stream_impl() {
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+        if (sampler) {
+            llama_sampler_free(sampler);
+            sampler = nullptr;
+        }
+#endif
+    }
+
+    bool check_cancelled() {
+        return cancelled.load(std::memory_order_acquire);
+    }
+
+    void request_cancel() {
+        cancelled.store(true, std::memory_order_release);
+    }
+};
+
+ev_vision_stream ev_vision_describe_stream(
+    ev_vision_context ctx,
+    const unsigned char* image_bytes,
+    int width,
+    int height,
+    const char* prompt,
+    const ev_generation_params* params,
+    ev_error_t* error
+) {
+    // Validate parameters
+    if (!ctx || !image_bytes || !prompt) {
+        if (error) *error = EV_ERROR_INVALID_PARAM;
+        return nullptr;
+    }
+    if (width <= 0 || height <= 0) {
+        if (error) *error = EV_ERROR_INVALID_PARAM;
+        return nullptr;
+    }
+    if (!ev_vision_is_valid(ctx)) {
+        if (error) *error = EV_ERROR_CONTEXT_INVALID;
+        return nullptr;
+    }
+
+    memory_guard_touch_engine(MG_ENGINE_VISION);
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+
+    // Clear KV cache for fresh generation
+    llama_memory_clear(llama_get_memory(ctx->llama_ctx), true);
+
+    // Step 1: Create bitmap from raw RGB888 image bytes
+    mtmd_bitmap* bitmap = mtmd_bitmap_init(
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        image_bytes
+    );
+    if (!bitmap) {
+        ctx->last_error = "Failed to create bitmap from image bytes";
+        if (error) *error = EV_ERROR_OUT_OF_MEMORY;
+        return nullptr;
+    }
+
+    // Step 2: Build prompt with media marker
+    const char* marker = mtmd_default_marker();
+    std::string full_prompt = std::string(marker) + "\n" + prompt;
+
+    // Step 3: Tokenize prompt + image via mtmd
+    mtmd_input_chunks* chunks = mtmd_input_chunks_init();
+    if (!chunks) {
+        mtmd_bitmap_free(bitmap);
+        if (error) *error = EV_ERROR_OUT_OF_MEMORY;
+        return nullptr;
+    }
+
+    mtmd_input_text text;
+    text.text = full_prompt.c_str();
+    text.add_special = true;
+    text.parse_special = true;
+
+    const mtmd_bitmap* bitmaps_arr[] = { bitmap };
+    int32_t tokenize_result = mtmd_tokenize(
+        ctx->mtmd_ctx, chunks, &text, bitmaps_arr, 1
+    );
+
+    mtmd_bitmap_free(bitmap);
+    bitmap = nullptr;
+
+    if (tokenize_result != 0) {
+        mtmd_input_chunks_free(chunks);
+        ctx->last_error = "Failed to tokenize prompt with image";
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
+
+    // Step 4: Evaluate chunks one at a time (cancellable at chunk boundaries)
+    int32_t n_batch = static_cast<int32_t>(ctx->config.batch_size > 0
+        ? ctx->config.batch_size : 512);
+    llama_pos n_past = 0;
+
+    struct timespec ts_start, ts_end;
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+
+    // Create stream early so we can check cancel flag during encoding
+    ev_vision_stream stream = new (std::nothrow) ev_vision_stream_impl(ctx, params);
+    if (!stream) {
+        mtmd_input_chunks_free(chunks);
+        if (error) *error = EV_ERROR_OUT_OF_MEMORY;
+        return nullptr;
+    }
+
+    size_t n_chunks = mtmd_input_chunks_size(chunks);
+    for (size_t i = 0; i < n_chunks; i++) {
+        // Check cancel between chunks
+        if (stream->check_cancelled()) {
+            mtmd_input_chunks_free(chunks);
+            delete stream;
+            if (error) *error = EV_ERROR_STREAM_ENDED;
+            return nullptr;
+        }
+
+        const mtmd_input_chunk* chunk = mtmd_input_chunks_get(chunks, i);
+        llama_pos new_n_past = 0;
+
+        int32_t eval_result = mtmd_helper_eval_chunk_single(
+            ctx->mtmd_ctx, ctx->llama_ctx, chunk,
+            n_past, 0, n_batch, (i == n_chunks - 1), &new_n_past
+        );
+
+        if (eval_result != 0) {
+            mtmd_input_chunks_free(chunks);
+            ctx->last_error = "Failed to evaluate chunk " + std::to_string(i);
+            delete stream;
+            if (error) *error = EV_ERROR_INFERENCE_FAILED;
+            return nullptr;
+        }
+        n_past = new_n_past;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    ctx->last_image_encode_ms = (ts_end.tv_sec - ts_start.tv_sec) * 1000.0
+                               + (ts_end.tv_nsec - ts_start.tv_nsec) / 1e6;
+
+    mtmd_input_chunks_free(chunks);
+    chunks = nullptr;
+
+    // Step 5: Create sampler (owned by stream)
+    stream->sampler = vision_create_sampler(stream->params);
+    if (!stream->sampler) {
+        ctx->last_error = "Failed to create sampler";
+        delete stream;
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
+
+    if (error) *error = EV_SUCCESS;
+    return stream;
+#else
+    (void)width; (void)height; (void)image_bytes; (void)prompt; (void)params;
+    if (error) *error = EV_ERROR_NOT_IMPLEMENTED;
+    return nullptr;
+#endif
+}
+
+char* ev_vision_stream_next(ev_vision_stream stream, ev_error_t* error) {
+    if (!stream) {
+        if (error) *error = EV_ERROR_INVALID_PARAM;
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(stream->mutex);
+
+    // Check cancellation
+    if (stream->check_cancelled()) {
+        stream->ended = true;
+        if (error) *error = EV_ERROR_STREAM_ENDED;
+        return nullptr;
+    }
+
+    if (stream->ended) {
+        if (error) *error = EV_ERROR_STREAM_ENDED;
+        return nullptr;
+    }
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    ev_vision_context ctx = stream->ctx;
+    std::lock_guard<std::mutex> ctx_lock(ctx->mutex);
+
+    // Check max tokens limit
+    if (stream->n_generated >= stream->params.max_tokens) {
+        stream->ended = true;
+        if (error) *error = EV_SUCCESS;
+        return nullptr;
+    }
+
+    // Sample next token
+    llama_token new_token = llama_sampler_sample(stream->sampler, ctx->llama_ctx, -1);
+
+    // Check for EOS
+    const llama_vocab* vocab = llama_model_get_vocab(ctx->model);
+    if (llama_vocab_is_eog(vocab, new_token)) {
+        stream->ended = true;
+        if (error) *error = EV_SUCCESS;
+        return nullptr;
+    }
+
+    // Convert token to text
+    char buf[256];
+    int n = llama_token_to_piece(vocab, new_token, buf, sizeof(buf), 0, true);
+    if (n <= 0) {
+        // Empty token, decode it and continue
+        stream->n_generated++;
+        llama_batch batch = llama_batch_get_one(&new_token, 1);
+        llama_decode(ctx->llama_ctx, batch);
+        if (error) *error = EV_SUCCESS;
+        char* result = static_cast<char*>(std::malloc(1));
+        if (result) result[0] = '\0';
+        return result;
+    }
+
+    // Decode next token (update KV cache)
+    llama_batch batch = llama_batch_get_one(&new_token, 1);
+    if (llama_decode(ctx->llama_ctx, batch) != 0) {
+        stream->ended = true;
+        if (error) *error = EV_ERROR_INFERENCE_FAILED;
+        return nullptr;
+    }
+
+    stream->n_generated++;
+
+    // Allocate and return token string
+    char* result = static_cast<char*>(std::malloc(static_cast<size_t>(n) + 1));
+    if (!result) {
+        if (error) *error = EV_ERROR_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    std::memcpy(result, buf, static_cast<size_t>(n));
+    result[n] = '\0';
+
+    if (error) *error = EV_SUCCESS;
+    return result;
+#else
+    stream->ended = true;
+    if (error) *error = EV_ERROR_NOT_IMPLEMENTED;
+    return nullptr;
+#endif
+}
+
+bool ev_vision_stream_has_next(ev_vision_stream stream) {
+    if (!stream) return false;
+    std::lock_guard<std::mutex> lock(stream->mutex);
+    return !stream->ended && !stream->check_cancelled();
+}
+
+void ev_vision_stream_cancel(ev_vision_stream stream) {
+    if (!stream) return;
+    stream->request_cancel();
+}
+
+void ev_vision_stream_free(ev_vision_stream stream) {
+    if (!stream) return;
+    delete stream;
 }

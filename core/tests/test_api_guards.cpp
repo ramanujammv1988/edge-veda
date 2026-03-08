@@ -260,6 +260,346 @@ int test_ev_generation_params_default_null() {
     return 0;
 }
 
+// ---------- Vision API guards ----------
+
+int test_ev_vision_init_null_config() {
+    ev_error_t error = EV_SUCCESS;
+    ev_vision_context ctx = ev_vision_init(NULL, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_init_null_model_path() {
+    ev_vision_config config;
+    ev_vision_config_default(&config);
+    // model_path is NULL after default, mmproj_path is also NULL
+    ev_error_t error = EV_SUCCESS;
+    ev_vision_context ctx = ev_vision_init(&config, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_init_null_mmproj_path() {
+    ev_vision_config config;
+    ev_vision_config_default(&config);
+    config.model_path = "/nonexistent/model.gguf";
+    // mmproj_path is still NULL
+    ev_error_t error = EV_SUCCESS;
+    ev_vision_context ctx = ev_vision_init(&config, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_describe_null_ctx() {
+    unsigned char dummy_image[3] = {0, 0, 0};
+    char* output = NULL;
+    ev_error_t err = ev_vision_describe(NULL, dummy_image, 1, 1, "describe", NULL, &output);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_describe_null_image() {
+    char* output = NULL;
+    ev_error_t err = ev_vision_describe(NULL, NULL, 1, 1, "describe", NULL, &output);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_describe_null_prompt() {
+    unsigned char dummy_image[3] = {0, 0, 0};
+    char* output = NULL;
+    ev_error_t err = ev_vision_describe(NULL, dummy_image, 1, 1, NULL, NULL, &output);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_describe_null_output() {
+    unsigned char dummy_image[3] = {0, 0, 0};
+    ev_error_t err = ev_vision_describe(NULL, dummy_image, 1, 1, "describe", NULL, NULL);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_free_null() {
+    // Must not crash
+    ev_vision_free(NULL);
+    return 0;
+}
+
+int test_ev_vision_is_valid_null() {
+    if (ev_vision_is_valid(NULL) != false) return 1;
+    return 0;
+}
+
+int test_ev_vision_config_default_null() {
+    // Must not crash
+    ev_vision_config_default(NULL);
+    return 0;
+}
+
+int test_ev_vision_get_last_timings_null_ctx() {
+    ev_timings_data timings;
+    ev_error_t err = ev_vision_get_last_timings(NULL, &timings);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_get_last_timings_null_both() {
+    ev_error_t err = ev_vision_get_last_timings(NULL, NULL);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+// ---------- Whisper API guards ----------
+
+int test_ev_whisper_init_null_config() {
+    ev_error_t error = EV_SUCCESS;
+    ev_whisper_context ctx = ev_whisper_init(NULL, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_whisper_init_null_model_path() {
+    ev_whisper_config config;
+    ev_whisper_config_default(&config);
+    // model_path is NULL after default
+    ev_error_t error = EV_SUCCESS;
+    ev_whisper_context ctx = ev_whisper_init(&config, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_whisper_transcribe_null_ctx() {
+    float dummy_pcm[16] = {0};
+    ev_whisper_result result;
+    memset(&result, 0, sizeof(result));
+    ev_error_t err = ev_whisper_transcribe(NULL, dummy_pcm, 16, NULL, &result);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_whisper_transcribe_null_pcm() {
+    ev_whisper_result result;
+    memset(&result, 0, sizeof(result));
+    ev_error_t err = ev_whisper_transcribe(NULL, NULL, 16, NULL, &result);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_whisper_transcribe_null_result() {
+    float dummy_pcm[16] = {0};
+    ev_error_t err = ev_whisper_transcribe(NULL, dummy_pcm, 16, NULL, NULL);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_whisper_transcribe_zero_samples() {
+    float dummy_pcm[16] = {0};
+    ev_whisper_result result;
+    memset(&result, 0, sizeof(result));
+    ev_error_t err = ev_whisper_transcribe(NULL, dummy_pcm, 0, NULL, &result);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_whisper_free_null() {
+    // Must not crash
+    ev_whisper_free(NULL);
+    return 0;
+}
+
+int test_ev_whisper_is_valid_null() {
+    if (ev_whisper_is_valid(NULL) != false) return 1;
+    return 0;
+}
+
+int test_ev_whisper_config_default_null() {
+    // Must not crash
+    ev_whisper_config_default(NULL);
+    return 0;
+}
+
+int test_ev_whisper_free_result_null() {
+    // Must not crash
+    ev_whisper_free_result(NULL);
+    return 0;
+}
+
+int test_ev_whisper_free_result_zeroed() {
+    ev_whisper_result zeroed;
+    memset(&zeroed, 0, sizeof(zeroed));
+    // Must not crash
+    ev_whisper_free_result(&zeroed);
+    return 0;
+}
+
+// ---------- Image Gen API guards ----------
+
+int test_ev_image_init_null_config() {
+    ev_error_t error = EV_SUCCESS;
+    ev_image_context ctx = ev_image_init(NULL, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_image_init_null_model_path() {
+    ev_image_config config;
+    ev_image_config_default(&config);
+    // model_path is NULL after default
+    ev_error_t error = EV_SUCCESS;
+    ev_image_context ctx = ev_image_init(&config, &error);
+    if (ctx != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_image_generate_null_ctx() {
+    ev_image_gen_params params;
+    ev_image_gen_params_default(&params);
+    params.prompt = "test";
+    ev_image_result result;
+    memset(&result, 0, sizeof(result));
+    ev_error_t err = ev_image_generate(NULL, &params, &result);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_image_generate_null_params() {
+    ev_image_result result;
+    memset(&result, 0, sizeof(result));
+    ev_error_t err = ev_image_generate(NULL, NULL, &result);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_image_generate_null_result() {
+    ev_image_gen_params params;
+    ev_image_gen_params_default(&params);
+    params.prompt = "test";
+    ev_error_t err = ev_image_generate(NULL, &params, NULL);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_image_generate_null_prompt() {
+    ev_image_gen_params params;
+    ev_image_gen_params_default(&params);
+    // params.prompt is NULL after default
+    ev_image_result result;
+    memset(&result, 0, sizeof(result));
+    ev_error_t err = ev_image_generate(NULL, &params, &result);
+    if (err != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_image_free_null() {
+    // Must not crash
+    ev_image_free(NULL);
+    return 0;
+}
+
+int test_ev_image_is_valid_null() {
+    if (ev_image_is_valid(NULL) != false) return 1;
+    return 0;
+}
+
+int test_ev_image_free_result_null() {
+    // Must not crash
+    ev_image_free_result(NULL);
+    return 0;
+}
+
+int test_ev_image_free_result_zeroed() {
+    ev_image_result zeroed;
+    memset(&zeroed, 0, sizeof(zeroed));
+    // Must not crash
+    ev_image_free_result(&zeroed);
+    return 0;
+}
+
+int test_ev_image_config_default_null() {
+    // Must not crash
+    ev_image_config_default(NULL);
+    return 0;
+}
+
+int test_ev_image_gen_params_default_null() {
+    // Must not crash
+    ev_image_gen_params_default(NULL);
+    return 0;
+}
+
+int test_ev_image_set_progress_callback_null_ctx() {
+    // Must not crash
+    ev_image_set_progress_callback(NULL, NULL, NULL);
+    return 0;
+}
+
+int test_ev_image_cancel_null() {
+    // Must not crash
+    ev_image_cancel(NULL);
+    return 0;
+}
+
+// ---------- Vision Streaming API guards ----------
+
+int test_ev_vision_describe_stream_null_ctx() {
+    unsigned char pixel = 0;
+    ev_error_t error = EV_SUCCESS;
+    ev_vision_stream s = ev_vision_describe_stream(NULL, &pixel, 1, 1, "test", NULL, &error);
+    if (s != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_describe_stream_null_image() {
+    ev_error_t error = EV_SUCCESS;
+    ev_vision_stream s = ev_vision_describe_stream(NULL, NULL, 1, 1, "test", NULL, &error);
+    if (s != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_describe_stream_null_prompt() {
+    unsigned char pixel = 0;
+    ev_error_t error = EV_SUCCESS;
+    ev_vision_stream s = ev_vision_describe_stream(NULL, &pixel, 1, 1, NULL, NULL, &error);
+    if (s != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_stream_next_null() {
+    ev_error_t error = EV_SUCCESS;
+    char* token = ev_vision_stream_next(NULL, &error);
+    if (token != NULL) return 1;
+    if (error != EV_ERROR_INVALID_PARAM) return 1;
+    return 0;
+}
+
+int test_ev_vision_stream_has_next_null() {
+    if (ev_vision_stream_has_next(NULL) != false) return 1;
+    return 0;
+}
+
+int test_ev_vision_stream_cancel_null() {
+    // Must not crash
+    ev_vision_stream_cancel(NULL);
+    return 0;
+}
+
+int test_ev_vision_stream_free_null() {
+    // Must not crash
+    ev_vision_stream_free(NULL);
+    return 0;
+}
+
 // ---------- Grammar ownership debug hook (conditional) ----------
 
 #ifdef EDGE_VEDA_TEST_HOOKS
@@ -332,6 +672,58 @@ int main() {
     // Config default guards
     TEST(test_ev_config_default_null);
     TEST(test_ev_generation_params_default_null);
+
+    // Vision API guards
+    TEST(test_ev_vision_init_null_config);
+    TEST(test_ev_vision_init_null_model_path);
+    TEST(test_ev_vision_init_null_mmproj_path);
+    TEST(test_ev_vision_describe_null_ctx);
+    TEST(test_ev_vision_describe_null_image);
+    TEST(test_ev_vision_describe_null_prompt);
+    TEST(test_ev_vision_describe_null_output);
+    TEST(test_ev_vision_free_null);
+    TEST(test_ev_vision_is_valid_null);
+    TEST(test_ev_vision_config_default_null);
+    TEST(test_ev_vision_get_last_timings_null_ctx);
+    TEST(test_ev_vision_get_last_timings_null_both);
+
+    // Whisper API guards
+    TEST(test_ev_whisper_init_null_config);
+    TEST(test_ev_whisper_init_null_model_path);
+    TEST(test_ev_whisper_transcribe_null_ctx);
+    TEST(test_ev_whisper_transcribe_null_pcm);
+    TEST(test_ev_whisper_transcribe_null_result);
+    TEST(test_ev_whisper_transcribe_zero_samples);
+    TEST(test_ev_whisper_free_null);
+    TEST(test_ev_whisper_is_valid_null);
+    TEST(test_ev_whisper_config_default_null);
+    TEST(test_ev_whisper_free_result_null);
+    TEST(test_ev_whisper_free_result_zeroed);
+
+    // Image Gen API guards
+    TEST(test_ev_image_init_null_config);
+    TEST(test_ev_image_init_null_model_path);
+    TEST(test_ev_image_generate_null_ctx);
+    TEST(test_ev_image_generate_null_params);
+    TEST(test_ev_image_generate_null_result);
+    TEST(test_ev_image_generate_null_prompt);
+    TEST(test_ev_image_free_null);
+    TEST(test_ev_image_is_valid_null);
+    TEST(test_ev_image_free_result_null);
+    TEST(test_ev_image_free_result_zeroed);
+    TEST(test_ev_image_config_default_null);
+    TEST(test_ev_image_gen_params_default_null);
+    TEST(test_ev_image_set_progress_callback_null_ctx);
+    TEST(test_ev_image_cancel_null);
+
+    // Vision Streaming API guards
+    TEST(test_ev_vision_describe_stream_null_ctx);
+    TEST(test_ev_vision_describe_stream_null_image);
+    TEST(test_ev_vision_describe_stream_null_prompt);
+    TEST(test_ev_vision_stream_next_null);
+    TEST(test_ev_vision_stream_has_next_null);
+    TEST(test_ev_vision_stream_cancel_null);
+    TEST(test_ev_vision_stream_free_null);
 
     // Grammar ownership debug hook (only when compiled with EDGE_VEDA_TEST_HOOKS)
 #ifdef EDGE_VEDA_TEST_HOOKS

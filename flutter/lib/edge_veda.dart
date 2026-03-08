@@ -110,6 +110,10 @@ export 'src/types.dart'
 // Performance tracing
 export 'src/perf_trace.dart' show PerfTrace;
 
+// Streaming worker (persistent isolate for LLM streaming)
+export 'src/isolate/worker_isolate.dart' show StreamingWorker;
+export 'src/isolate/worker_messages.dart' show TokenResponse;
+
 // Vision worker (persistent isolate)
 export 'src/isolate/vision_worker.dart' show VisionWorker;
 export 'src/isolate/vision_worker_messages.dart'
@@ -183,6 +187,10 @@ export 'src/vector_index.dart' show VectorIndex, SearchResult;
 export 'src/fts_index.dart' show FtsIndex;
 export 'src/rag_pipeline.dart' show RagPipeline, RagConfig;
 
+// Inference configuration
+export 'src/inference_config.dart'
+    show AdaptiveVisionConfig, InferenceConfig;
+
 // Model advisor
 export 'src/model_advisor.dart'
     show
@@ -209,6 +217,8 @@ export 'src/types.dart'
 
 // Image worker (persistent isolate)
 export 'src/isolate/image_worker.dart' show ImageWorker;
+export 'src/isolate/image_worker_messages.dart'
+    show ImageCompleteResponse, ImageWorkerResponse;
 
 // Text-to-Speech (TTS)
 export 'src/tts_service.dart'

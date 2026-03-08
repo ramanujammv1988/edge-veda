@@ -19,6 +19,7 @@ class ModelManager {
   static const String _metadataFileName = 'metadata.json';
   static const int _maxRetries = 3;
   static const Duration _initialRetryDelay = Duration(seconds: 1);
+  static const Duration _streamChunkTimeout = Duration(seconds: 30);
 
   /// Telemetry service for disk space checks.
   /// Replaceable in tests to inject a mock.
@@ -463,7 +464,10 @@ class ModelManager {
       // branches above all return/throw before reaching here.
       final IOSink activeSink = sink!; // ignore: unnecessary_non_null_assertion
 
-      await for (final chunk in response.stream) {
+      await for (final chunk in response.stream.timeout(
+        _streamChunkTimeout,
+        onTimeout: (sink) => sink.close(),
+      )) {
         // Check for cancellation during download
         if (cancelToken?.isCancelled == true) {
           await activeSink.close();
@@ -503,6 +507,14 @@ class ModelManager {
       await activeSink.flush();
       await activeSink.close();
       sink = null;
+
+      // Detect incomplete download (e.g. stream closed by timeout)
+      if (totalBytes > 0 && downloadedBytes < totalBytes) {
+        throw SocketException(
+          'Download stalled at ${(downloadedBytes * 100 / totalBytes).round()}%'
+          ' ($downloadedBytes/$totalBytes bytes)',
+        );
+      }
 
       // Verify checksum BEFORE atomic rename
       if (verifyChecksum && model.checksum != null) {
@@ -889,6 +901,38 @@ class ModelRegistry {
     family: 'smolvlm',
   );
 
+  /// SmolVLM2-256M-Video-Instruct (Q8_0) - Tiny VLM for low-end devices
+  // ignore: constant_identifier_names
+  static const ModelInfo smolvlm2_256m = ModelInfo(
+    id: 'smolvlm2-256m-video-instruct-q8',
+    name: 'SmolVLM2 256M Video Instruct',
+    sizeBytes: 175056352, // ~167 MB
+    description: 'Tiny vision model for low-end devices',
+    downloadUrl:
+        'https://huggingface.co/ggml-org/SmolVLM2-256M-Video-Instruct-GGUF/resolve/main/SmolVLM2-256M-Video-Instruct-Q8_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q8_0',
+    parametersB: 0.26,
+    maxContextLength: 4096,
+    capabilities: ['vision'],
+    family: 'smolvlm',
+  );
+
+  /// SmolVLM2-256M mmproj (Q8_0) - Quantized projector for SmolVLM2 256M
+  // ignore: constant_identifier_names
+  static const ModelInfo smolvlm2_256m_mmproj = ModelInfo(
+    id: 'smolvlm2-256m-mmproj-q8',
+    name: 'SmolVLM2 256M Multimodal Projector',
+    sizeBytes: 103771680, // ~99 MB
+    description: 'Q8 multimodal projector for SmolVLM2 256M',
+    downloadUrl:
+        'https://huggingface.co/ggml-org/SmolVLM2-256M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-256M-Video-Instruct-Q8_0.gguf',
+    format: 'GGUF',
+    quantization: 'Q8_0',
+    capabilities: ['vision-projector'],
+    family: 'smolvlm',
+  );
+
   // -- macOS Desktop --
 
   /// LLaVA 1.6 Mistral 7B (Q4_K_M) - High quality VLM for macOS (~4.8 GB)
@@ -1053,7 +1097,7 @@ class ModelRegistry {
 
   /// Get all available vision models (model + mmproj pairs)
   static List<ModelInfo> getVisionModels() {
-    return [smolvlm2_500m, llava16_mistral_7b, qwen2vl_7b];
+    return [smolvlm2_256m, smolvlm2_500m, llava16_mistral_7b, qwen2vl_7b];
   }
 
   /// Get the multimodal projector for a vision model
@@ -1063,6 +1107,8 @@ class ModelRegistry {
   /// corresponding mmproj for a given vision model ID.
   static ModelInfo? getMmprojForModel(String modelId) {
     switch (modelId) {
+      case 'smolvlm2-256m-video-instruct-q8':
+        return smolvlm2_256m_mmproj;
       case 'smolvlm2-500m-video-instruct-q8':
         return smolvlm2_500m_mmproj;
       case 'llava-1.6-mistral-7b-q4':
@@ -1206,6 +1252,7 @@ class ModelRegistry {
     final allModels = [
       ...getAllModels(),
       ...getVisionModels(),
+      smolvlm2_256m_mmproj,
       smolvlm2_500m_mmproj,
       llava16_mistral_7b_mmproj,
       qwen2vl_7b_mmproj,

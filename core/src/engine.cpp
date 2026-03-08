@@ -24,17 +24,8 @@
 #include "ggml.h"
 #endif
 
-// Memory guard function declarations (defined in memory_guard.cpp)
-extern "C" {
-    void memory_guard_set_limit(size_t limit_bytes);
-    size_t memory_guard_get_limit();
-    size_t memory_guard_get_current_usage();
-    size_t memory_guard_get_peak_usage();
-    bool memory_guard_is_under_pressure();
-    void memory_guard_cleanup();
-    void memory_guard_reset_stats();
-    void memory_guard_set_callback(void (*callback)(void*, size_t, size_t), void* user_data);
-}
+#include "memory_guard.h"
+#include "thread_utils.h"
 
 // Tombstone magic numbers for use-after-free detection (issue #28)
 static constexpr uint32_t EV_CTX_MAGIC = 0x45564354; // "EVCT"
@@ -184,10 +175,26 @@ struct ev_stream_impl {
     }
 };
 
-// Reference count of active contexts for memory guard callback lifetime.
-// When the last context is freed, the memory guard callback is cleared.
-static std::mutex g_memory_contexts_mutex;
-static int g_memory_context_count = 0;
+// Eviction callback invoked by memory guard when LLM engine is selected for LRU eviction.
+// Called from the monitor thread with mg mutex released. Must be safe to call concurrently.
+static void llm_evict_cb(void* user_data) {
+    ev_context ctx = static_cast<ev_context>(user_data);
+    if (!ctx) return;
+
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+
+    // Skip if there's an active stream — can't safely evict mid-generation
+    if (ctx->active_stream_count.load(std::memory_order_acquire) != 0) return;
+    if (!ctx->model_loaded) return; // Already evicted or freed
+
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    if (ctx->sampler) { llama_sampler_free(ctx->sampler); ctx->sampler = nullptr; }
+    if (ctx->llama_ctx) { llama_free(ctx->llama_ctx); ctx->llama_ctx = nullptr; }
+    if (ctx->embed_ctx) { llama_free(ctx->embed_ctx); ctx->embed_ctx = nullptr; }
+    if (ctx->model) { llama_model_free(ctx->model); ctx->model = nullptr; }
+    ctx->model_loaded = false;
+#endif
+}
 
 /* ============================================================================
  * Version Information
@@ -367,7 +374,8 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = config->context_size > 0 ? static_cast<uint32_t>(config->context_size) : 2048;
     ctx_params.n_batch = config->batch_size > 0 ? static_cast<uint32_t>(config->batch_size) : 512;
-    ctx_params.n_threads = config->num_threads > 0 ? static_cast<uint32_t>(config->num_threads) : 4;
+    ctx_params.n_threads = config->num_threads > 0 ? static_cast<uint32_t>(config->num_threads)
+                                                     : ev_default_thread_count();
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
     // KV cache quantization (Q8_0 halves KV cache memory vs F16 default)
@@ -396,15 +404,11 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
 
     ctx->model_loaded = true;
 
-    // Set up memory monitoring
-    if (ctx->memory_limit > 0) {
-        memory_guard_set_limit(static_cast<uint64_t>(ctx->memory_limit));
-    }
-
-    // Track active context for memory guard callback lifetime
+    // Register with process-wide memory guard for cross-engine coordination.
+    // Auto-sets recommended limit on first registration (MEM-06).
     {
-        std::lock_guard<std::mutex> global_lock(g_memory_contexts_mutex);
-        ++g_memory_context_count;
+        size_t footprint = llama_model_size(ctx->model);
+        memory_guard_register_engine(MG_ENGINE_LLM, footprint, llm_evict_cb, ctx);
     }
 
     if (error) *error = EV_SUCCESS;
@@ -425,41 +429,40 @@ void ev_free(ev_context ctx) {
     assert(ctx->active_stream_count.load(std::memory_order_acquire) == 0 &&
            "ev_free() called with active streams — free all streams first.");
 
-    std::lock_guard<std::mutex> lock(ctx->mutex);
+    // Unregister BEFORE acquiring ctx->mutex to prevent ABBA deadlock.
+    // Lock ordering: monitor thread holds mg.mutex → evict_cb → ctx->mutex.
+    // If we held ctx->mutex → unregister → mg.mutex, that's inverted.
+    // Spin-waits for any in-flight eviction callback to complete.
+    memory_guard_unregister_engine(MG_ENGINE_LLM);
+    memory_guard_set_callback(nullptr, nullptr);
+
+    {
+        std::lock_guard<std::mutex> lock(ctx->mutex);
 
 #ifdef EDGE_VEDA_LLAMA_ENABLED
-    {
-        std::lock_guard<std::mutex> global_lock(g_memory_contexts_mutex);
-        if (g_memory_context_count > 0) {
-            --g_memory_context_count;
+        if (ctx->sampler) {
+            llama_sampler_free(ctx->sampler);
+            ctx->sampler = nullptr;
         }
-        if (g_memory_context_count == 0) {
-            memory_guard_set_callback(nullptr, nullptr);
-            memory_guard_set_limit(0);
+        if (ctx->llama_ctx) {
+            llama_free(ctx->llama_ctx);
+            ctx->llama_ctx = nullptr;
         }
-    }
-
-    if (ctx->sampler) {
-        llama_sampler_free(ctx->sampler);
-        ctx->sampler = nullptr;
-    }
-    if (ctx->llama_ctx) {
-        llama_free(ctx->llama_ctx);
-        ctx->llama_ctx = nullptr;
-    }
-    if (ctx->embed_ctx) {
-        llama_free(ctx->embed_ctx);
-        ctx->embed_ctx = nullptr;
-    }
-    if (ctx->model) {
-        llama_model_free(ctx->model);
-        ctx->model = nullptr;
-    }
-    edge_veda_backend_release();
+        if (ctx->embed_ctx) {
+            llama_free(ctx->embed_ctx);
+            ctx->embed_ctx = nullptr;
+        }
+        if (ctx->model) {
+            llama_model_free(ctx->model);
+            ctx->model = nullptr;
+        }
+        edge_veda_backend_release();
 #endif
 
-    // Poison the magic before deletion so stale pointers can detect UAF (issue #28)
-    ctx->magic = EV_CTX_DEAD;
+        // Poison the magic before deletion so stale pointers can detect UAF (issue #28)
+        ctx->magic = EV_CTX_DEAD;
+    }
+    // lock_guard destructor has run, mutex is unlocked before delete
     delete ctx;
 }
 
@@ -600,6 +603,7 @@ ev_error_t ev_generate(
         return EV_ERROR_CONTEXT_INVALID;
     }
 
+    memory_guard_touch_engine(MG_ENGINE_LLM);
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
     // Guard: ev_generate() clears KV cache, which would corrupt an active stream.
@@ -728,6 +732,8 @@ ev_stream ev_generate_stream(
         if (error) *error = EV_ERROR_CONTEXT_INVALID;
         return nullptr;
     }
+
+    memory_guard_touch_engine(MG_ENGINE_LLM);
 
     // Enforce single active stream per context (issue #29).
     // A second stream's ev_stream_next() would clear KV cache, silently
@@ -1119,6 +1125,7 @@ ev_error_t ev_embed(
     // Zero-initialize result
     std::memset(result, 0, sizeof(ev_embed_result));
 
+    memory_guard_touch_engine(MG_ENGINE_LLM);
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
     // Lazy-init and persist embedding context to avoid per-call setup overhead.
@@ -1128,7 +1135,7 @@ ev_error_t ev_embed(
         emb_params.n_ctx = 512;
         emb_params.n_batch = 512;
         emb_params.n_threads = ctx->config.num_threads > 0
-            ? static_cast<uint32_t>(ctx->config.num_threads) : 4;
+            ? static_cast<uint32_t>(ctx->config.num_threads) : ev_default_thread_count();
         emb_params.n_threads_batch = emb_params.n_threads;
         emb_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
 

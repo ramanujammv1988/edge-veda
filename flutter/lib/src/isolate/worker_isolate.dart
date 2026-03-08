@@ -16,12 +16,13 @@ library;
 
 import 'dart:async';
 import 'dart:ffi' as ffi;
-import 'dart:io' show Platform;
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 
 import '../ffi/bindings.dart';
+import '../inference_config.dart' show InferenceConfig;
+import '../model_advisor.dart' show DeviceProfile;
 import '../types.dart' show MemoryStats;
 import 'worker_messages.dart';
 
@@ -202,10 +203,10 @@ class StreamingWorker {
     _commandPort!.send(NextTokenCommand());
 
     try {
-      // Android CPU-only: prefill on SD845 @ ~0.1 tok/s can exceed 2min
-      // for multi-turn conversations. iOS Metal is much faster.
-      // Use platform-aware timeout to avoid masking hangs on faster paths.
-      final timeout = Duration(seconds: Platform.isAndroid ? 300 : 60);
+      // DeviceTier-aware timeout: low-end Android gets longer timeouts
+      // (3min) while high-end Apple devices get short ones (20s).
+      final timeout =
+          InferenceConfig.llmTokenTimeout(DeviceProfile.detect().tier);
       return await completer.future.timeout(timeout);
     } finally {
       await subscription.cancel();

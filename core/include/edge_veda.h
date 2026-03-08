@@ -618,6 +618,80 @@ EV_API ev_error_t ev_vision_describe(
     char** output
 );
 
+/* ============================================================================
+ * Vision Streaming API
+ *
+ * Incremental token delivery for vision inference.
+ * Mirrors the LLM streaming pattern (ev_generate_stream / ev_stream_next).
+ *
+ * The image encoding phase (mtmd_helper_eval_chunks) runs during
+ * ev_vision_describe_stream() before returning the stream handle.
+ * Subsequent ev_vision_stream_next() calls deliver tokens one at a time.
+ *
+ * Thread safety:
+ *   - One active vision stream per context (enforced, same as LLM).
+ *   - Cancel is safe to call from any thread (atomic flag).
+ * ========================================================================= */
+
+/** Opaque handle to a vision stream */
+typedef struct ev_vision_stream_impl* ev_vision_stream;
+
+/**
+ * @brief Start a streaming vision inference
+ *
+ * Encodes the image (blocking), then returns a stream handle for
+ * incremental token retrieval via ev_vision_stream_next().
+ *
+ * @param ctx Vision context handle
+ * @param image_bytes Raw RGB888 pixel data (width * height * 3 bytes)
+ * @param width Image width in pixels
+ * @param height Image height in pixels
+ * @param prompt Text prompt describing the query
+ * @param params Generation parameters (NULL for defaults)
+ * @param error Pointer to receive error code
+ * @return Stream handle on success, NULL on failure
+ */
+EV_API ev_vision_stream ev_vision_describe_stream(
+    ev_vision_context ctx,
+    const unsigned char* image_bytes,
+    int width,
+    int height,
+    const char* prompt,
+    const ev_generation_params* params,
+    ev_error_t* error
+);
+
+/**
+ * @brief Get the next token from a vision stream
+ * @param stream Vision stream handle
+ * @param error Pointer to receive error code
+ * @return Token text (caller frees with ev_free_string), NULL when done
+ */
+EV_API char* ev_vision_stream_next(ev_vision_stream stream, ev_error_t* error);
+
+/**
+ * @brief Check if more tokens are available in the vision stream
+ * @param stream Vision stream handle
+ * @return true if more tokens are available
+ */
+EV_API bool ev_vision_stream_has_next(ev_vision_stream stream);
+
+/**
+ * @brief Cancel a running vision stream
+ *
+ * Safe to call from any thread. The next ev_vision_stream_next() call
+ * will return NULL with EV_ERROR_STREAM_ENDED.
+ *
+ * @param stream Vision stream handle
+ */
+EV_API void ev_vision_stream_cancel(ev_vision_stream stream);
+
+/**
+ * @brief Free a vision stream and its resources
+ * @param stream Vision stream handle
+ */
+EV_API void ev_vision_stream_free(ev_vision_stream stream);
+
 /**
  * @brief Free vision context and release all resources
  * @param ctx Vision context handle to free
@@ -1028,6 +1102,17 @@ EV_API void ev_image_set_progress_callback(ev_image_context ctx, ev_image_progre
  * @return Error code (EV_SUCCESS on success)
  */
 EV_API ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_params* params, ev_image_result* result);
+
+/**
+ * @brief Cancel an in-progress image generation
+ *
+ * Sets a cancel flag that is checked between denoising steps via the
+ * progress callback. The next ev_image_generate() call on this context
+ * will return EV_ERROR_INFERENCE_FAILED. Safe to call from any thread.
+ *
+ * @param ctx Image context handle
+ */
+EV_API void ev_image_cancel(ev_image_context ctx);
 
 /**
  * @brief Free image generation result

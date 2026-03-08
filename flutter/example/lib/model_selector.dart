@@ -61,19 +61,40 @@ class ModelSelector {
 
   // ── STT (Whisper) ──────────────────────────────────────────────────────────
 
-  static List<ModelInfo> get _whisperPriority => Platform.isMacOS
-      ? [
-          ModelRegistry.whisperLargeV3,
-          ModelRegistry.whisperMedium,
-          ModelRegistry.whisperSmall,
-          ModelRegistry.whisperBaseEn,
+  static List<ModelInfo> get _whisperPriority {
+    if (Platform.isMacOS) {
+      return [
+        ModelRegistry.whisperLargeV3,
+        ModelRegistry.whisperMedium,
+        ModelRegistry.whisperSmall,
+        ModelRegistry.whisperBaseEn,
+        ModelRegistry.whisperTinyEn,
+      ];
+    }
+    if (Platform.isAndroid) {
+      // Device-tier aware: on low-end Android (CPU-only), prefer tiny
+      // for 2x faster inference. Medium+ devices can handle base.
+      final tier = DeviceProfile.detect().tier;
+      if (tier.index <= DeviceTier.low.index) {
+        return [
           ModelRegistry.whisperTinyEn,
-        ]
-      : [
           ModelRegistry.whisperBaseEn,
-          ModelRegistry.whisperTinyEn,
-          ModelRegistry.whisperSmall,
         ];
+      }
+      // medium+ Android: unchanged
+      return [
+        ModelRegistry.whisperBaseEn,
+        ModelRegistry.whisperTinyEn,
+        ModelRegistry.whisperSmall,
+      ];
+    }
+    // iOS
+    return [
+      ModelRegistry.whisperBaseEn,
+      ModelRegistry.whisperTinyEn,
+      ModelRegistry.whisperSmall,
+    ];
+  }
 
   static Future<ModelSelection> bestWhisper([ModelManager? mm]) =>
       _pick(_whisperPriority, fallback: ModelRegistry.whisperTinyEn, mm: mm);

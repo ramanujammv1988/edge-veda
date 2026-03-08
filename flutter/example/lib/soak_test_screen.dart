@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:camera/camera.dart';
@@ -18,6 +19,10 @@ class SoakTestScreen extends StatefulWidget {
 
 class _SoakTestScreenState extends State<SoakTestScreen> {
   final SoakTestService _service = SoakTestService.instance;
+  StreamSubscription<DownloadProgress>? _downloadSub;
+  double _downloadProgress = 0.0;
+  String _downloadStatusText = '';
+  bool _isDownloading = false;
 
   @override
   void initState() {
@@ -27,6 +32,7 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
 
   @override
   void dispose() {
+    _downloadSub?.cancel();
     _service.removeListener(_onServiceChanged);
     super.dispose();
   }
@@ -37,11 +43,141 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
     }
   }
 
-  Future<void> _start() => _service.start();
+  Future<void> _start() async {
+    if (!_service.cameraSupported) {
+      await _service.start();
+      return;
+    }
+
+    // Check what models need downloading
+    final plan = await _service.checkModelsNeeded();
+
+    if (plan.needsDownload) {
+      // Internet check
+      final reachable = await _service.checkInternetReachable();
+      if (!reachable) {
+        if (mounted) _showNoInternetDialog();
+        return;
+      }
+
+      // Confirmation dialog
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          icon: const Icon(Icons.download, color: AppTheme.accent, size: 48),
+          title: const Text('Download Required',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          content: Text(
+            'The soak test requires downloading vision models '
+            '(~${_formatBytes(plan.totalBytes)}). '
+            'Once downloaded, they run entirely offline.\n\nContinue?',
+            style: const TextStyle(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Download',
+                  style: TextStyle(color: AppTheme.accent)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
+      // Start listening to download progress
+      setState(() {
+        _isDownloading = true;
+        _downloadProgress = 0.0;
+        _downloadStatusText = '';
+      });
+      _downloadSub = _service.downloadProgress.listen((progress) {
+        if (mounted) {
+          setState(() {
+            _downloadProgress = progress.progress;
+            _downloadStatusText =
+                '${progress.progressPercent}% — '
+                '${_formatBytes(progress.downloadedBytes)}/'
+                '${_formatBytes(progress.totalBytes)}';
+          });
+        }
+      });
+    }
+
+    try {
+      await _service.start();
+    } finally {
+      _downloadSub?.cancel();
+      _downloadSub = null;
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
+  }
 
   Future<void> _stop() => _service.stop();
 
   Future<void> _shareTrace() => _service.shareTrace();
+
+  Future<void> _downloadTrace() async {
+    final saved = await _service.saveTraceLocally();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(saved != null
+            ? 'Saved to $saved'
+            : 'Save failed or cancelled'),
+        backgroundColor: saved != null ? AppTheme.success : AppTheme.warning,
+      ),
+    );
+  }
+
+  void _cancelDownload() {
+    _service.cancelDownload();
+    _downloadSub?.cancel();
+    _downloadSub = null;
+    if (mounted) {
+      setState(() => _isDownloading = false);
+    }
+  }
+
+  void _showNoInternetDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        icon: const Icon(Icons.wifi_off, color: AppTheme.warning, size: 48),
+        title: const Text('No Internet Connection',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Please connect to the internet to download vision models. '
+          'Once downloaded, models run entirely offline.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: AppTheme.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
 
   String _thermalString(int state) {
     return switch (state) {
@@ -330,40 +466,87 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed:
-                          isInitializing ? null : (isRunning ? _stop : _start),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            isRunning ? AppTheme.danger : AppTheme.accent,
-                        foregroundColor: AppTheme.background,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  if (_isDownloading) ...[
+                    if (_downloadStatusText.isNotEmpty)
+                      Text(
+                        _downloadStatusText,
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 13,
+                          fontFamily: 'monospace',
                         ),
                       ),
-                      child: isInitializing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.textPrimary,
-                              ),
-                            )
-                          : Text(
-                              isRunning
-                                  ? 'Stop'
-                                  : 'Start ${isManaged ? "Managed" : "Raw"} Soak Test',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: _downloadProgress > 0
+                            ? _downloadProgress
+                            : null,
+                        minHeight: 8,
+                        backgroundColor: AppTheme.border,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppTheme.accent),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton(
+                        onPressed: _cancelDownload,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.danger,
+                          side: const BorderSide(color: AppTheme.danger),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel Download',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: isInitializing
+                            ? null
+                            : (isRunning ? _stop : _start),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              isRunning ? AppTheme.danger : AppTheme.accent,
+                          foregroundColor: AppTheme.background,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: isInitializing
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              )
+                            : Text(
+                                isRunning
+                                    ? 'Stop'
+                                    : 'Start ${isManaged ? "Managed" : "Raw"} Soak Test',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -601,19 +784,38 @@ class _SoakTestScreenState extends State<SoakTestScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _service.traceFilePath != null && !_service.isRunning
-                  ? _shareTrace
-                  : null,
-              icon: const Icon(Icons.share, size: 16),
-              label: const Text('Export Trace'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.accent,
-                side: const BorderSide(color: AppTheme.border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _service.traceFilePath != null && !_service.isRunning
+                      ? _downloadTrace
+                      : null,
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Download'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accent,
+                    side: const BorderSide(color: AppTheme.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _service.traceFilePath != null && !_service.isRunning
+                      ? _shareTrace
+                      : null,
+                  icon: const Icon(Icons.share, size: 16),
+                  label: const Text('Share'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accent,
+                    side: const BorderSide(color: AppTheme.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

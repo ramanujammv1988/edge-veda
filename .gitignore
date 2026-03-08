@@ -193,6 +193,8 @@ callgrind.out.*
 .claude.json
 claude.json
 .planning/
+.gemini/
+.opencode/
 prd.txt
 report.pdf
 EdgeVeda.xlsx
@@ -210,6 +212,9 @@ build/macos-arm64/
 build/macos-x86_64/
 build/macos-merged/
 flutter/macos/Frameworks/EdgeVedaCore.xcframework
+
+# Test binaries
+test_backend_detection
 
 # Evidence (device test captures - not for version control)
 evidence/

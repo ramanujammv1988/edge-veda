@@ -140,6 +140,7 @@ class WhisperWorker {
     Float32List pcmSamples, {
     String language = 'en',
     bool translate = false,
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     _ensureActive();
 
@@ -163,7 +164,7 @@ class WhisperWorker {
 
     try {
       // Whisper transcription typically takes 1-5 seconds per chunk
-      return await completer.future.timeout(const Duration(seconds: 30));
+      return await completer.future.timeout(timeout);
     } finally {
       await subscription.cancel();
     }

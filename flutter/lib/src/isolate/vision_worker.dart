@@ -17,13 +17,14 @@ library;
 
 import 'dart:async';
 import 'dart:ffi' as ffi;
-import 'dart:io' show Platform;
 import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
 import '../ffi/bindings.dart';
+import '../inference_config.dart' show InferenceConfig;
+import '../model_advisor.dart' show DeviceProfile;
 import 'vision_worker_messages.dart';
 
 /// Worker isolate manager for persistent vision inference
@@ -150,6 +151,7 @@ class VisionWorker {
     String prompt = 'Describe what you see.',
     int maxTokens = 100,
     double temperature = 0.3,
+    Duration? timeout,
   }) async {
     _ensureActive();
 
@@ -175,10 +177,11 @@ class VisionWorker {
     );
 
     try {
-      // Android CPU-only inference can take 3-5min; iOS Metal is much faster.
-      // Use platform-aware timeout to avoid masking hangs on faster paths.
-      final timeout = Duration(seconds: Platform.isAndroid ? 600 : 120);
-      return await completer.future.timeout(timeout);
+      // DeviceTier-aware timeout: minimum-tier Android gets 90s,
+      // high-end Apple gets 60s. Caller can still override explicitly.
+      final effectiveTimeout =
+          timeout ?? InferenceConfig.visionTimeout(DeviceProfile.detect().tier);
+      return await completer.future.timeout(effectiveTimeout);
     } finally {
       await subscription.cancel();
     }

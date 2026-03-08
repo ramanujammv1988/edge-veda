@@ -7,6 +7,8 @@
  * and Windows (GetProcessMemoryInfo).
  */
 
+#include "memory_guard.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -34,6 +36,14 @@
 
 namespace {
 
+struct EngineRegistryEntry {
+    bool active = false;
+    size_t footprint_bytes = 0;
+    uint64_t last_use_timestamp = 0;  // steady_clock nanoseconds
+    void (*evict_callback)(void*) = nullptr;
+    void* evict_user_data = nullptr;
+};
+
 struct MemoryGuardState {
     // Memory limits and tracking
     std::atomic<size_t> memory_limit{0};
@@ -56,6 +66,14 @@ struct MemoryGuardState {
     float pressure_threshold{0.9f}; // Trigger callback at 90% of limit
     bool auto_cleanup{true};
 
+    // Engine registry for cross-engine memory coordination
+    EngineRegistryEntry engine_registry[MG_ENGINE_COUNT];
+
+    // Tracks which engine is currently being evicted (-1 = none).
+    // Used by memory_guard_unregister_engine() to spin-wait for
+    // in-flight eviction callbacks before the caller deletes context.
+    std::atomic<int> evicting_engine_id{-1};
+
     ~MemoryGuardState() noexcept {
         monitoring_active.store(false, std::memory_order_release);
         if (monitor_thread.joinable()) {
@@ -67,6 +85,15 @@ struct MemoryGuardState {
         }
     }
 };
+
+static uint64_t current_monotonic_ns() {
+    auto now = std::chrono::steady_clock::now();
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()
+        ).count()
+    );
+}
 
 MemoryGuardState g_memory_guard;
 
@@ -235,25 +262,59 @@ static void memory_monitor_loop() {
 
         // Check memory pressure
         size_t limit = g_memory_guard.memory_limit.load(std::memory_order_acquire);
+        void (*evict_cb)(void*) = nullptr;
+        void* evict_data = nullptr;
+
         if (limit > 0 && current > 0) {
             float usage_ratio = static_cast<float>(current) / static_cast<float>(limit);
 
-            // Trigger callback if threshold exceeded
             if (usage_ratio >= g_memory_guard.pressure_threshold) {
-                std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
+                // Hold lock for pressure callback + LRU scan, then release before eviction
+                {
+                    std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
 
-                if (g_memory_guard.pressure_callback) {
-                    g_memory_guard.pressure_callback(
-                        g_memory_guard.callback_user_data,
-                        current,
-                        limit
-                    );
+                    if (g_memory_guard.pressure_callback) {
+                        g_memory_guard.pressure_callback(
+                            g_memory_guard.callback_user_data,
+                            current,
+                            limit
+                        );
+                    }
+
+                    // Auto-cleanup: find LRU engine to evict when RSS >= 95%
+                    if (g_memory_guard.auto_cleanup && usage_ratio >= 0.95f) {
+                        int lru_engine = -1;
+                        uint64_t oldest_ts = UINT64_MAX;
+
+                        for (int i = 0; i < MG_ENGINE_COUNT; i++) {
+                            auto& entry = g_memory_guard.engine_registry[i];
+                            if (entry.active && entry.evict_callback != nullptr) {
+                                if (entry.last_use_timestamp < oldest_ts) {
+                                    oldest_ts = entry.last_use_timestamp;
+                                    lru_engine = i;
+                                }
+                            }
+                        }
+
+                        if (lru_engine >= 0) {
+                            auto& entry = g_memory_guard.engine_registry[lru_engine];
+                            evict_cb = entry.evict_callback;
+                            evict_data = entry.evict_user_data;
+                            // Pre-clear so the eviction callback's unregister is a no-op
+                            entry.active = false;
+                            entry.footprint_bytes = 0;
+                            entry.evict_callback = nullptr;
+                            entry.evict_user_data = nullptr;
+                            // Signal which engine is being evicted (unregister spin-waits on this)
+                            g_memory_guard.evicting_engine_id.store(lru_engine, std::memory_order_release);
+                        }
+                    }
                 }
-
-                // Auto-cleanup if enabled
-                if (g_memory_guard.auto_cleanup && usage_ratio >= 0.95f) {
-                    // TODO: Trigger cleanup in main library
-                    // This would need to be coordinated with engine.cpp
+                // Lock released — safe to call eviction callback without deadlock.
+                // Set evicting_engine_id so unregister can spin-wait for completion.
+                if (evict_cb) {
+                    evict_cb(evict_data);
+                    g_memory_guard.evicting_engine_id.store(-1, std::memory_order_release);
                 }
             }
         }
@@ -457,6 +518,12 @@ void memory_guard_shutdown() {
     g_memory_guard.memory_limit.store(0, std::memory_order_release);
     g_memory_guard.pressure_callback = nullptr;
     g_memory_guard.callback_user_data = nullptr;
+
+    // Clear engine registry
+    for (int i = 0; i < MG_ENGINE_COUNT; i++) {
+        g_memory_guard.engine_registry[i] = EngineRegistryEntry{};
+    }
+    g_memory_guard.evicting_engine_id.store(-1, std::memory_order_release);
 }
 
 /**
@@ -532,6 +599,120 @@ size_t memory_guard_get_recommended_limit() {
     // Desktop: Use 60% of total memory
     return static_cast<size_t>(total * 0.6);
 #endif
+}
+
+/* ============================================================================
+ * Engine Registry API
+ * ========================================================================= */
+
+void memory_guard_register_engine(
+    int engine_id,
+    size_t footprint,
+    void (*evict_cb)(void* user_data),
+    void* user_data
+) {
+    if (engine_id < 0 || engine_id >= MG_ENGINE_COUNT) return;
+
+    std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
+
+    auto& entry = g_memory_guard.engine_registry[engine_id];
+    entry.active = true;
+    entry.footprint_bytes = footprint;
+    entry.last_use_timestamp = current_monotonic_ns();
+    entry.evict_callback = evict_cb;
+    entry.evict_user_data = user_data;
+
+    // Auto-set process-wide limit on first registration if no limit set yet.
+    // This resolves MEM-06 (last-write-wins collision) by using a single
+    // recommended limit rather than per-engine set_limit calls.
+    if (g_memory_guard.memory_limit.load(std::memory_order_acquire) == 0) {
+        size_t recommended = memory_guard_get_recommended_limit();
+        if (recommended > 0) {
+            g_memory_guard.memory_limit.store(recommended, std::memory_order_release);
+        }
+    }
+
+    // Start monitoring if not already running
+    start_monitoring();
+}
+
+void memory_guard_unregister_engine(int engine_id) {
+    if (engine_id < 0 || engine_id >= MG_ENGINE_COUNT) return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
+
+        auto& entry = g_memory_guard.engine_registry[engine_id];
+        entry.active = false;
+        entry.footprint_bytes = 0;
+        entry.evict_callback = nullptr;
+        entry.evict_user_data = nullptr;
+        entry.last_use_timestamp = 0;
+    }
+
+    // Spin-wait for any in-flight eviction of THIS engine to complete.
+    // The monitor thread sets evicting_engine_id before calling the callback
+    // and clears it after. This ensures the eviction callback has finished
+    // before the caller (typically ev_*_free) proceeds to delete the context.
+    while (g_memory_guard.evicting_engine_id.load(std::memory_order_acquire) == engine_id) {
+        std::this_thread::yield();
+    }
+}
+
+void memory_guard_touch_engine(int engine_id) {
+    if (engine_id < 0 || engine_id >= MG_ENGINE_COUNT) return;
+
+    std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
+
+    auto& entry = g_memory_guard.engine_registry[engine_id];
+    if (entry.active) {
+        entry.last_use_timestamp = current_monotonic_ns();
+    }
+}
+
+size_t memory_guard_get_total_engine_footprint() {
+    std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
+
+    size_t total = 0;
+    for (int i = 0; i < MG_ENGINE_COUNT; i++) {
+        if (g_memory_guard.engine_registry[i].active) {
+            total += g_memory_guard.engine_registry[i].footprint_bytes;
+        }
+    }
+    return total;
+}
+
+int memory_guard_check_budget(size_t proposed_bytes) {
+    std::lock_guard<std::mutex> lock(g_memory_guard.mutex);
+
+    size_t limit = g_memory_guard.memory_limit.load(std::memory_order_acquire);
+    if (limit == 0) return 0; // No limit set, always fits
+
+    size_t current_footprint = 0;
+    for (int i = 0; i < MG_ENGINE_COUNT; i++) {
+        if (g_memory_guard.engine_registry[i].active) {
+            current_footprint += g_memory_guard.engine_registry[i].footprint_bytes;
+        }
+    }
+
+    if (current_footprint + proposed_bytes <= limit) {
+        return 0; // Fits within budget
+    }
+
+    // Check if evicting LRU engines would free enough space
+    size_t evictable = 0;
+    for (int i = 0; i < MG_ENGINE_COUNT; i++) {
+        auto& entry = g_memory_guard.engine_registry[i];
+        if (entry.active && entry.evict_callback != nullptr) {
+            evictable += entry.footprint_bytes;
+        }
+    }
+
+    if (current_footprint - evictable + proposed_bytes <= limit) {
+        return 1; // Fits after evicting LRU
+    }
+
+    return -1; // Cannot fit even after eviction
 }
 
 } // extern "C"

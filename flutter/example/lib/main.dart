@@ -126,6 +126,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   );
   StreamSubscription<dynamic>? _memorySubscription;
   String? _memoryPressureLevel;
+  DateTime? _lastMemorySnackbar;
 
   bool _isInitialized = false;
   bool _isLoading = false;
@@ -158,7 +159,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   int _indexingTotal = 0; // Total chunks to embed
   String? _embeddingModelPath; // Cached path to embedding model
   final List<ChatMessage> _ragMessages = [];
-  bool _preferOfflineModel = true;
+  bool _preferOfflineModel = false;
   bool _isInternetReachable = false;
   bool _checkingInternet = false;
   Timer? _networkMonitorTimer;
@@ -272,15 +273,22 @@ Answer:
               _memoryPressureLevel = level;
             });
 
-            // Show warning for critical memory pressure
-            if (level == 'critical' || level == 'running_critical') {
+            // Show warning only for truly critical memory pressure
+            // (TRIM_MEMORY_COMPLETE). running_critical is expected during
+            // inference with large models and should not alarm the user.
+            if (level == 'critical') {
+              final now = DateTime.now();
+              final cooldown = _lastMemorySnackbar == null ||
+                  now.difference(_lastMemorySnackbar!).inSeconds >= 60;
+
               setState(() {
                 _statusMessage =
                     'Memory pressure: $level - consider restarting';
               });
 
-              // Show snackbar warning
-              if (mounted) {
+              // Debounce: show snackbar at most once per 60 seconds
+              if (mounted && cooldown) {
+                _lastMemorySnackbar = now;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Memory pressure: $level'),
@@ -413,9 +421,12 @@ Answer:
           );
         }
         if (!_isInternetReachable) {
-          throw const FormatException(
-            'No internet connection. Connect once to download the base model.',
-          );
+          _showNoInternetDialog();
+          setState(() {
+            _isDownloading = false;
+            _statusMessage = 'No internet connection';
+          });
+          return;
         }
         setState(() {
           _statusMessage = 'Downloading model (${model.name})...';
@@ -1052,9 +1063,12 @@ Answer:
             );
           }
           if (!_isInternetReachable) {
-            throw const FormatException(
-              'No internet connection. Connect once to download the embedding model.',
-            );
+            _showNoInternetDialog();
+            setState(() {
+              _isIndexingDocument = false;
+              _statusMessage = 'No internet connection';
+            });
+            return;
           }
           _embeddingModelPath = await _modelManager.downloadModel(embModel);
         } else {
@@ -2017,9 +2031,13 @@ Context:
               );
             }
             if (!_isInternetReachable) {
-              throw const FormatException(
-                'No internet connection. Connect once to download Qwen3.',
-              );
+              _showNoInternetDialog();
+              setState(() {
+                _isSwitchingModel = false;
+                _isLoading = false;
+                _statusMessage = 'No internet connection';
+              });
+              return;
             }
             setState(() {
               _statusMessage = 'Downloading Qwen3 model (~397 MB)...';
@@ -2456,6 +2474,30 @@ Context:
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
+    );
+  }
+
+  Future<void> _showNoInternetDialog() {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        icon: const Icon(Icons.wifi_off, color: AppTheme.warning, size: 48),
+        title: const Text('No Internet Connection',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Please connect to the internet to download this model. '
+          'Once downloaded, models run entirely offline.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child:
+                const Text('OK', style: TextStyle(color: AppTheme.accent)),
+          ),
+        ],
+      ),
     );
   }
 

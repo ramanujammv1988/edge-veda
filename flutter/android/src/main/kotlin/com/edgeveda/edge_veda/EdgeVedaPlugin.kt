@@ -16,10 +16,19 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Debug
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.StatFs
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.provider.CalendarContract
 import android.provider.MediaStore
 import android.util.Log
@@ -43,10 +52,12 @@ import java.util.Calendar
  * Edge Veda Flutter Plugin for Android — Full iOS Parity
  *
  * Channels:
- *   MethodChannel "com.edgeveda.edge_veda/telemetry" — 17 methods (13 iOS-parity + 4 device_info)
+ *   MethodChannel "com.edgeveda.edge_veda/telemetry" — 25 methods (13 iOS-parity + 4 device_info + 5 TTS + 3 SpeechRecognizer)
  *   EventChannel  "com.edgeveda.edge_veda/thermal"   — PowerManager thermal listener (API 29+)
  *   EventChannel  "com.edgeveda.edge_veda/audio_capture" — AudioRecord 16kHz PCM float
  *   EventChannel  "com.edgeveda.edge_veda/memory_pressure" — ComponentCallbacks2 (Android-unique)
+ *   EventChannel  "com.edgeveda.edge_veda/tts_events" — TextToSpeech utterance progress events
+ *   EventChannel  "com.edgeveda.edge_veda/speech_recognition" — SpeechRecognizer results for fallback STT
  */
 class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodCallHandler,
     ActivityAware, PluginRegistry.RequestPermissionsResultListener {
@@ -67,6 +78,10 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
     // Stream handlers (need references for cleanup)
     private var thermalStreamHandler: ThermalStreamHandler? = null
     private var audioCaptureStreamHandler: AudioCaptureStreamHandler? = null
+    private var ttsEventChannel: EventChannel? = null
+    private var ttsStreamHandler: TtsStreamHandler? = null
+    private var speechRecognitionEventChannel: EventChannel? = null
+    private var speechRecognizerStreamHandler: SpeechRecognizerStreamHandler? = null
 
     // Permission request tracking — keyed by request code to prevent race conditions.
     // Concurrent requests for different permission types are handled independently.
@@ -78,9 +93,12 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
         private const val CHANNEL_THERMAL = "com.edgeveda.edge_veda/thermal"
         private const val CHANNEL_AUDIO_CAPTURE = "com.edgeveda.edge_veda/audio_capture"
         private const val CHANNEL_MEMORY_PRESSURE = "com.edgeveda.edge_veda/memory_pressure"
+        private const val CHANNEL_TTS_EVENTS = "com.edgeveda.edge_veda/tts_events"
+        private const val CHANNEL_SPEECH_RECOGNITION = "com.edgeveda.edge_veda/speech_recognition"
 
         private const val REQUEST_CODE_MICROPHONE = 9001
         private const val REQUEST_CODE_DETECTIVE = 9002
+        private const val REQUEST_CODE_WRITE_STORAGE = 9003
 
         init {
             System.loadLibrary("edge_veda")
@@ -119,6 +137,16 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
                 memoryEventSink = null
             }
         })
+
+        // EventChannel — TTS events
+        ttsStreamHandler = TtsStreamHandler(binding.applicationContext)
+        ttsEventChannel = EventChannel(binding.binaryMessenger, CHANNEL_TTS_EVENTS)
+        ttsEventChannel?.setStreamHandler(ttsStreamHandler)
+
+        // EventChannel — speech recognition (SpeechRecognizer fallback)
+        speechRecognizerStreamHandler = SpeechRecognizerStreamHandler()
+        speechRecognitionEventChannel = EventChannel(binding.binaryMessenger, CHANNEL_SPEECH_RECOGNITION)
+        speechRecognitionEventChannel?.setStreamHandler(speechRecognizerStreamHandler)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -141,6 +169,16 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
         memoryPressureChannel?.setStreamHandler(null)
         memoryPressureChannel = null
         memoryEventSink = null
+
+        ttsStreamHandler?.dispose()
+        ttsEventChannel?.setStreamHandler(null)
+        ttsEventChannel = null
+        ttsStreamHandler = null
+
+        speechRecognizerStreamHandler?.dispose()
+        speechRecognitionEventChannel?.setStreamHandler(null)
+        speechRecognitionEventChannel = null
+        speechRecognizerStreamHandler = null
     }
 
     // =========================================================================
@@ -172,7 +210,7 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
     }
 
     // =========================================================================
-    // MethodChannel handler — 17 methods
+    // MethodChannel handler — 25 methods
     // =========================================================================
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -191,6 +229,7 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
             "getPhotoInsights" -> getPhotoInsights(result)
             "getCalendarInsights" -> getCalendarInsights(result)
             "shareFile" -> shareFile(call, result)
+            "saveFileToDownloads" -> saveFileToDownloads(call, result)
 
             // --- Device info methods (4) ---
             "getDeviceModel" -> result.success(Build.MODEL)
@@ -224,6 +263,47 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
                 } else {
                     result.success("CPU")
                 }
+            }
+
+            // --- TTS methods (5) ---
+            "tts_speak" -> {
+                val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
+                val text = args["text"] as? String ?: ""
+                val voiceId = args["voiceId"] as? String
+                val rate = (args["rate"] as? Number)?.toFloat()
+                val pitch = (args["pitch"] as? Number)?.toFloat()
+                val volume = (args["volume"] as? Number)?.toFloat()
+                ttsStreamHandler?.speak(text, voiceId, rate, pitch, volume)
+                result.success(true)
+            }
+            "tts_stop" -> {
+                ttsStreamHandler?.stop()
+                result.success(true)
+            }
+            "tts_pause" -> {
+                // Android TextToSpeech has no native pause — no-op
+                result.success(true)
+            }
+            "tts_resume" -> {
+                // Android TextToSpeech has no native resume — no-op
+                result.success(true)
+            }
+            "tts_voices" -> {
+                result.success(ttsStreamHandler?.getVoices() ?: emptyList<Map<String, Any>>())
+            }
+
+            // --- SpeechRecognizer methods (3) ---
+            "speechRecognizer_isAvailable" -> {
+                val ctx = applicationContext
+                result.success(ctx != null && SpeechRecognizer.isRecognitionAvailable(ctx))
+            }
+            "speechRecognizer_start" -> {
+                speechRecognizerStreamHandler?.startListening(applicationContext)
+                result.success(true)
+            }
+            "speechRecognizer_stop" -> {
+                speechRecognizerStreamHandler?.stopListening()
+                result.success(true)
             }
 
             else -> result.notImplemented()
@@ -429,6 +509,18 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
                     pendingResult.success(
                         mapOf("photos" to "denied", "calendar" to "denied")
                     )
+                }
+                return true
+            }
+            REQUEST_CODE_WRITE_STORAGE -> {
+                val granted = grantResults.isNotEmpty() &&
+                        grantResults[0] == PackageManager.PERMISSION_GRANTED
+                val filePath = pendingSaveFilePath
+                pendingSaveFilePath = null
+                if (granted && filePath != null) {
+                    doSaveFileToDownloads(filePath, pendingResult)
+                } else {
+                    pendingResult.error("PERMISSION_DENIED", "Storage permission denied", null)
                 }
                 return true
             }
@@ -719,6 +811,110 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
     }
 
     // =========================================================================
+    // Save File to Downloads — MediaStore (API 29+) or direct copy
+    // =========================================================================
+
+    // Stash the source path so we can resume after the permission grant.
+    private var pendingSaveFilePath: String? = null
+
+    private fun saveFileToDownloads(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        if (path == null) {
+            result.error("INVALID_ARG", "Missing 'path' argument", null)
+            return
+        }
+
+        val sourceFile = File(path)
+        if (!sourceFile.exists()) {
+            result.error("FILE_NOT_FOUND", "File not found", path)
+            return
+        }
+
+        val ctx = applicationContext ?: run {
+            result.error("NO_CONTEXT", "Application context unavailable", null)
+            return
+        }
+
+        // API < 29 requires WRITE_EXTERNAL_STORAGE at runtime
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                val act = activity ?: run {
+                    result.error("NO_ACTIVITY", "No activity for permission request", null)
+                    return
+                }
+                pendingSaveFilePath = path
+                pendingPermissions.remove(REQUEST_CODE_WRITE_STORAGE)?.error(
+                    "CANCELLED", "Superseded by a new save request", null
+                )
+                pendingPermissions[REQUEST_CODE_WRITE_STORAGE] = result
+                ActivityCompat.requestPermissions(
+                    act,
+                    arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                    REQUEST_CODE_WRITE_STORAGE
+                )
+                return
+            }
+        }
+
+        doSaveFileToDownloads(path, result)
+    }
+
+    private fun doSaveFileToDownloads(path: String, result: MethodChannel.Result) {
+        val sourceFile = File(path)
+        val ctx = applicationContext ?: run {
+            result.error("NO_CONTEXT", "Application context unavailable", null)
+            return
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // API 29+: Use MediaStore (no WRITE_EXTERNAL_STORAGE needed)
+                val values = android.content.ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, sourceFile.name)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+
+                val resolver = ctx.contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri == null) {
+                    result.error("SAVE_FAILED", "Failed to create MediaStore entry", null)
+                    return
+                }
+
+                resolver.openOutputStream(uri)?.use { output ->
+                    sourceFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+
+                val savedPath = "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)}/${sourceFile.name}"
+                result.success(savedPath)
+            } else {
+                // API < 29: Copy directly to Downloads folder
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloadsDir.exists()) downloadsDir.mkdirs()
+                val destFile = File(downloadsDir, sourceFile.name)
+                sourceFile.inputStream().use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                result.success(destFile.absolutePath)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "saveFileToDownloads failed", e)
+            result.error("SAVE_FAILED", e.message, null)
+        }
+    }
+
+    // =========================================================================
     // ComponentCallbacks2 — memory pressure (Android-unique)
     // =========================================================================
 
@@ -953,6 +1149,394 @@ class EdgeVedaPlugin : FlutterPlugin, ComponentCallbacks2, MethodChannel.MethodC
 
         fun dispose() {
             stopCapture()
+            eventSink = null
+        }
+    }
+
+    // =========================================================================
+    // Inner class: TtsStreamHandler
+    // =========================================================================
+
+    /**
+     * Text-to-Speech using android.speech.tts.TextToSpeech.
+     * Implements EventChannel.StreamHandler to emit TTS events matching the
+     * Dart TtsEvent format: {"type": "start"|"finish"|"cancel"|"wordBoundary",
+     * "start": int, "length": int, "text": string}.
+     *
+     * Design notes:
+     * - Pause/Resume: Android TTS has no native pause/resume. These are no-ops.
+     * - Word boundaries: onRangeStart() requires API 26+ (minSdk is 24).
+     *   On API 24-25 word boundary events won't fire — Dart handles gracefully.
+     * - Init is async: If speak() arrives before onInit(SUCCESS), the request
+     *   is queued and executed once init completes. On onInit(ERROR), a cancel
+     *   event is emitted so the Dart Completer resolves.
+     * - Rate mapping: iOS default rate = 0.5, Android default = 1.0.
+     *   Dart rate is multiplied by 2.0 to match.
+     */
+    inner class TtsStreamHandler(private val context: Context) : EventChannel.StreamHandler {
+        private var eventSink: EventChannel.EventSink? = null
+        private var tts: TextToSpeech? = null
+        private var ttsReady = false
+        private val mainHandler = Handler(Looper.getMainLooper())
+
+        // Queued speak request if TTS not yet initialized
+        private var pendingSpeak: (() -> Unit)? = null
+
+        // Track the text being spoken for word boundary events
+        private var currentText: String = ""
+
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+            eventSink = events
+            initTts()
+        }
+
+        override fun onCancel(arguments: Any?) {
+            eventSink = null
+        }
+
+        private fun initTts() {
+            if (tts != null) return
+            tts = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    ttsReady = true
+                    setupListener()
+                    // Execute any queued speak request
+                    pendingSpeak?.invoke()
+                    pendingSpeak = null
+                } else {
+                    Log.e(TAG, "TTS init failed with status=$status")
+                    ttsReady = false
+                    // Emit cancel so Dart Completer resolves
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "cancel"))
+                    }
+                    pendingSpeak = null
+                }
+            }
+        }
+
+        private fun setupListener() {
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "start"))
+                    }
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "finish"))
+                    }
+                }
+
+                @Deprecated("Deprecated in API level 21")
+                override fun onError(utteranceId: String?) {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "cancel"))
+                    }
+                }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "cancel"))
+                    }
+                }
+
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "cancel"))
+                    }
+                }
+
+                override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                    // API 26+ only
+                    val length = end - start
+                    val word = if (start >= 0 && end <= currentText.length && start < end) {
+                        currentText.substring(start, end)
+                    } else {
+                        ""
+                    }
+                    mainHandler.post {
+                        eventSink?.success(mapOf(
+                            "type" to "wordBoundary",
+                            "start" to start,
+                            "length" to length,
+                            "text" to word
+                        ))
+                    }
+                }
+            })
+        }
+
+        fun speak(text: String, voiceId: String?, rate: Float?, pitch: Float?, volume: Float?) {
+            if (text.isEmpty()) return
+
+            // Ensure TTS is initialized
+            if (tts == null) {
+                initTts()
+            }
+
+            if (!ttsReady) {
+                // Queue the speak request for when TTS init completes
+                pendingSpeak = { doSpeak(text, voiceId, rate, pitch, volume) }
+            } else {
+                doSpeak(text, voiceId, rate, pitch, volume)
+            }
+        }
+
+        private fun doSpeak(text: String, voiceId: String?, rate: Float?, pitch: Float?, volume: Float?) {
+            val engine = tts ?: return
+            currentText = text
+
+            // Voice selection
+            if (!voiceId.isNullOrEmpty()) {
+                val voices = try { engine.voices } catch (_: Exception) { null }
+                val voice = voices?.firstOrNull { it.name == voiceId }
+                if (voice != null) {
+                    engine.voice = voice
+                }
+            }
+
+            // Rate: Dart sends 0.0-1.0 (iOS scale), Android default is 1.0
+            // Map by multiplying by 2.0 so Dart 0.5 → Android 1.0
+            engine.setSpeechRate((rate ?: 0.5f) * 2.0f)
+
+            // Pitch: 0.5-2.0 on both platforms, direct pass-through
+            engine.setPitch(pitch ?: 1.0f)
+
+            // Speak with utterance ID for progress tracking
+            val params = android.os.Bundle()
+            if (volume != null) {
+                params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
+            }
+            engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, "ev_tts_utterance")
+        }
+
+        fun stop() {
+            tts?.stop()
+        }
+
+        fun getVoices(): List<Map<String, Any>> {
+            val engine = tts ?: return emptyList()
+            if (!ttsReady) return emptyList()
+
+            val voices: Set<Voice> = try {
+                engine.voices ?: return emptyList()
+            } catch (_: Exception) {
+                return emptyList()
+            }
+
+            return voices
+                .filter { !it.isNetworkConnectionRequired }
+                .map { voice ->
+                    val quality = if (voice.quality >= 400) 3 else 2
+                    mapOf(
+                        "id" to voice.name,
+                        "name" to voice.name,
+                        "language" to voice.locale.toLanguageTag(),
+                        "quality" to quality
+                    )
+                }
+                .sortedBy { it["language"] as String }
+        }
+
+        fun dispose() {
+            tts?.stop()
+            tts?.shutdown()
+            tts = null
+            ttsReady = false
+            pendingSpeak = null
+            currentText = ""
+            eventSink = null
+        }
+    }
+
+    // =========================================================================
+    // Inner class: SpeechRecognizerStreamHandler
+    // =========================================================================
+
+    /**
+     * Fallback STT using Android's built-in SpeechRecognizer.
+     *
+     * Implements EventChannel.StreamHandler to emit recognition events.
+     * Used as an automatic fallback when Whisper inference repeatedly
+     * times out on low-end devices.
+     *
+     * Key behaviors:
+     * - EXTRA_PREFER_OFFLINE = true for privacy parity with Whisper
+     * - Auto-restart on ERROR_NO_MATCH / ERROR_SPEECH_TIMEOUT (continuous listening)
+     * - Auto-restart after final result (continuous listening)
+     * - SpeechRecognizer must be created/destroyed on main thread
+     *
+     * Events emitted: ready, speechStart, speechEnd, result, error
+     */
+    inner class SpeechRecognizerStreamHandler : EventChannel.StreamHandler {
+        private var eventSink: EventChannel.EventSink? = null
+        private var speechRecognizer: SpeechRecognizer? = null
+        private val mainHandler = Handler(Looper.getMainLooper())
+        @Volatile private var isListening = false
+        // Flag to track if we were asked to stop — prevents auto-restart races
+        private var stopRequested = false
+
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+            eventSink = events
+        }
+
+        override fun onCancel(arguments: Any?) {
+            stopListening()
+            eventSink = null
+        }
+
+        fun startListening(context: Context?) {
+            val ctx = context ?: return
+            stopRequested = false
+
+            mainHandler.post {
+                try {
+                    // Always create a fresh recognizer to avoid stale state
+                    speechRecognizer?.destroy()
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ctx)
+                    speechRecognizer?.setRecognitionListener(createListener())
+                    doStartListening()
+                } catch (e: Exception) {
+                    Log.e(TAG, "SpeechRecognizer start failed", e)
+                    eventSink?.success(mapOf(
+                        "type" to "error",
+                        "errorCode" to -1,
+                        "message" to (e.message ?: "Failed to start SpeechRecognizer")
+                    ))
+                }
+            }
+        }
+
+        private fun doStartListening() {
+            if (stopRequested) return
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            isListening = true
+            speechRecognizer?.startListening(intent)
+        }
+
+        fun stopListening() {
+            stopRequested = true
+            isListening = false
+            mainHandler.post {
+                try {
+                    speechRecognizer?.stopListening()
+                    speechRecognizer?.cancel()
+                    speechRecognizer?.destroy()
+                } catch (_: Exception) {}
+                speechRecognizer = null
+            }
+        }
+
+        private fun createListener(): RecognitionListener {
+            return object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "ready"))
+                    }
+                }
+
+                override fun onBeginningOfSpeech() {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "speechStart"))
+                    }
+                }
+
+                override fun onEndOfSpeech() {
+                    mainHandler.post {
+                        eventSink?.success(mapOf("type" to "speechEnd"))
+                    }
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val scores = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+                    val text = matches?.firstOrNull() ?: ""
+                    val confidence = scores?.firstOrNull()?.toDouble() ?: 0.0
+                    if (text.isNotEmpty()) {
+                        mainHandler.post {
+                            eventSink?.success(mapOf(
+                                "type" to "result",
+                                "text" to text,
+                                "confidence" to confidence,
+                                "isFinal" to true
+                            ))
+                        }
+                    }
+                    // Auto-restart for continuous listening
+                    if (isListening && !stopRequested) {
+                        mainHandler.postDelayed({ doStartListening() }, 100)
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val text = matches?.firstOrNull() ?: ""
+                    if (text.isNotEmpty()) {
+                        mainHandler.post {
+                            eventSink?.success(mapOf(
+                                "type" to "result",
+                                "text" to text,
+                                "confidence" to 0.0,
+                                "isFinal" to false
+                            ))
+                        }
+                    }
+                }
+
+                override fun onError(error: Int) {
+                    val message = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH -> "No speech detected"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech input timed out"
+                        SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                        SpeechRecognizer.ERROR_CLIENT -> "Client-side error"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Missing RECORD_AUDIO permission"
+                        SpeechRecognizer.ERROR_NETWORK -> "Network error"
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
+                        SpeechRecognizer.ERROR_SERVER -> "Server error"
+                        else -> "Unknown error ($error)"
+                    }
+
+                    mainHandler.post {
+                        eventSink?.success(mapOf(
+                            "type" to "error",
+                            "errorCode" to error,
+                            "message" to message
+                        ))
+                    }
+
+                    // Auto-restart on transient errors (continuous listening)
+                    val isTransient = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                    if (isTransient && isListening && !stopRequested) {
+                        mainHandler.postDelayed({ doStartListening() }, 300)
+                    }
+                }
+
+                override fun onRmsChanged(rmsdB: Float) {
+                    // Not forwarded — too noisy for EventChannel
+                }
+
+                override fun onBufferReceived(buffer: ByteArray?) {
+                    // Not used
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {
+                    // Not used
+                }
+            }
+        }
+
+        fun dispose() {
+            stopListening()
             eventSink = null
         }
     }

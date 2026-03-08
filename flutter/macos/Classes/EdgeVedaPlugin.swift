@@ -340,6 +340,8 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
             handleRequestMicrophonePermission(result)
         case "shareFile":
             handleShareFile(call, result: result)
+        case "saveFileToDownloads":
+            handleSaveFileToDownloads(call, result: result)
         case "checkDetectivePermissions":
             handleCheckDetectivePermissions(result)
         case "requestDetectivePermissions":
@@ -655,6 +657,47 @@ public class EdgeVedaPlugin: NSObject, FlutterPlugin {
             let rect = NSRect(x: contentView.bounds.midX, y: contentView.bounds.midY, width: 0, height: 0)
             picker.show(relativeTo: rect, of: contentView, preferredEdge: .minY)
             result(true)
+        }
+    }
+
+    // MARK: - Save to Downloads
+
+    /// Present an NSSavePanel so the user can choose where to save the file.
+    /// Defaults to ~/Downloads with the original filename.
+    private func handleSaveFileToDownloads(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let filePath = args["path"] as? String else {
+            result(FlutterError(code: "INVALID_ARG", message: "Missing 'path' argument", details: nil))
+            return
+        }
+
+        let sourceURL = URL(fileURLWithPath: filePath)
+        guard FileManager.default.fileExists(atPath: filePath) else {
+            result(FlutterError(code: "FILE_NOT_FOUND", message: "File not found", details: filePath))
+            return
+        }
+
+        DispatchQueue.main.async {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = sourceURL.lastPathComponent
+            panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            panel.canCreateDirectories = true
+
+            panel.begin { response in
+                guard response == .OK, let destURL = panel.url else {
+                    result(nil) // user cancelled
+                    return
+                }
+                do {
+                    if FileManager.default.fileExists(atPath: destURL.path) {
+                        try FileManager.default.removeItem(at: destURL)
+                    }
+                    try FileManager.default.copyItem(at: sourceURL, to: destURL)
+                    result(destURL.path)
+                } catch {
+                    result(FlutterError(code: "SAVE_FAILED", message: error.localizedDescription, details: nil))
+                }
+            }
         }
     }
 
