@@ -50,8 +50,10 @@ class ModelSelector {
           ModelRegistry.qwen2vl_7b,
           ModelRegistry.llava16_mistral_7b,
           ModelRegistry.smolvlm2_500m,
+          ModelRegistry.smolvlm2_256m,
         ]
       : [
+          ModelRegistry.smolvlm2_256m,
           ModelRegistry.smolvlm2_500m,
         ];
 
