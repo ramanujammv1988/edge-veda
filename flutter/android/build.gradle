@@ -1,6 +1,6 @@
 // Edge Veda Flutter Plugin - Android Build Configuration
 group 'com.edgeveda.edge_veda'
-version '0.1.0'
+version '2.4.2'
 
 buildscript {
     ext.kotlin_version = '1.9.0'
