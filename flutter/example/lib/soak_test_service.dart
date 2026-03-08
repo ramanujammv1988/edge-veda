@@ -186,15 +186,7 @@ class SoakTestService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // On low-end Android, vision inference is not viable (ViT encoder takes
-      // 20+ min per frame on A53 CPU). Auto-fallback to LLM workload which
-      // produces actual throughput with the on-disk Llama 1B model.
       _isLowEndAndroid = await DeviceProfile.isLowEndAndroid(_telemetry);
-      if (_isLowEndAndroid && workload == SoakWorkload.vision) {
-        debugPrint('[SoakTest] Low-end Android detected — '
-            'falling back from vision to LLM workload');
-        workload = SoakWorkload.llm;
-      }
       _soakWorkload = workload;
 
       // Route to workload-specific initialization
