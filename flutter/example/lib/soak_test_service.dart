@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:screen_capturer/screen_capturer.dart';
 
+import 'device_status_info.dart';
 import 'model_selector.dart';
 
 /// Available soak test workloads.
@@ -227,6 +228,12 @@ class SoakTestService extends ChangeNotifier {
           'low_end_android': _isLowEndAndroid,
           'context_size': _isLowEndAndroid ? 2048 : 4096,
           'num_threads': _isLowEndAndroid ? 2 : _adaptiveThreadCount(),
+          'device_model': DeviceStatusInfo.model,
+          'chip': DeviceStatusInfo.chip,
+          'total_memory_gb': DeviceStatusInfo.memoryGB,
+          'gpu_backend': DeviceStatusInfo.backendLabel,
+          'has_neural_engine': DeviceStatusInfo.hasNeuralEngine,
+          'platform': DeviceStatusInfo.platformLabel,
         },
       );
 
