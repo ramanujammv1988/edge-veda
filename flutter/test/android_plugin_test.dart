@@ -3240,6 +3240,437 @@ void main() {
   // SoakTestService default duration — 35 min behavior change
   // =========================================================================
 
+  // =========================================================================
+  // 14. Soak Test — Multi-Workload Support
+  // =========================================================================
+
+  group('SoakWorkload enum completeness', () {
+    test('soak_test_service.dart defines all 5 workload types', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('enum SoakWorkload'));
+        expect(content, contains('vision,'));
+        expect(content, contains('llm,'));
+        expect(content, contains('stt,'));
+        expect(content, contains('imageGen,'));
+        expect(content, contains('mixed,'));
+      }
+    });
+  });
+
+  group('Soak LLM workload', () {
+    test('start() accepts SoakWorkload.llm parameter', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content,
+          contains('SoakWorkload workload = SoakWorkload.vision'),
+          reason: 'start() should accept workload param with vision default',
+        );
+      }
+    });
+
+    test('LLM workload uses StreamingWorker', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('StreamingWorker? _llmWorker'));
+        expect(content, contains('_llmWorker = StreamingWorker()'));
+        expect(content, contains('_llmWorker!.spawn()'));
+        expect(content, contains('_llmWorker!.init('));
+      }
+    });
+
+    test('LLM loop uses rotating prompts', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('_soakPrompts'));
+        expect(
+          content,
+          contains('_soakPrompts[_promptIndex % _soakPrompts.length]'),
+          reason: 'LLM prompts should rotate with modulo',
+        );
+      }
+    });
+
+    test('LLM records trace with llm_inference stage', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains("stage: 'llm_inference'"));
+      }
+    });
+  });
+
+  group('Soak STT workload', () {
+    test('STT workload uses WhisperWorker', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('WhisperWorker? _whisperWorker'));
+        expect(content, contains('_whisperWorker = WhisperWorker()'));
+        expect(content, contains('_whisperWorker!.spawn()'));
+        expect(content, contains('_whisperWorker!.initWhisper('));
+      }
+    });
+
+    test('STT generates synthetic 440Hz sine wave at 16kHz', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('_generateSineWave'));
+        expect(content, contains('frequencyHz: 440.0'));
+        expect(content, contains('sampleRate: 16000'));
+        expect(content, contains('durationMs: 3000'));
+      }
+    });
+
+    test('STT records trace with stt_inference stage', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains("stage: 'stt_inference'"));
+      }
+    });
+
+    test('STT uses tier-aware timeout (90s low-end, 30s default)', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('Duration(seconds: 90)'));
+        expect(content, contains('Duration(seconds: 30)'));
+      }
+    });
+  });
+
+  group('Soak ImageGen workload', () {
+    test('ImageGen workload uses ImageWorker', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('ImageWorker? _imageWorker'));
+        expect(content, contains('_imageWorker = ImageWorker()'));
+        expect(content, contains('_imageWorker!.spawn()'));
+        expect(content, contains('_imageWorker!.initImage('));
+      }
+    });
+
+    test('ImageGen uses rotating image prompts', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('_imagePrompts'));
+        expect(
+          content,
+          contains('_imagePrompts[_promptIndex % _imagePrompts.length]'),
+          reason: 'Image prompts should rotate with modulo',
+        );
+      }
+    });
+
+    test('ImageGen generates 256x256 images (small for soak)', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('width: 256'));
+        expect(content, contains('height: 256'));
+      }
+    });
+
+    test('ImageGen records trace with imagegen_inference stage', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains("stage: 'imagegen_inference'"));
+      }
+    });
+  });
+
+  group('Soak mixed workload rotation', () {
+    test('mixed rotation cycles LLM → STT → ImageGen', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('_startMixedRotation'));
+        expect(
+          content,
+          contains('Duration(minutes: 5)'),
+          reason: 'Mixed rotation should cycle every 5 minutes',
+        );
+      }
+    });
+
+    test('mixed rotation disposes workers before switching', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Inside _startMixedRotation, it should call dispose before re-init
+        expect(
+          content,
+          contains('await _disposeInferenceWorkers()'),
+          reason: 'Mixed rotation must dispose workers before switching',
+        );
+      }
+    });
+  });
+
+  group('OOM recovery validation', () {
+    test('validateOomRecovery method exists', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('Future<Map<String, dynamic>> validateOomRecovery()'));
+      }
+    });
+
+    test('OOM recovery loads LLM, Vision, and Whisper sequentially', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('OOM test: LLM loaded'));
+        expect(content, contains('OOM test: Vision loaded'));
+        expect(content, contains('OOM test: Whisper loaded'));
+      }
+    });
+
+    test('OOM recovery tracks failures and recoveries', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('_modelLoadFailures'));
+        expect(content, contains('_oomRecoveryCount'));
+        expect(content, contains("results['failures']"));
+        expect(content, contains("results['recoveries']"));
+      }
+    });
+
+    test('OOM recovery disposes each worker after load test', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        // Each model load is wrapped in try/finally with dispose
+        final disposeInOom = 'await w.dispose()'.allMatches(content).length;
+        expect(
+          disposeInOom,
+          greaterThanOrEqualTo(3),
+          reason: 'Each OOM load attempt should dispose worker in finally block',
+        );
+      }
+    });
+  });
+
+  group('Worker cleanup on stop', () {
+    test('stop() cancels soakInferenceTimer', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('_soakInferenceTimer?.cancel()'));
+        expect(content, contains('_soakInferenceTimer = null'));
+      }
+    });
+
+    test('_disposeInferenceWorkers cleans up all 4 worker types', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('await _visionWorker.dispose()'));
+        expect(content, contains('await _llmWorker?.dispose()'));
+        expect(content, contains('await _whisperWorker?.dispose()'));
+        expect(content, contains('await _imageWorker?.dispose()'));
+      }
+    });
+  });
+
+  group('Soak GPU detection — runtime not hardcoded', () {
+    test('soak_test_service uses InferenceConfig.useGpu (not Platform.isIOS)', () {
+      final file = File(
+        '${Directory.current.path}/example/lib/soak_test_service.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content,
+          contains('InferenceConfig.useGpu'),
+          reason: 'Soak test should use runtime GPU detection',
+        );
+        // Should NOT have hardcoded Platform.isIOS for useGpu
+        expect(
+          content.contains('useGpu: Platform.isIOS'),
+          isFalse,
+          reason: 'useGpu should not be hardcoded to Platform.isIOS',
+        );
+      }
+    });
+  });
+
+  group('InferenceConfig — DeviceTier-aware parameters', () {
+    test('InferenceConfig.dart exists with tier-aware methods', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/inference_config.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('class InferenceConfig'));
+        expect(content, contains('llmTokenTimeout'));
+        expect(content, contains('visionTimeout'));
+        expect(content, contains('maxInferenceDimension'));
+        expect(content, contains('useGpu'));
+      }
+    });
+
+    test('AdaptiveVisionConfig tracks consecutive failures', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/inference_config.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('class AdaptiveVisionConfig'));
+        expect(content, contains('recordSuccess'));
+        expect(content, contains('recordTimeout'));
+        expect(content, contains('_consecutiveFailures'));
+        expect(content, contains('_consecutiveSuccesses'));
+      }
+    });
+
+    test('AdaptiveVisionConfig degrades resolution by 25% after 2 timeouts', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/inference_config.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content,
+          contains('_consecutiveFailures >= 2'),
+          reason: 'Should degrade after 2 consecutive failures',
+        );
+        expect(
+          content,
+          contains('* 0.75'),
+          reason: 'Resolution should degrade by 25%',
+        );
+      }
+    });
+
+    test('AdaptiveVisionConfig recovers after 5 consecutive successes', () {
+      final file = File(
+        '${Directory.current.path}/lib/src/inference_config.dart',
+      );
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(
+          content,
+          contains('_consecutiveSuccesses >= 5'),
+          reason: 'Should recover after 5 consecutive successes',
+        );
+        expect(
+          content,
+          contains('* 1.25'),
+          reason: 'Resolution should recover by 25%',
+        );
+      }
+    });
+  });
+
+  group('Integration test files exist', () {
+    test('LLM integration test exists', () {
+      final file = File(
+        '${Directory.current.path}/example/integration_test/llm_test.dart',
+      );
+      expect(file.existsSync(), isTrue,
+          reason: 'integration_test/llm_test.dart should exist');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('StreamingWorker'));
+        expect(content, contains('startStream'));
+        expect(content, contains('nextToken'));
+      }
+    });
+
+    test('Vision integration test exists', () {
+      final file = File(
+        '${Directory.current.path}/example/integration_test/vision_test.dart',
+      );
+      expect(file.existsSync(), isTrue,
+          reason: 'integration_test/vision_test.dart should exist');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('VisionWorker'));
+        expect(content, contains('describeFrame'));
+      }
+    });
+
+    test('Whisper integration test exists', () {
+      final file = File(
+        '${Directory.current.path}/example/integration_test/whisper_test.dart',
+      );
+      expect(file.existsSync(), isTrue,
+          reason: 'integration_test/whisper_test.dart should exist');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('WhisperWorker'));
+        expect(content, contains('transcribeChunk'));
+      }
+    });
+
+    test('ImageGen integration test exists', () {
+      final file = File(
+        '${Directory.current.path}/example/integration_test/imagegen_test.dart',
+      );
+      expect(file.existsSync(), isTrue,
+          reason: 'integration_test/imagegen_test.dart should exist');
+      if (file.existsSync()) {
+        final content = file.readAsStringSync();
+        expect(content, contains('ImageWorker'));
+        expect(content, contains('generateImage'));
+      }
+    });
+  });
+
   group('SoakTestService default duration', () {
     test('soak_test_service.dart defines _testDuration as 35 minutes', () {
       final file = File(

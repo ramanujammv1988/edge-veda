@@ -182,11 +182,21 @@ class SoakTestService extends ChangeNotifier {
     if (_isRunning || _isInitializing) return;
 
     _isInitializing = true;
-    _soakWorkload = workload;
     _statusMessage = 'Preparing soak test...';
     notifyListeners();
 
     try {
+      // On low-end Android, vision inference is not viable (ViT encoder takes
+      // 20+ min per frame on A53 CPU). Auto-fallback to LLM workload which
+      // produces actual throughput with the on-disk Llama 1B model.
+      _isLowEndAndroid = await DeviceProfile.isLowEndAndroid(_telemetry);
+      if (_isLowEndAndroid && workload == SoakWorkload.vision) {
+        debugPrint('[SoakTest] Low-end Android detected — '
+            'falling back from vision to LLM workload');
+        workload = SoakWorkload.llm;
+      }
+      _soakWorkload = workload;
+
       // Route to workload-specific initialization
       switch (workload) {
         case SoakWorkload.llm:
@@ -1029,10 +1039,6 @@ class SoakTestService extends ChangeNotifier {
   Future<void> _initVisionWorkload() async {
     _workloadId = WorkloadId.vision;
     if (cameraSupported) {
-      _isLowEndAndroid = await DeviceProfile.isLowEndAndroid(_telemetry);
-      if (_isLowEndAndroid) {
-        debugPrint('[SoakTest] Low-end Android detected');
-      }
       await _ensureModelsDownloaded();
       _statusMessage = 'Loading vision model...';
       notifyListeners();
@@ -1054,7 +1060,6 @@ class SoakTestService extends ChangeNotifier {
 
   Future<void> _initLlmWorkload() async {
     _workloadId = WorkloadId.text;
-    _isLowEndAndroid = await DeviceProfile.isLowEndAndroid(_telemetry);
     _statusMessage = 'Selecting LLM model...';
     notifyListeners();
 
@@ -1082,7 +1087,6 @@ class SoakTestService extends ChangeNotifier {
 
   Future<void> _initSttWorkload() async {
     _workloadId = WorkloadId.text;
-    _isLowEndAndroid = await DeviceProfile.isLowEndAndroid(_telemetry);
     _statusMessage = 'Selecting whisper model...';
     notifyListeners();
 
@@ -1109,7 +1113,6 @@ class SoakTestService extends ChangeNotifier {
 
   Future<void> _initImageGenWorkload() async {
     _workloadId = WorkloadId.text;
-    _isLowEndAndroid = await DeviceProfile.isLowEndAndroid(_telemetry);
     _statusMessage = 'Selecting image model...';
     notifyListeners();
 
