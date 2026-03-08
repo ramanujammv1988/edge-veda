@@ -706,7 +706,11 @@ class VoicePipeline {
   // the pipeline can gracefully handle phone calls, Siri, Bluetooth
   // disconnect, and headphone plug/unplug during active voice sessions.
   Future<void> _configureAudioSession() async {
-    await _methodChannel.invokeMethod<bool>('configureVoicePipelineAudio');
+    try {
+      await _methodChannel.invokeMethod<bool>('configureVoicePipelineAudio');
+    } catch (_) {
+      // Best effort -- Android does not use AVAudioSession
+    }
   }
 
   /// Stop the voice pipeline and release all resources.
