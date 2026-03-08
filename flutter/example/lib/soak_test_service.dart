@@ -401,27 +401,17 @@ class SoakTestService extends ChangeNotifier {
   /// Returns a [ModelDownloadPlan] describing which files are missing.
   /// If [ModelDownloadPlan.needsDownload] is false, all models are on disk.
   Future<ModelDownloadPlan> checkModelsNeeded() async {
-    // Detect low-end Android inline since this can be called from UI before
-    // start() sets the _isLowEndAndroid field.
-    final isLowEnd = Platform.isAndroid &&
-        Platform.numberOfProcessors <= 4 &&
-        (await _telemetry.snapshot()).availableMemoryBytes <
-            3 * 1024 * 1024 * 1024;
-
     final candidates = Platform.isMacOS
         ? [
             ModelRegistry.qwen2vl_7b,
             ModelRegistry.llava16_mistral_7b,
             ModelRegistry.smolvlm2_500m,
+            ModelRegistry.smolvlm2_256m,
           ]
-        : isLowEnd
-            ? [
-                ModelRegistry.smolvlm2_256m,
-                ModelRegistry.smolvlm2_500m,
-              ]
-            : [
-                ModelRegistry.smolvlm2_500m,
-              ];
+        : [
+            ModelRegistry.smolvlm2_256m,
+            ModelRegistry.smolvlm2_500m,
+          ];
 
     ModelInfo? selectedModel;
     ModelInfo? selectedMmproj;
@@ -447,8 +437,6 @@ class SoakTestService extends ChangeNotifier {
 
     if (selectedModel == null ||
         (Platform.isMacOS &&
-            selectedModel.id == ModelRegistry.smolvlm2_500m.id) ||
-        (isLowEnd &&
             selectedModel.id == ModelRegistry.smolvlm2_500m.id)) {
       // Need to download a model
       final ModelInfo target;
@@ -456,12 +444,9 @@ class SoakTestService extends ChangeNotifier {
       if (Platform.isMacOS) {
         target = ModelRegistry.qwen2vl_7b;
         targetMmproj = ModelRegistry.qwen2vl_7b_mmproj;
-      } else if (isLowEnd) {
+      } else {
         target = ModelRegistry.smolvlm2_256m;
         targetMmproj = ModelRegistry.smolvlm2_256m_mmproj;
-      } else {
-        target = ModelRegistry.smolvlm2_500m;
-        targetMmproj = ModelRegistry.smolvlm2_500m_mmproj;
       }
 
       final modelReady = await _modelManager.isModelDownloaded(target.id);
