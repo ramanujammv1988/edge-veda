@@ -1,0 +1,583 @@
+import Foundation
+import CEdgeVeda
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// Memory warning handler callback
+public typealias MemoryWarningHandler = @Sendable () async -> Void
+
+/// Main EdgeVeda inference engine with async/await support
+@available(iOS 15.0, macOS 12.0, *)
+public actor EdgeVeda {
+    /// The C context pointer. Marked nonisolated(unsafe) because:
+    /// - It's an opaque C pointer managed by the underlying C library
+    /// - The C library handles thread safety internally
+    /// - We need to access it from nonisolated deinit for cleanup
+    private nonisolated(unsafe) var context: ev_context?
+    private let config: EdgeVedaConfig
+    private let modelPath: String
+    
+    /// Track the current generation task for cancellation support
+    private var currentGenerationTask: Task<String, Error>?
+    private var currentStreamTask: Task<Void, Never>?
+    
+    /// The active C-level ev_stream handle for cancellation propagation.
+    /// Marked nonisolated(unsafe) because ev_stream_cancel() is thread-safe (atomic flag)
+    /// and we need to call it from the onTermination closure outside actor isolation.
+    private nonisolated(unsafe) var currentStream: ev_stream?
+    
+    /// Memory warning observer
+    private var memoryWarningObserver: Any?
+    
+    /// Custom memory warning handler
+    private var memoryWarningHandler: MemoryWarningHandler?
+    
+    /// Flag to track if model was auto-unloaded due to memory pressure
+    private var autoUnloadedDueToMemory: Bool = false
+
+    /// Swift-level memory pressure callback registered via setMemoryPressureCallback(_:)
+    private var memoryPressureCallback: (@Sendable (MemoryPressureEvent) -> Void)? = nil
+
+    // MARK: - Initialization
+
+    /// Initialize EdgeVeda with a model file and configuration
+    /// - Parameters:
+    ///   - modelPath: Path to the GGUF model file
+    ///   - config: Configuration options (defaults to auto-detected settings)
+    /// - Throws: EdgeVedaError if initialization fails
+    public init(modelPath: String, config: EdgeVedaConfig = .default) async throws {
+        self.modelPath = modelPath
+        self.config = config
+
+        // Verify model file exists
+        guard FileManager.default.fileExists(atPath: modelPath) else {
+            throw EdgeVedaError.modelNotFound(path: modelPath)
+        }
+
+        // Load model via FFI
+        try await loadModel()
+        
+        // Set up memory warning observer on iOS
+        #if canImport(UIKit)
+        setupMemoryWarningObserver()
+        #endif
+    }
+
+    private func loadModel() async throws {
+        try await Task {
+            let ctx = try FFIBridge.initContext(
+                modelPath: modelPath,
+                backend: config.backend,
+                threads: config.threads,
+                contextSize: config.contextSize,
+                gpuLayers: config.gpuLayers,
+                batchSize: config.batchSize,
+                useMmap: config.useMemoryMapping,
+                useMlock: config.lockMemory,
+                seed: config.seed,
+                memoryLimitBytes: config.memoryLimitBytes,
+                autoUnloadOnMemoryPressure: config.autoUnloadOnMemoryPressure,
+                flashAttn: config.flashAttn,
+                kvCacheTypeK: config.kvCacheTypeK,
+                kvCacheTypeV: config.kvCacheTypeV
+            )
+            self.context = ctx
+        }.value
+    }
+
+    // MARK: - Text Generation
+
+    /// Generate text completion synchronously
+    /// - Parameter prompt: Input prompt text
+    /// - Returns: Generated text completion
+    /// - Throws: EdgeVedaError if generation fails
+    public func generate(_ prompt: String) async throws -> String {
+        return try await generate(prompt, options: .default)
+    }
+
+    /// Generate text completion with custom options
+    /// - Parameters:
+    ///   - prompt: Input prompt text
+    ///   - options: Generation parameters
+    /// - Returns: Generated text completion
+    /// - Throws: EdgeVedaError if generation fails
+    public func generate(_ prompt: String, options: GenerateOptions) async throws -> String {
+        guard let ctx = context else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+
+        let task = Task {
+            try FFIBridge.generate(
+                ctx: ctx,
+                prompt: prompt,
+                maxTokens: options.maxTokens,
+                temperature: options.temperature,
+                topP: options.topP,
+                topK: options.topK,
+                repeatPenalty: options.repeatPenalty,
+                frequencyPenalty: options.frequencyPenalty,
+                presencePenalty: options.presencePenalty,
+                stopSequences: options.stopSequences,
+                grammarStr: options.grammarStr,
+                grammarRoot: options.grammarRoot,
+                confidenceThreshold: options.confidenceThreshold
+            )
+        }
+        
+        currentGenerationTask = task
+        defer { currentGenerationTask = nil }
+        
+        return try await task.value
+    }
+
+    /// Generate text with streaming token-by-token output
+    /// - Parameter prompt: Input prompt text
+    /// - Returns: AsyncThrowingStream yielding tokens as they're generated
+    public func generateStream(_ prompt: String) -> AsyncThrowingStream<String, Error> {
+        return generateStream(prompt, options: .default)
+    }
+
+    /// Generate text with streaming and custom options
+    /// - Parameters:
+    ///   - prompt: Input prompt text
+    ///   - options: Generation parameters
+    /// - Returns: AsyncThrowingStream yielding tokens as they're generated
+    public func generateStream(_ prompt: String, options: GenerateOptions) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                guard let ctx = context else {
+                    continuation.finish(throwing: EdgeVedaError.modelNotLoaded)
+                    return
+                }
+
+                do {
+                    try await FFIBridge.generateStream(
+                        ctx: ctx,
+                        prompt: prompt,
+                        maxTokens: options.maxTokens,
+                        temperature: options.temperature,
+                        topP: options.topP,
+                        topK: options.topK,
+                        repeatPenalty: options.repeatPenalty,
+                        frequencyPenalty: options.frequencyPenalty,
+                        presencePenalty: options.presencePenalty,
+                        stopSequences: options.stopSequences,
+                        grammarStr: options.grammarStr,
+                        grammarRoot: options.grammarRoot,
+                        confidenceThreshold: options.confidenceThreshold,
+                        onStreamCreated: { [weak self] stream in
+                            self?.currentStream = stream
+                        }
+                    ) { @Sendable token in
+                        continuation.yield(token)
+                    }
+                    self.currentStream = nil
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            
+            // Store task reference for cancellation (must be done in actor context)
+            Task { [weak self] in
+                await self?.storeStreamTask(task)
+            }
+            
+            continuation.onTermination = { [weak self] _ in
+                // Cancel at C level first (thread-safe atomic flag)
+                if let stream = self?.currentStream {
+                    FFIBridge.cancelStream(stream)
+                    self?.currentStream = nil
+                }
+                task.cancel()
+                Task { [weak self] in
+                    await self?.clearStreamTask()
+                }
+            }
+        }
+    }
+    
+    /// Helper to store stream task from non-isolated context
+    private func storeStreamTask(_ task: Task<Void, Never>) {
+        currentStreamTask = task
+    }
+    
+    /// Helper to clear stream task from non-isolated context
+    private func clearStreamTask() {
+        currentStreamTask = nil
+    }
+
+    // MARK: - Model Information
+
+    /// Full memory usage breakdown from the C inference engine.
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func getMemoryStats() async throws -> MemoryStats {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        return try await Task { try FFIBridge.getMemoryUsage(ctx: ctx) }.value
+    }
+
+    /// Current memory usage in bytes (backward-compatible convenience accessor).
+    public var memoryUsage: UInt64 {
+        get async {
+            guard let ctx = context else { return 0 }
+            return (try? FFIBridge.getMemoryUsage(ctx: ctx))?.currentBytes ?? 0
+        }
+    }
+
+    /// Get model metadata information
+    /// - Returns: Dictionary of model metadata
+    public func getModelInfo() async throws -> [String: String] {
+        guard let ctx = context else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+        return try FFIBridge.getModelInfo(ctx: ctx)
+    }
+
+    // MARK: - Memory Management API
+
+    /// Set a hard memory ceiling in bytes.
+    /// - Parameter limitBytes: Maximum memory in bytes; 0 = no limit.
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func setMemoryLimit(_ limitBytes: UInt64) async throws {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        try FFIBridge.setMemoryLimit(ctx: ctx, limitBytes: limitBytes)
+    }
+
+    /// Register a callback invoked when memory usage exceeds ~80% of the configured limit.
+    /// Pass nil to remove the callback.
+    /// - Parameter callback: Sendable closure receiving a `MemoryPressureEvent`, or nil to deregister
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func setMemoryPressureCallback(
+        _ callback: (@Sendable (MemoryPressureEvent) -> Void)?
+    ) throws {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        self.memoryPressureCallback = callback
+
+        if callback != nil {
+            try FFIBridge.setMemoryPressureCallback(ctx: ctx) { [weak self] currentBytes, limitBytes in
+                guard let self else { return }
+                let ratio = limitBytes > 0 ? Double(currentBytes) / Double(limitBytes) : 0.0
+                let event = MemoryPressureEvent(
+                    currentBytes: currentBytes,
+                    limitBytes: limitBytes,
+                    pressureRatio: ratio,
+                    timestamp: Date()
+                )
+                Task { await self.dispatchMemoryPressureEvent(event) }
+            }
+        } else {
+            try FFIBridge.setMemoryPressureCallback(ctx: ctx, callback: nil)
+        }
+    }
+
+    private func dispatchMemoryPressureEvent(_ event: MemoryPressureEvent) {
+        memoryPressureCallback?(event)
+    }
+
+    /// Ask the inference engine to release any cached allocations it can safely free.
+    /// - Throws: EdgeVedaError if model is not loaded or the C call fails
+    public func memoryCleanup() async throws {
+        guard let ctx = context else { throw EdgeVedaError.modelNotLoaded }
+        try FFIBridge.memoryCleanup(ctx: ctx)
+    }
+
+    // MARK: - Model Management
+
+    /// Unload the model and free resources
+    public func unloadModel() async {
+        guard let ctx = context else {
+            return
+        }
+
+        await Task {
+            FFIBridge.freeContext(ctx)
+        }.value
+
+        context = nil
+    }
+    
+    /// Reload the model after it was unloaded
+    /// Useful for recovering from memory pressure situations
+    /// - Throws: EdgeVedaError if reload fails
+    public func reloadModel() async throws {
+        guard context == nil else {
+            return // Already loaded
+        }
+        
+        try await loadModel()
+        autoUnloadedDueToMemory = false
+    }
+
+    /// Check if a model is currently loaded and ready for inference
+    /// - Returns: true if model is loaded, false otherwise
+    public func isModelLoaded() -> Bool {
+        return context != nil
+    }
+
+    /// Reset conversation context
+    public func resetContext() async throws {
+        guard let ctx = context else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+
+        try await Task {
+            try FFIBridge.resetContext(ctx: ctx)
+        }.value
+    }
+
+    /// Cancel an ongoing generation
+    /// Cancels at both the C core level (ev_stream_cancel) and Swift concurrency level
+    public func cancelGeneration() async throws {
+        guard context != nil else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+        
+        // Cancel at C level first — ev_stream_cancel sets an atomic bool
+        // that ev_stream_next checks before each token, causing it to return early
+        if let stream = currentStream {
+            FFIBridge.cancelStream(stream)
+            currentStream = nil
+        }
+        
+        // Then cancel Swift concurrency tasks
+        currentGenerationTask?.cancel()
+        currentGenerationTask = nil
+        
+        currentStreamTask?.cancel()
+        currentStreamTask = nil
+    }
+
+    // MARK: - Embeddings API
+
+    /// Compute embeddings for the given text
+    /// Returns a normalized float vector representing the semantic meaning of the text
+    ///
+    /// - Parameter text: Input text to embed
+    /// - Returns: EmbeddingResult containing the embedding vector
+    /// - Throws: EdgeVedaError if embedding computation fails
+    /// - Example:
+    /// ```swift
+    /// let result = try await edgeVeda.embed("Hello, world!")
+    /// print("Embedding dimensions: \(result.dimensions)")
+    /// print("First few values: \(result.embeddings.prefix(5))")
+    /// ```
+    public func embed(_ text: String) async throws -> EmbeddingResult {
+        guard let ctx = context else {
+            throw EdgeVedaError.modelNotLoaded
+        }
+        
+        return try await Task {
+            let embeddings = try FFIBridge.embed(ctx: ctx, text: text)
+            return EmbeddingResult(embeddings: embeddings)
+        }.value
+    }
+
+    // MARK: - Vision Inference
+
+    /// Create and initialize a vision worker for image description
+    /// - Parameter config: Vision configuration including model and mmproj paths
+    /// - Returns: Initialized VisionWorker ready for frame processing
+    /// - Throws: EdgeVedaError if initialization fails
+    public static func createVisionWorker(config: VisionConfig) async throws -> VisionWorker {
+        let worker = VisionWorker()
+        try await worker.initialize(config: config)
+        return worker
+    }
+
+    /// One-shot vision inference - describe a single image
+    /// Creates a temporary worker, performs inference, and cleans up automatically
+    /// For repeated inferences, use createVisionWorker() to reuse the worker
+    ///
+    /// - Parameters:
+    ///   - config: Vision configuration including model and mmproj paths
+    ///   - rgb: RGB888 image data (width * height * 3 bytes)
+    ///   - width: Image width in pixels
+    ///   - height: Image height in pixels
+    ///   - prompt: The prompt for describing the image (default: "Describe what you see.")
+    ///   - params: Generation parameters (default: VisionGenerationParams with sensible defaults)
+    /// - Returns: VisionResult with description and timing information
+    /// - Throws: EdgeVedaError if inference fails
+    public static func describeImage(
+        config: VisionConfig,
+        rgb: Data,
+        width: Int,
+        height: Int,
+        prompt: String = "Describe what you see.",
+        params: VisionGenerationParams = VisionGenerationParams()
+    ) async throws -> VisionResult {
+        let worker = VisionWorker()
+        try await worker.initialize(config: config)
+        defer {
+            Task {
+                await worker.cleanup()
+            }
+        }
+        
+        return try await worker.describeFrame(
+            rgb: rgb,
+            width: width,
+            height: height,
+            prompt: prompt,
+            params: params
+        )
+    }
+
+    // MARK: - Whisper (Speech-to-Text)
+
+    /// Create and initialize a Whisper worker for speech-to-text transcription
+    /// - Parameter config: Whisper configuration including model path
+    /// - Returns: Initialized WhisperWorker ready for audio transcription
+    /// - Throws: EdgeVedaError if initialization fails
+    /// - Example:
+    /// ```swift
+    /// let config = WhisperConfig(modelPath: "/path/to/whisper-model.gguf")
+    /// let whisper = try await EdgeVeda.createWhisperWorker(config: config)
+    /// ```
+    public static func createWhisperWorker(config: WhisperConfig) async throws -> WhisperWorker {
+        let worker = WhisperWorker()
+        try await worker.initialize(config: config)
+        return worker
+    }
+
+    /// One-shot speech-to-text transcription - transcribe a single audio buffer
+    /// Creates a temporary worker, performs transcription, and cleans up automatically
+    /// For repeated transcriptions, use createWhisperWorker() to reuse the worker
+    ///
+    /// - Parameters:
+    ///   - config: Whisper configuration including model path
+    ///   - audioData: Audio samples as Float32 array (mono, typically 16kHz)
+    ///   - params: Transcription parameters (default: WhisperParams with sensible defaults)
+    /// - Returns: WhisperResult with transcribed text and timing information
+    /// - Throws: EdgeVedaError if transcription fails
+    /// - Example:
+    /// ```swift
+    /// let config = WhisperConfig(modelPath: "/path/to/whisper-model.gguf")
+    /// let result = try await EdgeVeda.transcribeAudio(
+    ///     config: config,
+    ///     audioData: audioSamples
+    /// )
+    /// print("Transcribed: \(result.text)")
+    /// ```
+    public static func transcribeAudio(
+        config: WhisperConfig,
+        audioData: [Float],
+        params: WhisperParams = .default
+    ) async throws -> WhisperResult {
+        let worker = WhisperWorker()
+        try await worker.initialize(config: config)
+        defer {
+            Task {
+                await worker.cleanup()
+            }
+        }
+        
+        return try await worker.transcribe(audioData: audioData, params: params)
+    }
+
+    // MARK: - Memory Management (iOS)
+    
+    #if canImport(UIKit)
+    /// Set up memory warning observer for iOS
+    private nonisolated func setupMemoryWarningObserver() {
+        let observer = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { [weak self] in
+                await self?.handleMemoryWarning()
+            }
+        }
+        
+        Task { [weak self] in
+            await self?.storeMemoryObserver(observer)
+        }
+    }
+    
+    /// Store the memory observer (must be called in actor context)
+    private func storeMemoryObserver(_ observer: Any) {
+        self.memoryWarningObserver = observer
+    }
+    
+    /// Handle memory warning
+    private func handleMemoryWarning() async {
+        // Call custom handler if set
+        if let handler = memoryWarningHandler {
+            await handler()
+        } else {
+            // Default behavior: unload model to free memory
+            await handleMemoryWarningDefault()
+        }
+    }
+    
+    /// Default memory warning handler: unload the model
+    private func handleMemoryWarningDefault() async {
+        guard context != nil else {
+            return
+        }
+        
+        // Cancel any ongoing generation
+        currentGenerationTask?.cancel()
+        currentGenerationTask = nil
+        currentStreamTask?.cancel()
+        currentStreamTask = nil
+        
+        // Unload model to free memory
+        await unloadModel()
+        autoUnloadedDueToMemory = true
+    }
+    #endif
+    
+    /// Set a custom memory warning handler
+    /// By default, EdgeVeda will unload the model when memory warnings occur.
+    /// Use this to customize the behavior (e.g., reduce cache size, free other resources)
+    ///
+    /// - Parameter handler: Custom handler to call on memory warnings
+    /// - Example:
+    /// ```swift
+    /// await edgeVeda.setMemoryWarningHandler {
+    ///     // Custom cleanup logic
+    ///     print("Memory warning received, performing custom cleanup")
+    /// }
+    /// ```
+    public func setMemoryWarningHandler(_ handler: MemoryWarningHandler?) {
+        self.memoryWarningHandler = handler
+    }
+    
+    /// Check if model was auto-unloaded due to memory pressure
+    /// - Returns: true if model was unloaded due to memory warning
+    public func wasAutoUnloaded() -> Bool {
+        return autoUnloadedDueToMemory
+    }
+
+    // MARK: - Static Methods
+
+    /// Get SDK version
+    /// - Returns: Version string
+    /// - Example:
+    /// ```swift
+    /// let version = EdgeVeda.getVersion()
+    /// print("EdgeVeda SDK version: \(version)") // "1.0.0"
+    /// ```
+    public static func getVersion() -> String {
+        return EdgeVedaVersion.version
+    }
+
+    // MARK: - Cleanup
+
+    nonisolated deinit {
+        // Capture context locally to avoid actor isolation issues
+        let ctx = context
+        if let ctx = ctx {
+            FFIBridge.freeContext(ctx)
+        }
+        
+        // Remove memory warning observer
+        #if canImport(UIKit)
+        if let observer = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        #endif
+    }
+}
