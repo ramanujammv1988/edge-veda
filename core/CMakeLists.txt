@@ -82,6 +82,7 @@ set(EDGE_VEDA_SOURCES
     src/vision_engine.cpp
     src/whisper_engine.cpp
     src/image_engine.cpp
+    src/vulkan_denylist.cpp
 )
 
 # Header files
