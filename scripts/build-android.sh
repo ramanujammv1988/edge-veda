@@ -20,6 +20,7 @@ OUTPUT_DIR="$BUILD_DIR/jniLibs"
 CLEAN=false
 BUILD_TYPE="Release"
 ABIS="arm64-v8a armeabi-v7a x86_64"
+VULKAN_ENABLED="ON"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
             BUILD_TYPE="Release"
             shift
             ;;
+        --no-vulkan)
+            VULKAN_ENABLED="OFF"
+            shift
+            ;;
         --abi)
             ABIS="$2"
             shift 2
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --clean    Remove previous build artifacts before building"
             echo "  --debug    Build with debug symbols (default: Release)"
             echo "  --release  Build optimized release binary (default)"
+            echo "  --no-vulkan Disable Vulkan GPU backend (default: enabled)"
             echo "  --abi      Space-separated list of ABIs (default: arm64-v8a armeabi-v7a x86_64)"
             echo "  -h, --help Show this help message"
             echo ""
@@ -65,6 +71,7 @@ done
 echo "=== Edge Veda Android Build ==="
 echo "Build type: $BUILD_TYPE"
 echo "Target ABIs: $ABIS"
+echo "Vulkan: $VULKAN_ENABLED"
 echo "Project root: $PROJECT_ROOT"
 
 # ============================================================================
@@ -156,7 +163,7 @@ for abi in $ABIS; do
         -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
         -DEDGE_VEDA_BUILD_SHARED=ON \
         -DEDGE_VEDA_BUILD_STATIC=OFF \
-        -DEDGE_VEDA_ENABLE_VULKAN=OFF \
+        -DEDGE_VEDA_ENABLE_VULKAN=$VULKAN_ENABLED \
         -DEDGE_VEDA_ENABLE_CPU=ON \
         -DGGML_OPENMP=OFF
 
