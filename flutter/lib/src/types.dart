@@ -41,6 +41,14 @@ class EdgeVedaConfig {
   /// Default is Q8_0 (8) for mobile memory optimization.
   final int kvCacheTypeV;
 
+  /// Enable Vulkan GPU acceleration on Android/Linux/Windows.
+  ///
+  /// When true (default) and Vulkan is available, inference runs on GPU
+  /// with automatic VRAM-based layer offload. When false or Vulkan is
+  /// unavailable, falls back to CPU transparently.
+  /// Has no effect on iOS/macOS (Metal is used instead via [useGpu]).
+  final bool useVulkan;
+
   const EdgeVedaConfig({
     required this.modelPath,
     this.numThreads = 4,
@@ -51,6 +59,7 @@ class EdgeVedaConfig {
     this.flashAttn = -1,
     this.kvCacheTypeK = 8,
     this.kvCacheTypeV = 8,
+    this.useVulkan = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -63,6 +72,7 @@ class EdgeVedaConfig {
     'flashAttn': flashAttn,
     'kvCacheTypeK': kvCacheTypeK,
     'kvCacheTypeV': kvCacheTypeV,
+    'useVulkan': useVulkan,
   };
 
   @override
