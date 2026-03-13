@@ -397,8 +397,8 @@ class ModelManager {
       }
       final response = await client.send(request);
 
-      var downloadedBytes = 0;
-      var lastReportedBytes = 0;
+      int downloadedBytes = 0;
+      int lastReportedBytes = 0;
 
       if (response.statusCode == 206 && resumeOffset > 0) {
         // Resume supported - append to existing temp file
