@@ -504,6 +504,18 @@ typedef struct {
  */
 EV_API ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info);
 
+/**
+ * @brief Get the chat template string from GGUF model metadata
+ *
+ * Returns the Jinja2 chat template stored in the model's
+ * tokenizer.chat_template metadata field. The returned pointer
+ * is valid until the context is freed.
+ *
+ * @param ctx Context handle
+ * @return Chat template string, or NULL if not found
+ */
+EV_API const char* ev_get_chat_template(ev_context ctx);
+
 /* ============================================================================
  * Utility Functions
  * ========================================================================= */
