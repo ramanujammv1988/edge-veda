@@ -104,6 +104,9 @@ class EdgeVeda {
   /// Optional Scheduler for budget-aware image generation
   Scheduler? _scheduler;
 
+  /// Cached Jinja2 chat template string from GGUF model metadata
+  String? _chatTemplate;
+
   // Note: NO Pointer storage here - pointers can't transfer between isolates
 
   /// Whether the SDK is initialized
@@ -120,6 +123,12 @@ class EdgeVeda {
 
   /// Current configuration
   EdgeVedaConfig? get config => _config;
+
+  /// The Jinja2 chat template string from GGUF model metadata, or null.
+  ///
+  /// Available after [init]. Returns the raw Jinja2 template that the
+  /// model was trained with. Used by [ChatSession] for auto-detection.
+  String? get chatTemplate => _chatTemplate;
 
   /// Connect a [Scheduler] for budget-aware image generation.
   ///
@@ -161,8 +170,10 @@ class EdgeVeda {
 
     // Test initialization in background isolate to verify model loads
     // Pass only primitive data - no Pointers!
+    // Returns the chat template string from GGUF metadata (or null).
+    String? chatTemplateResult;
     try {
-      await Isolate.run<void>(() {
+      chatTemplateResult = await Isolate.run<String?>(() {
         final bindings = EdgeVedaNativeBindings.instance; // Re-load in isolate
 
         // Allocate config struct
@@ -196,8 +207,17 @@ class EdgeVeda {
             throw exception ??
                 const InitializationException('Unknown init error');
           }
-          // Immediately free - we just tested it works
+
+          // Extract chat template from GGUF metadata before freeing
+          String? template;
+          try {
+            template = bindings.getChatTemplate(ctx);
+          } catch (_) {
+            // Non-fatal: template extraction is best-effort
+          }
+
           bindings.evFree(ctx);
+          return template;
         } finally {
           calloc.free(modelPathPtr);
           calloc.free(configPtr);
@@ -215,6 +235,7 @@ class EdgeVeda {
     }
 
     _config = config;
+    _chatTemplate = chatTemplateResult;
     _isInitialized = true;
   }
 

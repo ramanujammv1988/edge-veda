@@ -52,6 +52,10 @@ class ToolTemplate {
     String? systemPrompt,
   }) {
     switch (format) {
+      case ChatTemplateFormat.auto:
+        // When in auto mode, use Qwen3-style as default since it's most common
+        // (but this path is rarely hit -- Jinja2 handles tools natively)
+        return _formatQwen3ToolPrompt(tools, systemPrompt);
       case ChatTemplateFormat.qwen3:
         return _formatQwen3ToolPrompt(tools, systemPrompt);
       case ChatTemplateFormat.gemma3:
@@ -80,6 +84,9 @@ class ToolTemplate {
     required String output,
   }) {
     switch (format) {
+      case ChatTemplateFormat.auto:
+        // Try Qwen3 (most common) first, then Gemma3 as fallback
+        return _parseQwen3ToolCalls(output) ?? _parseGemma3ToolCalls(output);
       case ChatTemplateFormat.qwen3:
         return _parseQwen3ToolCalls(output);
       case ChatTemplateFormat.gemma3:
@@ -104,6 +111,11 @@ class ToolTemplate {
     required String output,
   }) {
     switch (format) {
+      case ChatTemplateFormat.auto:
+        // Check both formats
+        if (output.contains('<tool_call>')) return true;
+        final autoTrimmed = output.trimLeft();
+        return autoTrimmed.startsWith('{') && autoTrimmed.contains('"name"');
       case ChatTemplateFormat.qwen3:
         return output.contains('<tool_call>');
       case ChatTemplateFormat.gemma3:

@@ -1262,6 +1262,18 @@ ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info) {
 #endif
 }
 
+const char* ev_get_chat_template(ev_context ctx) {
+    if (!ctx || ctx->magic != EV_CTX_MAGIC) return nullptr;
+#ifdef EDGE_VEDA_LLAMA_ENABLED
+    if (!ctx->model_loaded || !ctx->model) return nullptr;
+    // llama_model_chat_template returns pointer to internal string,
+    // valid until model is freed. Returns nullptr if not found in metadata.
+    return llama_model_chat_template(ctx->model, nullptr);
+#else
+    return nullptr;
+#endif
+}
+
 /* ============================================================================
  * Utility Functions
  * ========================================================================= */
