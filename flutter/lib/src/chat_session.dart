@@ -545,11 +545,11 @@ class ChatSession {
                 jsonDecode(response.text.trim()) as Map<String, dynamic>;
             if (json.containsKey('name')) {
               final name = json['name'] as String;
-              final argsKey = json.containsKey('parameters')
-                  ? 'parameters'
-                  : 'arguments';
+              final argsKey =
+                  json.containsKey('parameters') ? 'parameters' : 'arguments';
               final arguments =
-                  (json[argsKey] ?? <String, dynamic>{}) as Map<String, dynamic>;
+                  (json[argsKey] ?? <String, dynamic>{})
+                      as Map<String, dynamic>;
               toolCalls = [ToolCall(name: name, arguments: arguments)];
             }
           } catch (_) {
@@ -599,9 +599,10 @@ class ChatSession {
         _messages.add(
           ChatMessage(
             role: ChatRole.toolResult,
-            content: toolResult.isError
-                ? jsonEncode({'error': toolResult.error})
-                : jsonEncode(toolResult.data),
+            content:
+                toolResult.isError
+                    ? jsonEncode({'error': toolResult.error})
+                    : jsonEncode(toolResult.data),
             timestamp: DateTime.now(),
           ),
         );
@@ -638,9 +639,10 @@ class ChatSession {
   /// - Gemma3 uses `'parameters'`
   /// - Qwen3 and others use `'arguments'`
   String _buildToolCallGrammar(List<Tool> tools) {
-    final argsFieldName = templateFormat == ChatTemplateFormat.gemma3
-        ? 'parameters'
-        : 'arguments';
+    final argsFieldName =
+        templateFormat == ChatTemplateFormat.gemma3
+            ? 'parameters'
+            : 'arguments';
 
     final Map<String, dynamic> schema;
     if (tools.length == 1) {
@@ -663,10 +665,7 @@ class ChatSession {
       schema = {
         'type': 'object',
         'properties': {
-          'name': {
-            'type': 'string',
-            'enum': tools.map((t) => t.name).toList(),
-          },
+          'name': {'type': 'string', 'enum': tools.map((t) => t.name).toList()},
           argsFieldName: {'type': 'object'},
         },
         'required': ['name', argsFieldName],

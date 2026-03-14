@@ -11,13 +11,16 @@ void main() {
     weatherTool = Tool(
       name: 'get_weather',
       description: 'Get current weather for a location',
-      parameters: Param.object({
-        'location': Param.string(description: 'City name'),
-        'unit': Param.string(
-          description: 'Temperature unit',
-          enumValues: ['celsius', 'fahrenheit'],
-        ),
-      }, required: ['location']),
+      parameters: Param.object(
+        {
+          'location': Param.string(description: 'City name'),
+          'unit': Param.string(
+            description: 'Temperature unit',
+            enumValues: ['celsius', 'fahrenheit'],
+          ),
+        },
+        required: ['location'],
+      ),
       handler: (args) async {
         final city = args['location'] as String;
         final unit = args['unit'] as String? ?? 'celsius';
@@ -87,7 +90,10 @@ void main() {
         parameters: Param.object({'x': Param.string()}),
         handler: (args) async => {},
       );
-      expect(() => badTool.toDefinition(), throwsA(isA<ConfigurationException>()));
+      expect(
+        () => badTool.toDefinition(),
+        throwsA(isA<ConfigurationException>()),
+      );
     });
 
     test('throws on empty description via ToolDefinition validation', () {
@@ -97,7 +103,10 @@ void main() {
         parameters: Param.object({'x': Param.string()}),
         handler: (args) async => {},
       );
-      expect(() => badTool.toDefinition(), throwsA(isA<ConfigurationException>()));
+      expect(
+        () => badTool.toDefinition(),
+        throwsA(isA<ConfigurationException>()),
+      );
     });
   });
 
@@ -168,14 +177,17 @@ void main() {
       final tool = Tool(
         name: 'complex_tool',
         description: 'Tool with complex params',
-        parameters: Param.object({
-          'query': Param.string(description: 'Search query'),
-          'limit': Param.integer(minimum: 1, maximum: 100),
-          'filters': Param.object({
-            'category': Param.string(enumValues: ['a', 'b', 'c']),
-            'active': Param.boolean(),
-          }),
-        }, required: ['query']),
+        parameters: Param.object(
+          {
+            'query': Param.string(description: 'Search query'),
+            'limit': Param.integer(minimum: 1, maximum: 100),
+            'filters': Param.object({
+              'category': Param.string(enumValues: ['a', 'b', 'c']),
+              'active': Param.boolean(),
+            }),
+          },
+          required: ['query'],
+        ),
         handler: (args) async => {'results': []},
       );
 

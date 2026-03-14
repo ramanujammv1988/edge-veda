@@ -72,11 +72,7 @@ class Param {
   /// [minimum] and [maximum] are included for documentation and
   /// post-generation validation. GBNF grammar cannot enforce numeric
   /// range constraints.
-  static ParamSchema number({
-    String? description,
-    num? minimum,
-    num? maximum,
-  }) {
+  static ParamSchema number({String? description, num? minimum, num? maximum}) {
     final schema = <String, dynamic>{'type': 'number'};
     if (description != null) schema['description'] = description;
     if (minimum != null) schema['minimum'] = minimum;

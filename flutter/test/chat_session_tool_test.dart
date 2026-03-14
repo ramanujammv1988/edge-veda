@@ -7,9 +7,10 @@ void main() {
   group('Export verification', () {
     test('Tool, Param, ParamSchema are importable from edge_veda.dart', () {
       // If this compiles and runs, the exports work.
-      final schema = Param.object({
-        'city': Param.string(description: 'City name'),
-      }, required: ['city']);
+      final schema = Param.object(
+        {'city': Param.string(description: 'City name')},
+        required: ['city'],
+      );
 
       final tool = Tool(
         name: 'test_tool',
@@ -28,10 +29,13 @@ void main() {
       final tool = Tool(
         name: 'get_weather',
         description: 'Get weather info',
-        parameters: Param.object({
-          'location': Param.string(description: 'City name'),
-          'unit': Param.string(enumValues: ['celsius', 'fahrenheit']),
-        }, required: ['location']),
+        parameters: Param.object(
+          {
+            'location': Param.string(description: 'City name'),
+            'unit': Param.string(enumValues: ['celsius', 'fahrenheit']),
+          },
+          required: ['location'],
+        ),
         handler: (args) async => {},
       );
 
@@ -59,17 +63,19 @@ void main() {
         Tool(
           name: 'get_weather',
           description: 'Get weather',
-          parameters: Param.object({
-            'location': Param.string(),
-          }, required: ['location']),
+          parameters: Param.object(
+            {'location': Param.string()},
+            required: ['location'],
+          ),
           handler: (args) async => {},
         ),
         Tool(
           name: 'search_web',
           description: 'Search the web',
-          parameters: Param.object({
-            'query': Param.string(),
-          }, required: ['query']),
+          parameters: Param.object(
+            {'query': Param.string()},
+            required: ['query'],
+          ),
           handler: (args) async => {},
         ),
       ];
@@ -77,10 +83,7 @@ void main() {
       final schema = {
         'type': 'object',
         'properties': {
-          'name': {
-            'type': 'string',
-            'enum': tools.map((t) => t.name).toList(),
-          },
+          'name': {'type': 'string', 'enum': tools.map((t) => t.name).toList()},
           'arguments': {'type': 'object'},
         },
         'required': ['name', 'arguments'],
@@ -96,15 +99,18 @@ void main() {
       final tool = Tool(
         name: 'complex_tool',
         description: 'Complex tool',
-        parameters: Param.object({
-          'query': Param.string(description: 'Search query'),
-          'limit': Param.integer(minimum: 1, maximum: 100),
-          'filters': Param.object({
-            'category': Param.string(enumValues: ['a', 'b', 'c']),
-            'active': Param.boolean(),
-          }),
-          'tags': Param.array(items: Param.string()),
-        }, required: ['query']),
+        parameters: Param.object(
+          {
+            'query': Param.string(description: 'Search query'),
+            'limit': Param.integer(minimum: 1, maximum: 100),
+            'filters': Param.object({
+              'category': Param.string(enumValues: ['a', 'b', 'c']),
+              'active': Param.boolean(),
+            }),
+            'tags': Param.array(items: Param.string()),
+          },
+          required: ['query'],
+        ),
         handler: (args) async => {},
       );
 
@@ -134,9 +140,7 @@ void main() {
       final tool = Tool(
         name: 'my_tool',
         description: 'A tool',
-        parameters: Param.object({
-          'x': Param.string(),
-        }),
+        parameters: Param.object({'x': Param.string()}),
         handler: (args) async => {},
       );
 
@@ -162,9 +166,7 @@ void main() {
       final tool = Tool(
         name: 'my_tool',
         description: 'A tool',
-        parameters: Param.object({
-          'x': Param.string(),
-        }),
+        parameters: Param.object({'x': Param.string()}),
         handler: (args) async => {},
       );
 
@@ -225,9 +227,10 @@ void main() {
       final tool = Tool(
         name: 'get_weather',
         description: 'Get current weather',
-        parameters: Param.object({
-          'location': Param.string(description: 'City name'),
-        }, required: ['location']),
+        parameters: Param.object(
+          {'location': Param.string(description: 'City name')},
+          required: ['location'],
+        ),
         handler: (args) async => {},
       );
 
@@ -248,9 +251,10 @@ void main() {
       final tool = Tool(
         name: 'search',
         description: 'Search the web',
-        parameters: Param.object({
-          'query': Param.string(),
-        }, required: ['query']),
+        parameters: Param.object(
+          {'query': Param.string()},
+          required: ['query'],
+        ),
         handler: (args) async => {},
       );
 
@@ -280,8 +284,7 @@ void main() {
     });
 
     test('parseToolCalls extracts Gemma3-style tool call', () {
-      final output =
-          '{"name": "search", "parameters": {"query": "flutter"}}';
+      final output = '{"name": "search", "parameters": {"query": "flutter"}}';
       final calls = ToolTemplate.parseToolCalls(
         format: ChatTemplateFormat.gemma3,
         output: output,

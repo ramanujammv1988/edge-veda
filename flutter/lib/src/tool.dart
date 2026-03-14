@@ -48,7 +48,7 @@ class Tool {
 
   /// Async handler that receives parsed arguments and returns result data.
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> args)
-      handler;
+  handler;
 
   /// Priority for budget-aware degradation (default: [ToolPriority.required]).
   final ToolPriority priority;
@@ -70,11 +70,11 @@ class Tool {
   /// Validation fires here (name pattern, non-empty description,
   /// parameters must have 'type': 'object').
   ToolDefinition toDefinition() => ToolDefinition(
-        name: name,
-        description: description,
-        parameters: parameters.toJsonSchema(),
-        priority: priority,
-      );
+    name: name,
+    description: description,
+    parameters: parameters.toJsonSchema(),
+    priority: priority,
+  );
 
   /// Execute this tool with the given [call] arguments.
   ///

@@ -15,18 +15,18 @@ void main() {
     });
 
     test('includes enum when enumValues provided', () {
-      final schema = Param.string(
-        enumValues: ['celsius', 'fahrenheit'],
-      ).toJsonSchema();
+      final schema =
+          Param.string(enumValues: ['celsius', 'fahrenheit']).toJsonSchema();
       expect(schema['type'], 'string');
       expect(schema['enum'], ['celsius', 'fahrenheit']);
     });
 
     test('includes both description and enum', () {
-      final schema = Param.string(
-        description: 'Temperature unit',
-        enumValues: ['celsius', 'fahrenheit'],
-      ).toJsonSchema();
+      final schema =
+          Param.string(
+            description: 'Temperature unit',
+            enumValues: ['celsius', 'fahrenheit'],
+          ).toJsonSchema();
       expect(schema['type'], 'string');
       expect(schema['description'], 'Temperature unit');
       expect(schema['enum'], ['celsius', 'fahrenheit']);
@@ -40,11 +40,12 @@ void main() {
     });
 
     test('includes minimum and maximum when provided', () {
-      final schema = Param.integer(
-        description: 'Age',
-        minimum: 0,
-        maximum: 150,
-      ).toJsonSchema();
+      final schema =
+          Param.integer(
+            description: 'Age',
+            minimum: 0,
+            maximum: 150,
+          ).toJsonSchema();
       expect(schema['type'], 'integer');
       expect(schema['description'], 'Age');
       expect(schema['minimum'], 0);
@@ -65,11 +66,12 @@ void main() {
     });
 
     test('includes minimum and maximum when provided', () {
-      final schema = Param.number(
-        description: 'Temperature',
-        minimum: -273.15,
-        maximum: 1000,
-      ).toJsonSchema();
+      final schema =
+          Param.number(
+            description: 'Temperature',
+            minimum: -273.15,
+            maximum: 1000,
+          ).toJsonSchema();
       expect(schema['type'], 'number');
       expect(schema['description'], 'Temperature');
       expect(schema['minimum'], -273.15);
@@ -84,9 +86,10 @@ void main() {
     });
 
     test('includes description when provided', () {
-      final schema = Param.boolean(
-        description: 'Whether to include details',
-      ).toJsonSchema();
+      final schema =
+          Param.boolean(
+            description: 'Whether to include details',
+          ).toJsonSchema();
       expect(schema['type'], 'boolean');
       expect(schema['description'], 'Whether to include details');
     });
@@ -94,20 +97,19 @@ void main() {
 
   group('Param.array', () {
     test('produces array schema with items', () {
-      final schema = Param.array(
-        items: Param.string(),
-      ).toJsonSchema();
+      final schema = Param.array(items: Param.string()).toJsonSchema();
       expect(schema['type'], 'array');
       expect(schema['items'], {'type': 'string'});
     });
 
     test('includes minItems and maxItems when provided', () {
-      final schema = Param.array(
-        items: Param.integer(),
-        description: 'List of scores',
-        minItems: 1,
-        maxItems: 10,
-      ).toJsonSchema();
+      final schema =
+          Param.array(
+            items: Param.integer(),
+            description: 'List of scores',
+            minItems: 1,
+            maxItems: 10,
+          ).toJsonSchema();
       expect(schema['type'], 'array');
       expect(schema['items'], {'type': 'integer'});
       expect(schema['description'], 'List of scores');
@@ -124,10 +126,11 @@ void main() {
 
   group('Param.object', () {
     test('produces object schema with properties', () {
-      final schema = Param.object({
-        'name': Param.string(description: 'User name'),
-        'age': Param.integer(),
-      }).toJsonSchema();
+      final schema =
+          Param.object({
+            'name': Param.string(description: 'User name'),
+            'age': Param.integer(),
+          }).toJsonSchema();
 
       expect(schema['type'], 'object');
       final props = schema['properties'] as Map<String, dynamic>;
@@ -136,46 +139,52 @@ void main() {
     });
 
     test('includes required list when provided', () {
-      final schema = Param.object({
-        'name': Param.string(),
-        'age': Param.integer(),
-      }, required: ['name']).toJsonSchema();
+      final schema =
+          Param.object(
+            {'name': Param.string(), 'age': Param.integer()},
+            required: ['name'],
+          ).toJsonSchema();
 
       expect(schema['required'], ['name']);
     });
 
     test('omits required when null', () {
-      final schema = Param.object({
-        'name': Param.string(),
-      }).toJsonSchema();
+      final schema = Param.object({'name': Param.string()}).toJsonSchema();
       expect(schema.containsKey('required'), false);
     });
 
     test('omits required when empty list', () {
-      final schema = Param.object({
-        'name': Param.string(),
-      }, required: []).toJsonSchema();
+      final schema =
+          Param.object({'name': Param.string()}, required: []).toJsonSchema();
       expect(schema.containsKey('required'), false);
     });
 
     test('includes description when provided', () {
-      final schema = Param.object({
-        'x': Param.number(),
-      }, description: 'Coordinate object').toJsonSchema();
+      final schema =
+          Param.object({
+            'x': Param.number(),
+          }, description: 'Coordinate object').toJsonSchema();
       expect(schema['description'], 'Coordinate object');
     });
   });
 
   group('Nested schemas', () {
     test('nested object inside object produces correct deep schema', () {
-      final schema = Param.object({
-        'address': Param.object({
-          'street': Param.string(description: 'Street address'),
-          'city': Param.string(description: 'City name'),
-          'zip': Param.string(),
-        }, required: ['street', 'city']),
-        'name': Param.string(),
-      }, required: ['name', 'address']).toJsonSchema();
+      final schema =
+          Param.object(
+            {
+              'address': Param.object(
+                {
+                  'street': Param.string(description: 'Street address'),
+                  'city': Param.string(description: 'City name'),
+                  'zip': Param.string(),
+                },
+                required: ['street', 'city'],
+              ),
+              'name': Param.string(),
+            },
+            required: ['name', 'address'],
+          ).toJsonSchema();
 
       expect(schema['type'], 'object');
       expect(schema['required'], ['name', 'address']);
@@ -198,12 +207,13 @@ void main() {
     });
 
     test('array of objects produces correct nested schema', () {
-      final schema = Param.array(
-        items: Param.object({
-          'id': Param.integer(),
-          'label': Param.string(),
-        }, required: ['id']),
-      ).toJsonSchema();
+      final schema =
+          Param.array(
+            items: Param.object(
+              {'id': Param.integer(), 'label': Param.string()},
+              required: ['id'],
+            ),
+          ).toJsonSchema();
 
       expect(schema['type'], 'array');
       final items = schema['items'] as Map<String, dynamic>;
@@ -236,10 +246,7 @@ void main() {
 
     test('toJsonSchema returns unmodifiable map', () {
       final schema = Param.string().toJsonSchema();
-      expect(
-        () => schema['extra'] = 'value',
-        throwsA(isA<UnsupportedError>()),
-      );
+      expect(() => schema['extra'] = 'value', throwsA(isA<UnsupportedError>()));
     });
   });
 }
