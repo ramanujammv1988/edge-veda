@@ -99,6 +99,7 @@ class StreamingWorker {
     required int numThreads,
     required int contextSize,
     required bool useGpu,
+    bool useVulkan = true,
     int memoryLimitBytes = 0,
     int flashAttn = -1,
     int kvCacheTypeK = 8,
@@ -122,6 +123,7 @@ class StreamingWorker {
         numThreads: numThreads,
         contextSize: contextSize,
         useGpu: useGpu,
+        useVulkan: useVulkan,
         memoryLimitBytes: memoryLimitBytes,
         flashAttn: flashAttn,
         kvCacheTypeK: kvCacheTypeK,
@@ -418,13 +420,13 @@ void _handleInit(
   try {
     configPtr.ref.modelPath = modelPathPtr;
     configPtr.ref.backend =
-        cmd.useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+        (cmd.useGpu && cmd.useVulkan) ? EvBackend.auto_.value : EvBackend.cpu.value;
     configPtr.ref.numThreads = cmd.numThreads;
     configPtr.ref.contextSize = cmd.contextSize;
     configPtr.ref.batchSize = 512;
     configPtr.ref.memoryLimitBytes = cmd.memoryLimitBytes;
     configPtr.ref.autoUnloadOnMemoryPressure = true;
-    configPtr.ref.gpuLayers = cmd.useGpu ? -1 : 0;
+    configPtr.ref.gpuLayers = (cmd.useGpu && cmd.useVulkan) ? -1 : 0;
     configPtr.ref.useMmap = true;
     configPtr.ref.useMlock = false;
     configPtr.ref.seed = -1;
