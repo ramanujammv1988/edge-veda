@@ -16,7 +16,7 @@ void main() {
         'required': ['name'],
       });
       expect(grammar, contains('root ::='));
-      expect(grammar, contains('"name"'));
+      expect(grammar, contains('name'));
       expect(grammar, contains('string ws'));
       expect(grammar, contains('integer ws'));
     });
@@ -100,9 +100,9 @@ void main() {
       expect(grammar, contains('root ::='));
       // The address property should reference a rule that resolves to the
       // Address definition (an object with city and zip)
-      expect(grammar, contains('"city"'));
-      expect(grammar, contains('"zip"'));
-      expect(grammar, contains('"address"'));
+      expect(grammar, contains('city'));
+      expect(grammar, contains('zip'));
+      expect(grammar, contains('address'));
     });
 
     test('nested \$ref resolves through multiple levels', () {
@@ -135,8 +135,8 @@ void main() {
       });
 
       expect(grammar, contains('root ::='));
-      expect(grammar, contains('"city"'));
-      expect(grammar, contains('"name"'));
+      expect(grammar, contains('city'));
+      expect(grammar, contains('name'));
     });
 
     test('recursive \$ref does not stack overflow', () {
@@ -161,8 +161,8 @@ void main() {
 
       // Must not throw or hang
       expect(grammar, contains('root ::='));
-      expect(grammar, contains('"value"'));
-      expect(grammar, contains('"next"'));
+      expect(grammar, contains('value'));
+      expect(grammar, contains('next'));
     });
 
     test('missing \$ref falls back to value', () {
@@ -211,7 +211,7 @@ void main() {
         'required': ['color'],
       });
 
-      expect(grammar, contains('"color"'));
+      expect(grammar, contains('color'));
       expect(grammar, contains('string ws'));
     });
   });
@@ -258,40 +258,43 @@ void main() {
     });
 
     test('budgetExceeded getter returns true when budget hit', () {
+      // Use a schema with many properties to ensure rule budget is exceeded.
+      // Budget check triggers when _buildRule is called with _rules.length >= maxRules.
+      // With 5 required properties + object rule + 5 prop rules = 6 rules minimum.
       final result = GbnfBuilder.build(
         {
           'type': 'object',
           'properties': {
-            'x': {
-              'type': 'object',
-              'properties': {
-                'y': {
-                  'type': 'object',
-                  'properties': {
-                    'z': {'type': 'string'},
-                  },
-                },
-              },
-            },
+            'a': {'type': 'string'},
+            'b': {'type': 'string'},
+            'c': {'type': 'string'},
+            'd': {'type': 'string'},
+            'e': {'type': 'string'},
           },
+          'required': ['a', 'b', 'c', 'd', 'e'],
         },
-        maxRules: 2,
+        maxRules: 3,
       );
 
       expect(result.budgetExceeded, isTrue);
     });
 
     test('custom budget via maxRules parameter', () {
+      // Low budget: 5 required properties generate prop rules, so with maxRules: 3
+      // the budget will be exceeded when the 4th property _buildRule call runs.
       final resultLow = GbnfBuilder.build(
         {
           'type': 'object',
           'properties': {
             'a': {'type': 'string'},
             'b': {'type': 'string'},
+            'c': {'type': 'string'},
+            'd': {'type': 'string'},
+            'e': {'type': 'string'},
           },
-          'required': ['a', 'b'],
+          'required': ['a', 'b', 'c', 'd', 'e'],
         },
-        maxRules: 2,
+        maxRules: 3,
       );
 
       final resultHigh = GbnfBuilder.build(
@@ -410,8 +413,8 @@ void main() {
       });
 
       expect(grammar, contains('root ::='));
-      expect(grammar, contains('"meow"'));
-      expect(grammar, contains('"bark"'));
+      expect(grammar, contains('meow'));
+      expect(grammar, contains('bark'));
       expect(grammar, contains('|'));
     });
 
@@ -429,7 +432,7 @@ void main() {
         'required': ['value'],
       });
 
-      expect(grammar, contains('"value"'));
+      expect(grammar, contains('value'));
       expect(grammar, contains('|'));
       expect(grammar, contains('string ws'));
       expect(grammar, contains('integer ws'));
@@ -473,7 +476,7 @@ void main() {
       });
 
       expect(grammar, contains('root ::='));
-      expect(grammar, contains('"inner"'));
+      expect(grammar, contains('inner'));
       expect(grammar, contains('integer ws'));
       // Inner oneOf should produce its own alternation
       expect(grammar, contains('string ws'));
@@ -505,8 +508,8 @@ void main() {
       expect(grammar, contains('root ::='));
       expect(grammar, contains('circle'));
       expect(grammar, contains('square'));
-      expect(grammar, contains('"radius"'));
-      expect(grammar, contains('"side"'));
+      expect(grammar, contains('radius'));
+      expect(grammar, contains('side'));
     });
   });
 

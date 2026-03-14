@@ -5,7 +5,8 @@
 /// structurally valid JSON output.
 ///
 /// Supports: object, string, number, integer, boolean, null, array, enum,
-/// \$ref resolution, and grammar rule budget enforcement.
+/// \$ref resolution, oneOf/anyOf composition, additionalProperties guard,
+/// and grammar rule budget enforcement.
 library;
 
 /// Result of grammar generation, including budget status.
@@ -166,6 +167,14 @@ ws ::= | " " | "\n" [ \t]{0,20}
       return _resolveRef(schema[r'$ref'] as String);
     }
 
+    // Handle oneOf/anyOf composition (after $ref, before enum/type)
+    if (schema.containsKey('oneOf')) {
+      return _buildOneOfAnyOf(schema['oneOf'] as List);
+    }
+    if (schema.containsKey('anyOf')) {
+      return _buildOneOfAnyOf(schema['anyOf'] as List);
+    }
+
     // Handle enum (can appear with or without type)
     if (schema.containsKey('enum')) {
       return _buildEnum(schema['enum'] as List);
@@ -173,6 +182,14 @@ ws ::= | " " | "\n" [ \t]{0,20}
 
     final type = schema['type'];
     if (type == null) {
+      // Type-less schema with properties -> treat as object
+      if (schema.containsKey('properties')) {
+        return _buildObject(schema);
+      }
+      // allOf: log warning and fall back to value (not in scope)
+      if (schema.containsKey('allOf')) {
+        return 'value';
+      }
       // No type specified -- accept any value
       return 'value';
     }
@@ -246,6 +263,30 @@ ws ::= | " " | "\n" [ \t]{0,20}
     return ruleName;
   }
 
+  /// Build an alternation rule for oneOf/anyOf composition.
+  ///
+  /// Each alternative schema is built via [_buildRule] and the results are
+  /// joined with `|` as a GBNF alternation. Empty lists fall back to `value`,
+  /// single alternatives return the single rule reference directly.
+  String _buildOneOfAnyOf(List alternatives) {
+    if (alternatives.isEmpty) {
+      return 'value';
+    }
+
+    if (alternatives.length == 1) {
+      return _buildRule(alternatives[0] as Map<String, dynamic>);
+    }
+
+    final refs = <String>[];
+    for (final alt in alternatives) {
+      refs.add(_buildRule(alt as Map<String, dynamic>));
+    }
+
+    final name = _uniqueName('alt');
+    _rules[name] = '(${refs.join(' | ')})';
+    return name;
+  }
+
   /// Navigate a JSON pointer (e.g., "#/definitions/Address") within the
   /// root schema and return the target sub-schema, or null if not found.
   Map<String, dynamic>? _navigatePointer(String pointer) {
@@ -270,7 +311,10 @@ ws ::= | " " | "\n" [ \t]{0,20}
 
   /// Build an object rule from properties and required list.
   String _buildObject(Map<String, dynamic> schema) {
-    final properties = schema['properties'] as Map<String, dynamic>? ?? {};
+    final rawProps = schema['properties'];
+    final properties = rawProps is Map
+        ? Map<String, dynamic>.from(rawProps)
+        : <String, dynamic>{};
     final requiredList = (schema['required'] as List?)?.cast<String>() ?? [];
 
     if (properties.isEmpty) {
