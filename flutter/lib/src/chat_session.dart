@@ -40,6 +40,7 @@ import 'dart:convert';
 import 'chat_template.dart';
 import 'chat_types.dart';
 import 'edge_veda_impl.dart';
+import 'jinja_chat_template.dart';
 import 'gbnf_builder.dart';
 import 'json_recovery.dart';
 import 'schema_validator.dart';
@@ -118,6 +119,10 @@ class ChatSession {
   final List<ChatMessage> _messages = [];
   bool _isSummarizing = false;
 
+  /// Compiled Jinja2 template from GGUF metadata, or null if not available
+  /// or if an explicit templateFormat was set.
+  JinjaChatTemplate? _jinjaTemplate;
+
   /// Optional tool registry for function calling support.
   final ToolRegistry? _tools;
 
@@ -136,8 +141,10 @@ class ChatSession {
   /// [systemPrompt] sets a custom system prompt. If null and [preset]
   /// is provided, the preset's prompt text is used instead.
   ///
-  /// [templateFormat] defaults to [ChatTemplateFormat.llama3Instruct]
-  /// for Llama 3.x models. Change this if using a different model family.
+  /// [templateFormat] defaults to [ChatTemplateFormat.auto] which
+  /// auto-detects the Jinja2 template from GGUF model metadata. Change
+  /// this to an explicit value if using a model without GGUF metadata
+  /// or to override auto-detection.
   ///
   /// [maxResponseTokens] reserves space in the context window for the
   /// model's response (defaults to 512 tokens).
@@ -152,7 +159,7 @@ class ChatSession {
     required EdgeVeda edgeVeda,
     String? systemPrompt,
     SystemPromptPreset? preset,
-    this.templateFormat = ChatTemplateFormat.llama3Instruct,
+    this.templateFormat = ChatTemplateFormat.auto,
     int maxResponseTokens = 512,
     ToolRegistry? tools,
     this.onValidationEvent,
@@ -165,6 +172,21 @@ class ChatSession {
       throw const ConfigurationException(
         'EdgeVeda must be initialized before creating a ChatSession. Call init() first.',
       );
+    }
+
+    // Auto-detect Jinja2 template from model metadata
+    if (templateFormat == ChatTemplateFormat.auto) {
+      final templateStr = edgeVeda.chatTemplate;
+      if (templateStr != null && templateStr.isNotEmpty) {
+        try {
+          _jinjaTemplate = JinjaChatTemplate(templateStr);
+        } catch (e) {
+          // Jinja2 compilation failed -- will fall back to hardcoded
+          print(
+            'ChatSession: Jinja2 template compilation failed, using fallback: $e',
+          );
+        }
+      }
     }
   }
 
@@ -631,9 +653,26 @@ class ChatSession {
   }
 
   /// Format the current conversation into a prompt string
+  ///
+  /// Uses the Jinja2 template when available (auto mode with valid template),
+  /// falling back to hardcoded templates on failure or explicit format.
   String _formatConversation() {
+    if (_jinjaTemplate != null) {
+      try {
+        return _jinjaTemplate!.format(
+          messages: _messages,
+          systemPrompt: systemPrompt,
+          addGenerationPrompt: true,
+        );
+      } catch (e) {
+        // Jinja2 evaluation failed -- fall through to hardcoded
+        print('ChatSession: Jinja2 evaluation failed, using fallback: $e');
+      }
+    }
     return ChatTemplate.format(
-      template: templateFormat,
+      template: templateFormat == ChatTemplateFormat.auto
+          ? ChatTemplateFormat.llama3Instruct
+          : templateFormat,
       systemPrompt: systemPrompt,
       messages: _messages,
     );
@@ -641,23 +680,47 @@ class ChatSession {
 
   /// Format conversation with tool definitions injected into the system prompt.
   ///
-  /// If tools are registered, combines the system prompt with tool definitions
-  /// via [ToolTemplate.formatToolSystemPrompt]. Falls back to normal formatting
-  /// if no tools are registered.
+  /// If tools are registered, combines the system prompt with tool definitions.
+  /// When Jinja2 template is available, passes tools as template variables
+  /// for model-native formatting. Falls back to hardcoded tool formatting
+  /// if Jinja2 fails or is not available.
   String _formatConversationWithTools() {
     final tools = _tools;
     if (tools == null || tools.tools.isEmpty) {
       return _formatConversation();
     }
 
+    // Jinja2 path: pass tools as template variables for model-native formatting
+    if (_jinjaTemplate != null) {
+      try {
+        final toolDefs = tools.tools.map((t) => t.toFunctionJson()).toList();
+        return _jinjaTemplate!.format(
+          messages: _messages,
+          systemPrompt: systemPrompt,
+          addGenerationPrompt: true,
+          tools: toolDefs,
+        );
+      } catch (e) {
+        // Fall through to hardcoded tool formatting
+        print(
+          'ChatSession: Jinja2 tool formatting failed, using fallback: $e',
+        );
+      }
+    }
+
+    // Hardcoded path: use ToolTemplate to inject tools into system prompt
     final toolSystemPrompt = ToolTemplate.formatToolSystemPrompt(
-      format: templateFormat,
+      format: templateFormat == ChatTemplateFormat.auto
+          ? ChatTemplateFormat.llama3Instruct
+          : templateFormat,
       tools: tools.tools,
       systemPrompt: systemPrompt,
     );
 
     return ChatTemplate.format(
-      template: templateFormat,
+      template: templateFormat == ChatTemplateFormat.auto
+          ? ChatTemplateFormat.llama3Instruct
+          : templateFormat,
       systemPrompt: toolSystemPrompt,
       messages: _messages,
     );
