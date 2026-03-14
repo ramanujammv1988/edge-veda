@@ -1,225 +1,46 @@
-# Edge-Veda
+<p align="center">
+  <img src="docs/images/app_demo.gif" width="280" alt="On-device Document Q&A demo">
+</p>
 
-**A managed on-device AI runtime for Flutter — text, vision, speech-to-text, text-to-speech, image generation, and RAG running sustainably on real phones under real constraints. Private by default.**
-
-> **iOS only** (iPhone, Metal GPU). Android support is [on the roadmap](https://github.com/ramanujammv1988/edge-veda/issues/23).
-
-`~22,700 LOC | 40 C API functions | 32 Dart SDK files | 0 cloud dependencies`
-
-[![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
-[![Platform](https://img.shields.io/badge/platform-iOS-lightgrey)](https://github.com/ramanujammv1988/edge-veda)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/rv8qZMGC)
-
----
+<h1 align="center">Edge-Veda</h1>
 
 <p align="center">
-  <img src="docs/images/app_demo.gif" width="300" alt="On-device Document Q&A demo">
+  <strong>On-device AI runtime for Flutter — text, vision, speech, image generation, and RAG.<br>Private by default. Zero cloud dependencies.</strong>
 </p>
+
+<p align="center">
+  <a href="https://pub.dev/packages/edge_veda"><img src="https://img.shields.io/pub/v/edge_veda.svg" alt="pub package"></a>
+  <a href="https://github.com/ramanujammv1988/edge-veda"><img src="https://img.shields.io/badge/platform-iOS-lightgrey" alt="Platform"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+  <a href="https://discord.gg/zztPPRcnFC"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://www.npmjs.com/package/@edge-veda/mcp-server"><img src="https://img.shields.io/npm/v/@edge-veda/mcp-server" alt="npm"></a>
+</p>
+
 <p align="center"><em>Asking questions about a medical report — RAG retrieval + LLM generation, entirely on-device (<a href="docs/images/app_demo.mp4">full video</a>)</em></p>
 
 ---
 
-## Get Started in 3 Lines
+## Table of Contents
 
-```dart
-final edgeVeda = EdgeVeda();
-await edgeVeda.init(EdgeVedaConfig(modelPath: modelPath));
-final response = await edgeVeda.generate('Explain quantum computing');
-```
-
-> Start with **Llama 3.2 1B** for chat, **Qwen3 0.6B** for tool calling, **SmolVLM2** for vision.
-
----
-
-## Time to First App
-
-Typical observed times from prompt to a running on-device AI app.
-
-| You are a... | Starting point | With MCP plugin | Manual setup |
-|-------------|---------------|-----------------|-------------|
-| **Flutter developer** | Xcode + Flutter installed | **~2 min** | ~15 min |
-| **Developer (any stack)** | Mac + Claude Code, no Flutter | **~30 min** | ~1 hour |
-| **Complete beginner** | Mac, no dev tools | **~1–3 hours** | ~1 day |
-
-> **What's the MCP plugin?** A [Claude Code plugin](tools/mcp-server/) that automates environment checks, project scaffolding, model selection, and device deployment. One command to install:
-> ```bash
-> claude mcp add edge-veda -- npx @edge-veda/mcp-server
-> ```
-
-The bottleneck for beginners is Apple's toolchain (Xcode is a 10 GB download, Developer Mode requires a device restart, code signing needs a free Apple ID). Once the dev environment exists, Edge Veda setup is minutes, not hours.
-
-New to iOS development? See the [Quickstart Guide](flutter/QUICKSTART.md) for step-by-step setup.
+- [Get Started](#get-started)
+- [What Can It Do?](#what-can-it-do)
+- [Why Edge-Veda?](#why-edge-veda)
+- [Code Examples](#code-examples)
+- [Supported Models](#supported-models)
+- [Example Apps](#example-apps)
+- [Learning Path](#learning-path)
+- [Architecture](#architecture)
+- [Performance](#performance)
+- [Runtime Supervision](#runtime-supervision)
+- [Building from Source](#building-from-source)
+- [Contributing](#contributing)
+- [Support](#support)
 
 ---
 
-## Why Edge-Veda Exists
+## Get Started
 
-Modern on-device AI demos break instantly in real usage:
-
-- Thermal throttling collapses throughput
-- Memory spikes cause silent crashes
-- Sessions longer than ~60 seconds become unstable
-- Developers have no visibility into runtime behavior
-- Debugging failures is nearly impossible
-
-Edge-Veda exists to make on-device AI **predictable, observable, and sustainable** — not just runnable.
-
-![Session Stability: Unmanaged vs Managed Runtime](docs/images/session_stability.png)
-*Left: without runtime management, latency spikes and the app is killed by iOS within 2 minutes. Right: with Edge Veda, latency stays flat for 28+ minutes with thermal spikes auto-recovered. Same Y-axis scale.*
-
----
-
-## What Edge-Veda Is
-
-Edge-Veda is a **supervised on-device AI runtime** that:
-
-- Runs **text, vision, and speech models fully on device**
-- Keeps models **alive across long sessions**
-- Adapts automatically to **thermal, memory, and battery pressure**
-- Applies **runtime policies** instead of crashing
-- Provides **structured observability** for debugging and analysis
-- Supports **structured output, function calling, embeddings, and RAG**
-- Is **private by default** (no network calls during inference)
-
----
-
-## What Makes Edge-Veda Different
-
-Edge-Veda is designed for **behavior over time**, not benchmark bursts.
-
-- A long-lived runtime with persistent workers
-- A system that supervises AI under physical device limits
-- A runtime that degrades gracefully instead of failing
-- An observable, debuggable on-device AI layer
-- A complete on-device AI stack: inference, speech, tools, and retrieval
-
----
-
-## Current Capabilities
-
-### Core Inference
-- Persistent **text and vision inference workers** (models load once, stay in memory)
-- **Streaming token generation** with pull-based architecture
-- Multi-turn **chat session management** with auto-summarization at context overflow
-- Chat templates: Llama 3 Instruct, ChatML, Qwen3/Hermes, generic
-
-### Speech-to-Text
-- **On-device speech recognition** via whisper.cpp (Metal GPU accelerated)
-- Real-time streaming transcription in 3-second chunks
-- 48kHz native audio capture with automatic downsampling to 16kHz
-- WhisperWorker isolate for non-blocking transcription
-- ~670ms per chunk on iPhone with Metal GPU (whisper-tiny.en, 77MB)
-
-### Text-to-Speech
-- **On-device TTS** via iOS AVSpeechSynthesizer — zero additional binary size
-- Neural/enhanced voice selection with language filtering
-- Speak, stop, pause, resume with rate/pitch/volume control
-- Real-time **word boundary events** for text highlighting during speech
-- Completes the voice pipeline: **STT → LLM → TTS**
-
-### Structured Output & Function Calling
-- **GBNF grammar-constrained generation** for structured JSON output
-- **Tool/function calling** with ToolDefinition, ToolRegistry, and schema validation
-- Multi-round tool chains with configurable max rounds
-- `sendWithTools()` for automatic tool call/result cycling
-- `sendStructured()` for grammar-constrained generation with strict/standard validation modes
-- **JSON recovery** — auto-repairs truncated/malformed model output (unclosed brackets, trailing garbage)
-- **Validation telemetry** — `onValidationEvent` callback for enterprise observability
-
-### Embeddings & RAG
-- **Text embeddings** via ev_embed() with L2 normalization
-- **Per-token confidence scoring** from softmax entropy
-- **Cloud handoff signal** when average confidence drops below threshold
-- **VectorIndex** — pure Dart HNSW with cosine similarity and JSON persistence
-- **RagPipeline** — end-to-end embed, search, inject, generate
-
-### Image Generation
-- **On-device text-to-image** via stable-diffusion.cpp (Metal GPU accelerated)
-- Persistent `ImageWorker` isolate — model loads once, generates multiple images
-- **Scheduler-integrated** — respects thermal/battery QoS policies, auto-evicts under memory pressure
-- Progress callbacks with per-step updates during diffusion
-- **60-second idle auto-disposal** — frees ~2.3 GB when not in use
-- Configurable samplers (Euler A, DPM++), schedulers (Discrete, Karras, AYS), and CFG scale
-
-<p align="center">
-  <img src="docs/images/image_gen_demo.gif" width="300" alt="On-device image generation demo">
-</p>
-<p align="center"><em>"cat on a swing" → "dog riding a bicycle" — generated entirely on-device in ~30s each</em></p>
-
-### Runtime Supervision
-- **Compute budget contracts** — declare p95 latency, battery drain, thermal, and memory ceilings
-- **Adaptive budget profiles** — auto-calibrate to measured device performance
-- **Central scheduler** arbitrates concurrent workloads (text, vision, STT, image, RAG) with priority-based degradation
-- **Cross-worker memory eviction** — auto-disposes idle workers under memory pressure
-- **Thermal, memory, and battery-aware runtime policy** with hysteresis
-- Backpressure-controlled frame processing (drop-newest, not queue-forever)
-- Structured **performance tracing** (JSONL) with offline analysis tooling
-- Long-session stability validated on-device (28+ minutes, 0 crashes, 0 model reloads)
-
-### Smart Model Advisor
-
-<p align="center">
-  <img src="docs/images/app_model_advisor.jpeg" width="300" alt="Smart Model Advisor with 4D scoring">
-</p>
-<p align="center"><em>Device-aware model recommendations scored across fit, quality, speed, and context</em></p>
-
-- **DeviceProfile** detects iPhone model, RAM, chip generation, and device tier (low/medium/high/ultra)
-- **MemoryEstimator** with calibrated bytes-per-parameter formulas for accurate fit prediction
-- **ModelAdvisor** scores models 0–100 across fit, quality, speed, and context dimensions
-- Use-case weighted recommendations (chat, reasoning, vision, speech, fast)
-- **Optimal EdgeVedaConfig** generated per model+device pair (context length, threads, memory limit)
-- `canRun()` for quick fit check before download, `checkStorageAvailability()` for disk space
-
----
-
-## Architecture
-
-```
-Flutter App (Dart)
-    |
-    +-- ChatSession ---------- Chat templates, context summarization, tool calling
-    +-- WhisperSession ------- Streaming STT with 3s audio chunks
-    +-- RagPipeline ---------- Embed → search → inject → generate
-    +-- VectorIndex ---------- HNSW-backed vector search with persistence
-    |
-    +-- EdgeVeda ------------- generate(), generateStream(), embed(), describeImage()
-    |
-    +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
-    +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
-    +-- WhisperWorker -------- Persistent isolate, keeps whisper model loaded
-    +-- ImageWorker ---------- Persistent isolate, keeps SD model loaded
-    |
-    +-- Scheduler ------------ Central budget enforcer, priority-based degradation
-    +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
-    +-- RuntimePolicy -------- Thermal/battery/memory QoS with hysteresis
-    +-- TelemetryService ----- iOS thermal, battery, memory polling
-    +-- FrameQueue ----------- Drop-newest backpressure for camera frames
-    +-- PerfTrace ------------ JSONL flight recorder for offline analysis
-    +-- ModelAdvisor --------- Device-aware model recommendations + 4D scoring
-    +-- DeviceProfile -------- iPhone model/RAM/chip detection via sysctl
-    +-- MemoryEstimator ------ Calibrated model memory prediction
-    |
-    +-- FFI Bindings --------- 50 C functions via DynamicLibrary.open() (dynamic framework)
-         |
-    XCFramework (EdgeVedaCore.framework)
-    +-- engine.cpp ----------- Text inference + embeddings + confidence (wraps llama.cpp)
-    +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
-    +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)
-    +-- image_engine.cpp ----- Image generation (wraps stable-diffusion.cpp)
-    +-- memory_guard.cpp ----- Cross-platform RSS monitoring, pressure callbacks
-    +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
-    +-- whisper.cpp v1.8.3 --- Metal GPU, shared ggml backend (unmodified)
-    +-- stable-diffusion.cpp - Metal GPU, shared ggml backend (unmodified)
-```
-
-**Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Native pointers never cross isolate boundaries. Workers maintain persistent contexts so models load once and stay in memory across the entire session.
-
----
-
-## Quick Start
-
-### Installation
+### 1. Install the package
 
 ```yaml
 # pubspec.yaml
@@ -227,28 +48,93 @@ dependencies:
   edge_veda: ^2.4.0
 ```
 
-### Text Generation
+### 2. Run your first inference
 
 ```dart
 final edgeVeda = EdgeVeda();
-
-await edgeVeda.init(EdgeVedaConfig(
-  modelPath: modelPath,
-  contextLength: 2048,
-  useGpu: true,
-));
-
-// Streaming
-await for (final chunk in edgeVeda.generateStream('Explain recursion briefly')) {
-  stdout.write(chunk.token);
-}
-
-// Blocking
-final response = await edgeVeda.generate('Hello from on-device AI');
+await edgeVeda.init(EdgeVedaConfig(modelPath: modelPath));
+final response = await edgeVeda.generate('Explain quantum computing');
 print(response.text);
 ```
 
-### Multi-Turn Conversation
+### 3. Stream tokens in real-time
+
+```dart
+await for (final chunk in edgeVeda.generateStream('Explain recursion briefly')) {
+  stdout.write(chunk.token);
+}
+```
+
+> **Recommended starter models:** Llama 3.2 1B for chat, Qwen3 0.6B for tool calling, SmolVLM2 for vision.
+
+### New to iOS development?
+
+Check the **[Quickstart Guide](flutter/QUICKSTART.md)** for step-by-step Xcode + Flutter setup.
+
+### Prefer automated setup?
+
+The [MCP plugin](tools/mcp-server/) automates everything — environment checks, project scaffolding, model download, and device deployment:
+
+```bash
+claude mcp add edge-veda -- npx @edge-veda/mcp-server@0.2.0
+```
+
+Then just describe what you want to build:
+
+| Prompt | What happens |
+|--------|-------------|
+| *"Create an on-device chat app"* | Scaffolds project, configures iOS, downloads model, builds & deploys |
+| *"Add vision capability"* | Wires SmolVLM2, model download, camera screen into existing app |
+| *"Add RAG to my app"* | Adds embeddings, VectorIndex, RagPipeline, document picker UI |
+
+---
+
+## What Can It Do?
+
+| Capability | Description | Key Classes |
+|-----------|-------------|-------------|
+| **Text Generation** | Streaming & blocking inference, multi-turn chat with auto-summarization | `EdgeVeda`, `ChatSession` |
+| **Vision** | Continuous camera/image analysis with persistent VLM | `VisionWorker` |
+| **Speech-to-Text** | Real-time streaming transcription via whisper.cpp (Metal GPU) | `WhisperSession` |
+| **Text-to-Speech** | Neural voice synthesis with word boundary events | `TtsService` |
+| **Image Generation** | On-device text-to-image via stable-diffusion.cpp (Metal GPU) | `ImageWorker` |
+| **Function Calling** | Tool definitions, multi-round tool chains, schema validation | `ToolRegistry`, `ToolDefinition` |
+| **Structured Output** | GBNF grammar-constrained JSON with auto-repair | `sendStructured()` |
+| **Embeddings & RAG** | Vector search (HNSW), end-to-end retrieve + generate pipeline | `RagPipeline`, `VectorIndex` |
+| **Runtime Supervision** | Thermal/memory/battery-aware QoS with automatic degradation | `Scheduler`, `EdgeVedaBudget` |
+| **Smart Model Advisor** | Device-aware model scoring across fit, quality, speed, context | `ModelAdvisor`, `DeviceProfile` |
+| **Observability** | JSONL performance traces with offline analysis tooling | `PerfTrace` |
+
+<p align="center">
+  <img src="docs/images/image_gen_demo.gif" width="280" alt="On-device image generation demo">
+</p>
+<p align="center"><em>"cat on a swing" → "dog riding a bicycle" — generated entirely on-device in ~30s each</em></p>
+
+---
+
+## Why Edge-Veda?
+
+Most on-device AI demos break in real usage — thermal throttling, memory spikes, silent crashes after 60 seconds. Edge-Veda makes on-device AI **predictable, observable, and sustainable**.
+
+<p align="center">
+  <img src="docs/images/session_stability.png" width="600" alt="Session Stability: Unmanaged vs Managed Runtime">
+</p>
+<p align="center"><em>Left: unmanaged runtime — latency spikes, app killed by iOS in 2 min. Right: Edge Veda — stable for 28+ min with thermal auto-recovery.</em></p>
+
+**What makes it different:**
+
+- Models load once, stay in memory across the entire session
+- Adapts automatically to thermal, memory, and battery pressure
+- Applies runtime policies instead of crashing
+- Provides structured observability for debugging
+- Private by default — no network calls during inference
+
+---
+
+## Code Examples
+
+<details>
+<summary><strong>Multi-Turn Conversation</strong></summary>
 
 ```dart
 final session = ChatSession(
@@ -269,7 +155,10 @@ print('Turns: ${session.turnCount}');
 print('Context: ${(session.contextUsage * 100).toInt()}%');
 ```
 
-### Function Calling
+</details>
+
+<details>
+<summary><strong>Function Calling</strong></summary>
 
 ```dart
 final tools = ToolRegistry([
@@ -306,38 +195,39 @@ final response = await session.sendWithTools(
 );
 ```
 
-### Speech-to-Text
+</details>
+
+<details>
+<summary><strong>Speech-to-Text</strong></summary>
 
 ```dart
 final session = WhisperSession(modelPath: whisperModelPath);
 await session.start();
 
-// Listen for transcription segments
 session.onSegment.listen((segment) {
   print('[${segment.startMs}ms] ${segment.text}');
 });
 
-// Feed audio from microphone
 final audioSub = WhisperSession.microphone().listen((samples) {
   session.feedAudio(samples);
 });
 
-// Stop and get full transcript
 await session.flush();
 await session.stop();
 print(session.transcript);
 ```
 
-### Text-to-Speech
+</details>
+
+<details>
+<summary><strong>Text-to-Speech</strong></summary>
 
 ```dart
 final tts = TtsService();
 
-// List available neural voices
 final voices = await tts.availableVoices();
 final voice = voices.firstWhere((v) => v.language.startsWith('en'));
 
-// Speak with word-by-word highlighting
 tts.events.listen((event) {
   if (event.type == TtsEventType.wordBoundary) {
     print('Speaking: ${event.word}');
@@ -347,10 +237,13 @@ tts.events.listen((event) {
 await tts.speak('Hello from on-device AI', voiceId: voice.id, rate: 0.5);
 ```
 
-### Embeddings & RAG
+</details>
+
+<details>
+<summary><strong>Embeddings & RAG</strong></summary>
 
 <p align="center">
-  <img src="docs/images/app_rag_demo.png" width="300" alt="Document Q&A with on-device RAG">
+  <img src="docs/images/app_rag_demo.png" width="280" alt="Document Q&A with on-device RAG">
 </p>
 <p align="center"><em>Multi-turn Q&A over a PDF — RAG retrieval, 31.8 tok/s, entirely on-device</em></p>
 
@@ -374,7 +267,10 @@ final answer = await rag.query('What is Edge-Veda?');
 print(answer.text);
 ```
 
-### Continuous Vision Inference
+</details>
+
+<details>
+<summary><strong>Vision Inference</strong></summary>
 
 ```dart
 final visionWorker = VisionWorker();
@@ -396,72 +292,72 @@ final result = await visionWorker.describeFrame(
 print(result.description);
 ```
 
-### Zero-Config Setup (Claude Code MCP)
+</details>
 
-Skip all manual setup — the [MCP plugin](tools/mcp-server/) automates environment checks, project scaffolding, model selection, capability wiring, and device deployment.
+<details>
+<summary><strong>Compute Budget Contracts</strong></summary>
 
-```bash
-claude mcp add edge-veda -- npx @edge-veda/mcp-server@0.2.0
+```dart
+final scheduler = Scheduler(telemetry: TelemetryService());
+
+// Auto-calibrate to this device's performance
+scheduler.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
+
+// Register workloads with priorities
+scheduler.registerWorkload(WorkloadId.vision, priority: WorkloadPriority.high);
+scheduler.registerWorkload(WorkloadId.text, priority: WorkloadPriority.low);
+scheduler.start();
+
+// React to violations
+scheduler.onBudgetViolation.listen((v) {
+  print('${v.constraint}: ${v.currentValue} > ${v.budgetValue}');
+});
 ```
 
-Then tell Claude what you want to build:
+</details>
 
-| Prompt | What happens |
-|--------|-------------|
-| *"Create an on-device chat app"* | Scaffolds project, configures iOS, downloads model, builds & deploys |
-| *"Add vision capability"* | Wires SmolVLM2 imports, model download, camera screen into existing app |
-| *"Add RAG to my app"* | Adds embedding model, VectorIndex, RagPipeline, document picker UI |
+---
 
-**6 tools available:** `check_environment`, `list_models`, `create_project`, `add_capability`, `download_model`, `run`
+## Supported Models
 
-See [tools/mcp-server/](tools/mcp-server/) for full documentation.
+Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
 
-[![npm](https://img.shields.io/npm/v/@edge-veda/mcp-server)](https://www.npmjs.com/package/@edge-veda/mcp-server)
+| Model | Size | Best For | Template |
+|-------|------|----------|----------|
+| **Llama 3.2 1B Instruct** | 668 MB | General chat (default) | `llama3Instruct` |
+| **Qwen3 0.6B** | 397 MB | Function calling, tools | `qwen3` |
+| **SmolVLM2 500M** | 607 MB | Camera/image analysis | — |
+| **Phi 3.5 Mini Instruct** | 2.3 GB | Quality reasoning | `chatML` |
+| **Gemma 2 2B Instruct** | 1.6 GB | Balanced quality/speed | `generic` |
+| **TinyLlama 1.1B Chat** | 669 MB | Speed-first, low memory | `generic` |
+| **Whisper Tiny** | 77 MB | Fast transcription | — |
+| **Whisper Base** | 148 MB | Quality transcription | — |
+| **SD v2.1 Turbo** | 2.3 GB | Text-to-image (512x512) | — |
+| **MiniLM L6 v2** | 46 MB | RAG, similarity search | — |
+
+> **Template matters.** Using the wrong `ChatTemplateFormat` produces garbage output. Match the model to its template from the table above.
+
+Any GGUF model compatible with llama.cpp can be loaded by file path.
 
 ---
 
 ## Example Apps
 
-Four complete apps that showcase different personas and SDK capabilities. Each is a standalone Flutter project you can run on your iPhone.
+Four complete apps showcasing different use cases. Each is a standalone Flutter project you can run on your iPhone.
 
-### Smart Home Control ([examples/intent_engine](examples/intent_engine/))
-
-*"I'm heading to bed"* — the LLM dims lights, locks doors, and turns off the TV.
-
-On-device natural language intent parsing with LLM function calling. 10 virtual devices across 3 rooms, animated state dashboard, transparent action log, and a pluggable Home Assistant connector.
-
-**SDK features:** `ChatSession.sendWithTools()`, `ToolRegistry`, `ToolDefinition`, Qwen3-0.6B
-
-### Document Q&A ([examples/document_qa](examples/document_qa/))
-
-Load any PDF or text file and ask questions — RAG retrieval + LLM generation, 100% offline.
-
-Dual-model architecture (embedder + generator), semantic chunking, streaming answers with source attribution.
-
-**SDK features:** `RagPipeline`, `VectorIndex`, `embed()`, dual `EdgeVeda` instances, `ModelManager`
-
-### Health Advisor ([examples/health_advisor](examples/health_advisor/))
-
-Confidence-aware medical document Q&A with explicit cloud handoff when the model is uncertain.
-
-Per-token confidence scoring with color-coded badges (green/yellow/red) and a dismissible banner suggesting professional consultation when confidence drops below threshold.
-
-**SDK features:** `ConfidenceInfo`, `needsCloudHandoff`, `RagPipeline`, `GenerateOptions.confidenceThreshold`
-
-### Voice Journal ([examples/voice_journal](examples/voice_journal/))
-
-Record thoughts, auto-transcribe, auto-summarize, and semantically search across entries — entirely on-device.
-
-Three independent model instances (STT + summarization + embeddings) with SQLite persistence and cross-session semantic search.
-
-**SDK features:** `WhisperSession`, `ChatSession.reset()`, `VectorIndex` persistence, `ModelManager`
+| App | Description | SDK Features |
+|-----|-------------|-------------|
+| **[Smart Home Control](examples/intent_engine/)** | *"I'm heading to bed"* — dims lights, locks doors, turns off TV. Natural language intent parsing with LLM function calling. | `ChatSession.sendWithTools()`, `ToolRegistry`, Qwen3-0.6B |
+| **[Document Q&A](examples/document_qa/)** | Load any PDF and ask questions — RAG retrieval + LLM generation, 100% offline. | `RagPipeline`, `VectorIndex`, `embed()`, `ModelManager` |
+| **[Health Advisor](examples/health_advisor/)** | Confidence-aware medical Q&A with cloud handoff when the model is uncertain. | `ConfidenceInfo`, `needsCloudHandoff`, `RagPipeline` |
+| **[Voice Journal](examples/voice_journal/)** | Record, auto-transcribe, auto-summarize, and semantically search entries — all on-device. | `WhisperSession`, `VectorIndex`, `ModelManager` |
 
 ---
 
 ## Learning Path
 
-| Day | Topic | Classes to Learn | Lines |
-|-----|-------|-----------------|-------|
+| Day | Topic | Classes to Learn | Lines of Code |
+|-----|-------|-----------------|---------------|
 | 1 | Text generation | `EdgeVeda`, `EdgeVedaConfig` | 3 |
 | 2 | Streaming + chat | `ChatSession`, `ChatTemplateFormat` | 8 |
 | 3 | Model management | `ModelManager`, `ModelRegistry` | 6 |
@@ -472,178 +368,47 @@ Three independent model instances (STT + summarization + embeddings) with SQLite
 
 ---
 
-## Runtime Supervision
+## Architecture
 
-Edge-Veda continuously monitors:
-
-- Device thermal state (nominal / fair / serious / critical)
-- Available memory (`os_proc_available_memory`)
-- Battery level and Low Power Mode
-
-Based on these signals, it dynamically adjusts:
-
-| QoS Level | FPS | Resolution | Tokens | Trigger |
-|-----------|-----|------------|--------|---------|
-| Full | 2 | 640px | 100 | No pressure |
-| Reduced | 1 | 480px | 75 | Thermal warning, battery <15%, memory <200MB |
-| Minimal | 1 | 320px | 50 | Thermal serious, battery <5%, memory <100MB |
-| Paused | 0 | -- | 0 | Thermal critical, memory <50MB |
-
-**Escalation is immediate.** Thermal spikes are dangerous and must be responded to without delay.
-
-**Restoration requires cooldown** (60s per level) and happens one level at a time. Full recovery from paused to full takes 3 minutes. This prevents oscillation where the system rapidly alternates between high and low quality.
-
----
-
-## Compute Budget Contracts
-
-Declare runtime guarantees. The Scheduler enforces them.
-
-```dart
-// Option 1: Adaptive — auto-calibrates to this device's actual performance
-final scheduler = Scheduler(telemetry: TelemetryService());
-scheduler.setBudget(EdgeVedaBudget.adaptive(BudgetProfile.balanced));
-
-// Option 2: Static — explicit values
-scheduler.setBudget(const EdgeVedaBudget(
-  p95LatencyMs: 3000,
-  batteryDrainPerTenMinutes: 5.0,
-  maxThermalLevel: 2,
-));
-
-// Register workloads with priorities
-scheduler.registerWorkload(WorkloadId.vision, priority: WorkloadPriority.high);
-scheduler.registerWorkload(WorkloadId.text, priority: WorkloadPriority.low);
-scheduler.registerWorkload(WorkloadId.stt, priority: WorkloadPriority.low);
-scheduler.start();
-
-// React to violations
-scheduler.onBudgetViolation.listen((v) {
-  print('${v.constraint}: ${v.currentValue} > ${v.budgetValue}');
-});
+```
+Flutter App (Dart)
+    |
+    +-- ChatSession ---------- Chat templates, context summarization, tool calling
+    +-- WhisperSession ------- Streaming STT with 3s audio chunks
+    +-- RagPipeline ---------- Embed → search → inject → generate
+    +-- VectorIndex ---------- HNSW-backed vector search with persistence
+    |
+    +-- EdgeVeda ------------- generate(), generateStream(), embed(), describeImage()
+    |
+    +-- StreamingWorker ------ Persistent isolate, keeps text model loaded
+    +-- VisionWorker --------- Persistent isolate, keeps VLM loaded (~600MB)
+    +-- WhisperWorker -------- Persistent isolate, keeps whisper model loaded
+    +-- ImageWorker ---------- Persistent isolate, keeps SD model loaded
+    |
+    +-- Scheduler ------------ Central budget enforcer, priority-based degradation
+    +-- EdgeVedaBudget ------- Declarative constraints (p95, battery, thermal, memory)
+    +-- RuntimePolicy -------- Thermal/battery/memory QoS with hysteresis
+    +-- TelemetryService ----- iOS thermal, battery, memory polling
+    +-- PerfTrace ------------ JSONL flight recorder for offline analysis
+    +-- ModelAdvisor --------- Device-aware model recommendations + 4D scoring
+    |
+    +-- FFI Bindings --------- 50 C functions via DynamicLibrary.open()
+         |
+    XCFramework (EdgeVedaCore.framework)
+    +-- engine.cpp ----------- Text inference + embeddings (wraps llama.cpp)
+    +-- vision_engine.cpp ---- Vision inference (wraps libmtmd)
+    +-- whisper_engine.cpp --- Speech-to-text (wraps whisper.cpp)
+    +-- image_engine.cpp ----- Image generation (wraps stable-diffusion.cpp)
+    +-- memory_guard.cpp ----- Cross-platform RSS monitoring
+    +-- llama.cpp b7952 ------ Metal GPU, ARM NEON, GGUF models (unmodified)
+    +-- whisper.cpp v1.8.3 --- Metal GPU, shared ggml backend (unmodified)
+    +-- stable-diffusion.cpp - Metal GPU, shared ggml backend (unmodified)
 ```
 
-**Adaptive profiles** resolve against measured device performance after warm-up:
+> **Key design constraint:** Dart FFI is synchronous — calling llama.cpp directly would freeze the UI. All inference runs in background isolates. Workers maintain persistent contexts so models load once and stay in memory.
 
-| Profile | p95 Multiplier | Battery | Thermal | Use Case |
-|---------|---------------|---------|---------|----------|
-| Conservative | 2.0x | 0.6x (strict) | Floor 1 | Background workloads |
-| Balanced | 1.5x | 1.0x (match) | Floor 2 | Default for most apps |
-| Performance | 1.1x | 1.5x (generous) | Allow 3 | Latency-sensitive apps |
-
----
-
-## Performance
-
-All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with Metal GPU. See [BENCHMARKS.md](BENCHMARKS.md) for full details.
-
-![Key Metrics](docs/images/metrics_scorecard.png)
-
-### Text Generation
-
-| Metric | Value |
-|--------|-------|
-| Throughput | 42–43 tok/s |
-| Steady-state memory | 400–550 MB |
-| Multi-turn stability | No degradation over 10+ turns |
-
-### RAG (Retrieval-Augmented Generation)
-
-| Metric | Value |
-|--------|-------|
-| Generation speed | 42–43 tok/s |
-| Vector search | <1 ms |
-| End-to-end retrieval | 305–865 ms |
-
-### Vision (Soak Test)
-
-| Metric | Value |
-|--------|-------|
-| Sustained runtime | 28.6 minutes |
-| Frames processed | 572 |
-| p50 / p95 / p99 latency | 1,412 / 2,283 / 2,597 ms |
-| Crashes / model reloads | 0 / 0 |
-
-### Image Generation
-
-| Metric | Value |
-|--------|-------|
-| Model load | 5.1s (+2.3 GB) |
-| 512x512, 4 steps (Euler A) | ~14s per image |
-| Memory (steady state) | ~2.3 GB |
-| Idle auto-disposal | 60s (frees 2.3 GB) |
-
-### Speech-to-Text
-
-| Metric | Value |
-|--------|-------|
-| Transcription latency (p50) | ~670 ms per 3s chunk |
-| Model size | 77 MB |
-| Streaming | Real-time segments |
-
-### Memory Optimization
-
-![Memory Comparison](docs/images/memory_comparison.png)
-
-| Metric | Before | After |
-|--------|--------|-------|
-| KV cache | ~64 MB | ~32 MB (Q8_0) |
-| Steady-state memory | ~1,200 MB peak | 400–550 MB |
-
-### Thermal Management
-
-![Thermal Behavior](docs/images/thermal_management.png)
-
-The runtime monitors thermal state and automatically steps down quality of service to prevent crashes. When conditions improve, it recovers — one level at a time with a 60-second cooldown to prevent oscillation.
-
-### Observability
-
-Built-in performance flight recorder writes per-frame JSONL traces:
-
-- Per-stage timing (image encode / prompt eval / decode)
-- Runtime policy transitions (QoS level changes)
-- Frame drop statistics
-- Memory and thermal telemetry
-
-Traces are analyzed offline using `tools/analyze_trace.py` (p50/p95/p99 stats, throughput charts, thermal overlays).
-
----
-
-## Supported Models
-
-Pre-configured in `ModelRegistry` with download URLs and SHA-256 checksums:
-
-| Model | Size | Template | Capabilities | Best For |
-|-------|------|----------|-------------|----------|
-| Llama 3.2 1B Instruct | 668 MB | `llama3Instruct` | chat, reasoning | General chat (default) |
-| Phi 3.5 Mini Instruct | 2.3 GB | `chatML` | chat, reasoning | Quality reasoning |
-| Gemma 2 2B Instruct | 1.6 GB | `generic` | chat | Balanced quality/speed |
-| TinyLlama 1.1B Chat | 669 MB | `generic` | chat | Speed-first, low memory |
-| Qwen3 0.6B | 397 MB | `qwen3` | chat, tool-calling | Function calling, tools |
-| SmolVLM2 500M | 607 MB | — | vision | Camera/image analysis |
-| Whisper Tiny | 77 MB | — | stt | Fast transcription |
-| Whisper Base | 148 MB | — | stt | Quality transcription |
-| SD v2.1 Turbo | 2.3 GB | — | image generation | Text-to-image (512x512) |
-| MiniLM L6 v2 | 46 MB | — | embedding | RAG, similarity search |
-
-> **Template matters.** Using the wrong `ChatTemplateFormat` produces garbage output. Match the model to its template from the table above.
-
-Any GGUF model compatible with llama.cpp can be loaded by file path.
-
----
-
-## Platform Status
-
-| Platform | GPU | Status |
-|----------|-----|--------|
-| iOS (device) | Metal | Fully validated on-device |
-| iOS (simulator) | CPU | Working (Metal stubs, no mic) |
-| Android | CPU | Scaffolded, validation pending |
-| Android (Vulkan) | -- | Planned |
-
----
-
-## Project Structure
+<details>
+<summary><strong>Project Structure</strong></summary>
 
 ```
 edge-veda/
@@ -669,13 +434,80 @@ edge-veda/
 +-- scripts/
 |   +-- build-ios.sh              XCFramework build pipeline (406 LOC)
 +-- tools/
-|   +-- mcp-server/               Claude Code MCP plugin (TypeScript, 6 tools)
+|   +-- mcp-server/               MCP plugin (TypeScript, 6 tools)
 |   +-- analyze_trace.py          Soak test JSONL analysis (1,797 LOC)
 ```
 
+</details>
+
 ---
 
-## Building
+## Performance
+
+All numbers measured on a physical iPhone (A16 Bionic, 6GB RAM, iOS 26.2.1) with Metal GPU. See [BENCHMARKS.md](BENCHMARKS.md) for full details.
+
+<p align="center">
+  <img src="docs/images/metrics_scorecard.png" width="500" alt="Key Metrics">
+</p>
+
+| Capability | Key Metric | Value |
+|-----------|------------|-------|
+| **Text Generation** | Throughput | 42–43 tok/s |
+| **Text Generation** | Steady-state memory | 400–550 MB |
+| **RAG** | Vector search | <1 ms |
+| **RAG** | End-to-end retrieval | 305–865 ms |
+| **Vision (28 min soak)** | p50 / p95 latency | 1,412 / 2,283 ms |
+| **Vision (28 min soak)** | Crashes / model reloads | 0 / 0 |
+| **Image Generation** | 512x512, 4 steps | ~14s per image |
+| **Speech-to-Text** | Per-chunk latency (p50) | ~670 ms |
+| **Memory** | KV cache optimization | 64 MB → 32 MB (Q8_0) |
+
+<details>
+<summary><strong>Thermal Management & Observability</strong></summary>
+
+<p align="center">
+  <img src="docs/images/thermal_management.png" width="500" alt="Thermal Behavior">
+</p>
+
+The runtime monitors thermal state and automatically steps down QoS to prevent crashes. Recovery is gradual — one level at a time with 60-second cooldown to prevent oscillation.
+
+<p align="center">
+  <img src="docs/images/memory_comparison.png" width="500" alt="Memory Comparison">
+</p>
+
+Built-in performance flight recorder writes per-frame JSONL traces with per-stage timing, policy transitions, frame drop stats, and thermal telemetry. Analyze offline using `tools/analyze_trace.py`.
+
+</details>
+
+---
+
+## Runtime Supervision
+
+Edge-Veda continuously monitors thermal state, available memory, and battery level, then dynamically adjusts quality of service:
+
+| QoS Level | FPS | Resolution | Tokens | Trigger |
+|-----------|-----|------------|--------|---------|
+| **Full** | 2 | 640px | 100 | No pressure |
+| **Reduced** | 1 | 480px | 75 | Thermal warning, battery <15%, memory <200MB |
+| **Minimal** | 1 | 320px | 50 | Thermal serious, battery <5%, memory <100MB |
+| **Paused** | 0 | — | 0 | Thermal critical, memory <50MB |
+
+Escalation is immediate. Restoration requires 60s cooldown per level (3 min full recovery from paused).
+
+<details>
+<summary><strong>Adaptive Budget Profiles</strong></summary>
+
+| Profile | p95 Multiplier | Battery | Thermal | Use Case |
+|---------|---------------|---------|---------|----------|
+| Conservative | 2.0x | 0.6x (strict) | Floor 1 | Background workloads |
+| Balanced | 1.5x | 1.0x (match) | Floor 2 | Default for most apps |
+| Performance | 1.1x | 1.5x (generous) | Allow 3 | Latency-sensitive apps |
+
+</details>
+
+---
+
+## Building from Source
 
 ### Prerequisites
 
@@ -689,8 +521,6 @@ edge-veda/
 ./scripts/build-ios.sh --clean --release
 ```
 
-Compiles llama.cpp + whisper.cpp + stable-diffusion.cpp + Edge Veda C code for device (arm64) and simulator (arm64), links into dynamic frameworks, and packages as an XCFramework.
-
 ### Run Demo App
 
 ```bash
@@ -698,11 +528,49 @@ cd flutter/example
 flutter run
 ```
 
-The demo app includes Chat (multi-turn with tool calling), Vision (continuous camera scanning), Image (text-to-image generation with gallery), STT (live microphone transcription), and Settings (model management, device info).
+---
+
+## Platform Status
+
+| Platform | GPU | Status |
+|----------|-----|--------|
+| iOS (device) | Metal | Fully validated on-device |
+| iOS (simulator) | CPU | Working (Metal stubs, no mic) |
+| Android | CPU | Scaffolded, validation pending |
+| Android (Vulkan) | — | Planned |
 
 ---
 
-## Roadmap (Directional)
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Garbage/repeated output | Wrong chat template | Match model to template (see [Supported Models](#supported-models)) |
+| App crashes on launch | Missing XCFramework | Run `./scripts/build-ios.sh --clean --release` |
+| Out of memory | Model too large | Use `ModelAdvisor.canRun()` to check compatibility |
+| Slow first token | Large context + cold start | Reduce `contextLength`; model loads once then reuses |
+| Tool calls not parsed | Wrong model | Use Qwen3 0.6B with `ChatTemplateFormat.qwen3` |
+
+---
+
+## Contributing
+
+Contributions are welcome!
+
+**Areas of interest:** Android CPU/Vulkan testing, runtime policy improvements, trace visualization, model support, new example apps.
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Verify with `dart analyze` and `flutter test`
+4. Open a Pull Request with a summary of what changed and why
+
+**Code standards:** Dart follows `dart format`, C++ matches `core/src/` style, all FFI calls must run in isolates.
+
+---
+
+## Roadmap
 
 - Android sustained runtime validation (CPU + Vulkan GPU)
 - Semantic perception APIs (event-driven vision)
@@ -713,63 +581,9 @@ The demo app includes Chat (multi-turn with tool calling), Vision (continuous ca
 
 ---
 
-## Who This Is For
-
-Edge-Veda is designed for three developer personas:
-
-- **The IoT Builder** — smart home control, voice assistants, intent-driven automation. Needs function calling and real-time device interaction, 100% offline. *See [Intent Engine](examples/intent_engine/).*
-- **The Knowledge Worker** — document Q&A, medical advisors, legal research. Needs RAG, confidence scoring, and explicit cloud handoff when the model is uncertain. *See [Health Advisor](examples/health_advisor/) and [Document Q&A](examples/document_qa/).*
-- **The Personal AI Builder** — voice journals, thought capture, semantic search over personal data. Needs STT, summarization, and persistent vector search — all private, all on-device. *See [Voice Journal](examples/voice_journal/).*
-
-And more broadly, any team building privacy-sensitive, offline-first, or long-running on-device AI applications.
-
----
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Garbage/repeated output | Wrong chat template | Match model family to template (see Supported Models table) |
-| App crashes on launch | Missing XCFramework | Run `./scripts/build-ios.sh --clean --release` |
-| Out of memory | Model too large for device | Use `ModelAdvisor.canRun()` to check compatibility |
-| Slow first token | Large context + cold start | Reduce `contextLength`, model loads once then reuses |
-| Tool calls not parsed | Wrong model for tools | Use Qwen3 0.6B with `ChatTemplateFormat.qwen3` |
-
----
-
-## Contributing
-
-Contributions are welcome. Here's how to get started:
-
-### Areas of Interest
-
-- **Platform validation** — Android CPU/Vulkan testing on real devices
-- **Runtime policy** — New QoS strategies, thermal adaptation improvements
-- **Trace analysis** — Visualization tools, anomaly detection, regression tracking
-- **Model support** — Testing additional GGUF models, quantization profiles
-- **Example apps** — New use-case examples building on the four existing personas
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make changes and verify with `dart analyze` (SDK) and `flutter analyze` (demo app)
-4. Run tests: `cd flutter && flutter test`
-5. Commit with descriptive messages
-6. Open a Pull Request with a summary of what changed and why
-
-### Code Standards
-
-- Dart: follow standard `dart format` conventions
-- C++: match existing style in `core/src/`
-- All FFI calls must run in isolates (never on main thread)
-- New C API functions are automatically exported via the dynamic framework (no symbol whitelist needed)
-
----
-
 ## Support
 
-- **Discord:** [Join our community](https://discord.gg/rv8qZMGC)
+- **Discord:** [Join our community](https://discord.gg/zztPPRcnFC)
 - **GitHub Issues:** [Report bugs or request features](https://github.com/ramanujammv1988/edge-veda/issues)
 
 ---
@@ -780,4 +594,4 @@ Contributions are welcome. Here's how to get started:
 
 ---
 
-Built on [llama.cpp](https://github.com/ggml-org/llama.cpp) and [whisper.cpp](https://github.com/ggerganov/whisper.cpp) by Georgi Gerganov and contributors.
+<p align="center">Built on <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a> and <a href="https://github.com/ggerganov/whisper.cpp">whisper.cpp</a> by Georgi Gerganov and contributors.</p>
