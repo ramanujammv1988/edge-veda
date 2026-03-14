@@ -420,7 +420,9 @@ void _handleInit(
   try {
     configPtr.ref.modelPath = modelPathPtr;
     configPtr.ref.backend =
-        (cmd.useGpu && cmd.useVulkan) ? EvBackend.auto_.value : EvBackend.cpu.value;
+        (cmd.useGpu && cmd.useVulkan)
+            ? EvBackend.auto_.value
+            : EvBackend.cpu.value;
     configPtr.ref.numThreads = cmd.numThreads;
     configPtr.ref.contextSize = cmd.contextSize;
     configPtr.ref.batchSize = 512;

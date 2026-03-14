@@ -175,7 +175,9 @@ class EdgeVeda {
           // Populate config
           configPtr.ref.modelPath = modelPathPtr;
           configPtr.ref.backend =
-              (useGpu && useVulkan) ? EvBackend.auto_.value : EvBackend.cpu.value;
+              (useGpu && useVulkan)
+                  ? EvBackend.auto_.value
+                  : EvBackend.cpu.value;
           configPtr.ref.numThreads = numThreads;
           configPtr.ref.contextSize = contextSize;
           configPtr.ref.batchSize = 512;
