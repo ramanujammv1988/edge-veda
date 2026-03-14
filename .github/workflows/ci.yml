@@ -212,10 +212,19 @@ jobs:
           ndk-version: r26c
           add-to-path: true
 
-      - name: Install CMake, Ninja, and Vulkan tools
+      - name: Install CMake and Ninja
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build ccache shaderc
+          sudo apt-get install -y cmake ninja-build ccache
+
+      - name: Add NDK glslc to PATH (for Vulkan shader compilation)
+        run: |
+          GLSLC_DIR="${{ steps.setup-ndk.outputs.ndk-path }}/shader-tools/linux-x86_64"
+          if [ -f "$GLSLC_DIR/glslc" ]; then
+            echo "$GLSLC_DIR" >> $GITHUB_PATH
+          else
+            sudo apt-get install -y glslang-tools
+          fi
 
       - name: Configure ccache
         uses: hendrikmuhs/ccache-action@v1.2
