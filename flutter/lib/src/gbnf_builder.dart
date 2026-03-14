@@ -4,9 +4,26 @@
 /// that can be passed to llama.cpp's grammar sampler to guarantee
 /// structurally valid JSON output.
 ///
-/// Supports: object, string, number, integer, boolean, null, array, enum.
-/// Does NOT support: \$ref, oneOf, anyOf, allOf (too complex for small models).
+/// Supports: object, string, number, integer, boolean, null, array, enum,
+/// \$ref resolution, oneOf/anyOf composition, additionalProperties guard,
+/// and grammar rule budget enforcement.
 library;
+
+/// Result of grammar generation, including budget status.
+class GbnfResult {
+  /// The generated GBNF grammar string.
+  final String grammar;
+
+  /// Whether the rule budget was exceeded during generation.
+  ///
+  /// When true, some sub-schemas were degraded to the generic `value` rule
+  /// (any valid JSON). Post-generation schema validation can still catch
+  /// semantic violations.
+  final bool budgetExceeded;
+
+  /// Creates a grammar generation result.
+  const GbnfResult({required this.grammar, required this.budgetExceeded});
+}
 
 /// Builds GBNF grammar strings from JSON Schema definitions.
 ///
@@ -31,6 +48,24 @@ class GbnfBuilder {
   int _counter = 0;
   final _rules = <String, String>{};
 
+  /// The root schema, stored for $ref resolution.
+  late final Map<String, dynamic> _rootSchema;
+
+  /// Set of $ref pointers currently being resolved (cycle detection).
+  final _resolving = <String>{};
+
+  /// Cache of already-resolved $ref pointers to their rule names.
+  final _refCache = <String, String>{};
+
+  /// Maximum number of rules before budget degradation.
+  final int _maxRules;
+
+  /// Whether the rule budget was exceeded during generation.
+  bool _budgetExceeded = false;
+
+  /// Creates a builder with optional rule budget.
+  GbnfBuilder({int maxRules = 500}) : _maxRules = maxRules;
+
   /// Convert a JSON Schema to a GBNF grammar string.
   ///
   /// Supports a subset of JSON Schema Draft 7:
@@ -41,16 +76,36 @@ class GbnfBuilder {
   /// - `null`
   /// - `array` with `items`
   /// - `enum` (string values)
+  /// - `$ref` resolution (with cycle detection)
   ///
   /// [schema] is a JSON Schema as a Dart map.
   /// [rootRule] is the name of the root grammar rule (default: "root").
+  /// [maxRules] is the maximum number of grammar rules before budget
+  /// degradation (default: 500).
   ///
   /// Returns a complete GBNF grammar string.
   static String fromJsonSchema(
     Map<String, dynamic> schema, {
     String rootRule = 'root',
+    int maxRules = 500,
   }) {
-    final builder = GbnfBuilder();
+    return build(schema, rootRule: rootRule, maxRules: maxRules).grammar;
+  }
+
+  /// Build a GBNF grammar from a JSON Schema, returning a [GbnfResult]
+  /// that includes both the grammar string and budget status.
+  ///
+  /// [schema] is a JSON Schema as a Dart map.
+  /// [rootRule] is the name of the root grammar rule (default: "root").
+  /// [maxRules] is the maximum number of grammar rules before budget
+  /// degradation (default: 500).
+  static GbnfResult build(
+    Map<String, dynamic> schema, {
+    String rootRule = 'root',
+    int maxRules = 500,
+  }) {
+    final builder = GbnfBuilder(maxRules: maxRules);
+    builder._rootSchema = schema;
     final rootRef = builder._buildRule(schema);
 
     // Add base rules
@@ -67,7 +122,10 @@ class GbnfBuilder {
       buffer.writeln('${entry.key} ::= ${entry.value}');
     }
 
-    return buffer.toString();
+    return GbnfResult(
+      grammar: buffer.toString(),
+      budgetExceeded: builder._budgetExceeded,
+    );
   }
 
   /// Returns a pre-built GBNF grammar that accepts any valid JSON.
@@ -98,13 +156,40 @@ ws ::= | " " | "\n" [ \t]{0,20}
   ///
   /// Returns either a rule name reference or an inline expression.
   String _buildRule(Map<String, dynamic> schema) {
-    // Handle enum first (can appear with or without type)
+    // Budget check: if we've hit the rule limit, degrade to 'value'
+    if (_rules.length >= _maxRules) {
+      _budgetExceeded = true;
+      return 'value';
+    }
+
+    // Handle $ref before anything else
+    if (schema.containsKey(r'$ref')) {
+      return _resolveRef(schema[r'$ref'] as String);
+    }
+
+    // Handle oneOf/anyOf composition (after $ref, before enum/type)
+    if (schema.containsKey('oneOf')) {
+      return _buildOneOfAnyOf(schema['oneOf'] as List);
+    }
+    if (schema.containsKey('anyOf')) {
+      return _buildOneOfAnyOf(schema['anyOf'] as List);
+    }
+
+    // Handle enum (can appear with or without type)
     if (schema.containsKey('enum')) {
       return _buildEnum(schema['enum'] as List);
     }
 
     final type = schema['type'];
     if (type == null) {
+      // Type-less schema with properties -> treat as object
+      if (schema.containsKey('properties')) {
+        return _buildObject(schema);
+      }
+      // allOf: log warning and fall back to value (not in scope)
+      if (schema.containsKey('allOf')) {
+        return 'value';
+      }
       // No type specified -- accept any value
       return 'value';
     }
@@ -130,9 +215,107 @@ ws ::= | " " | "\n" [ \t]{0,20}
     }
   }
 
+  /// Resolve a $ref pointer to its target sub-schema and return the rule name.
+  ///
+  /// Navigates JSON pointer path segments from the root schema.
+  /// Supports both `#/definitions/X` and `#/$defs/X` styles.
+  /// Detects cycles via [_resolving] set to prevent infinite recursion.
+  /// Caches resolved refs via [_refCache] to avoid duplicate rule generation.
+  String _resolveRef(String ref) {
+    // Return cached rule name if already resolved
+    if (_refCache.containsKey(ref)) {
+      return _refCache[ref]!;
+    }
+
+    // Cycle detection: if this ref is currently being resolved, return the
+    // rule name that will be defined when resolution completes
+    if (_resolving.contains(ref)) {
+      // Generate a stable rule name for this ref
+      final segments = ref.split('/').where((s) => s != '#' && s.isNotEmpty);
+      final ruleName = 'ref-${segments.join('-')}';
+      return ruleName;
+    }
+
+    // Navigate the JSON pointer to find the target sub-schema
+    final target = _navigatePointer(ref);
+    if (target == null) {
+      // Missing definition -- fall back to value
+      return 'value';
+    }
+
+    // Generate a stable rule name for this ref
+    final segments = ref.split('/').where((s) => s != '#' && s.isNotEmpty);
+    final ruleName = 'ref-${segments.join('-')}';
+
+    // Mark as resolving (cycle detection)
+    _resolving.add(ref);
+    _refCache[ref] = ruleName;
+
+    // Build the rule for the target schema
+    final targetRef = _buildRule(target);
+
+    // Create the named rule mapping ref name to target
+    _rules[ruleName] = targetRef;
+
+    // Done resolving
+    _resolving.remove(ref);
+
+    return ruleName;
+  }
+
+  /// Build an alternation rule for oneOf/anyOf composition.
+  ///
+  /// Each alternative schema is built via [_buildRule] and the results are
+  /// joined with `|` as a GBNF alternation. Empty lists fall back to `value`,
+  /// single alternatives return the single rule reference directly.
+  String _buildOneOfAnyOf(List alternatives) {
+    if (alternatives.isEmpty) {
+      return 'value';
+    }
+
+    if (alternatives.length == 1) {
+      return _buildRule(alternatives[0] as Map<String, dynamic>);
+    }
+
+    final refs = <String>[];
+    for (final alt in alternatives) {
+      refs.add(_buildRule(alt as Map<String, dynamic>));
+    }
+
+    final name = _uniqueName('alt');
+    _rules[name] = '(${refs.join(' | ')})';
+    return name;
+  }
+
+  /// Navigate a JSON pointer (e.g., "#/definitions/Address") within the
+  /// root schema and return the target sub-schema, or null if not found.
+  Map<String, dynamic>? _navigatePointer(String pointer) {
+    // Split on '/' and skip the '#' prefix
+    final segments =
+        pointer.split('/').where((s) => s != '#' && s.isNotEmpty).toList();
+
+    dynamic current = _rootSchema;
+    for (final segment in segments) {
+      if (current is Map<String, dynamic> && current.containsKey(segment)) {
+        current = current[segment];
+      } else {
+        return null;
+      }
+    }
+
+    if (current is Map<String, dynamic>) {
+      return current;
+    }
+    return null;
+  }
+
   /// Build an object rule from properties and required list.
   String _buildObject(Map<String, dynamic> schema) {
-    final properties = schema['properties'] as Map<String, dynamic>? ?? {};
+    final rawProps = schema['properties'];
+    final properties =
+        rawProps is Map
+            ? Map<String, dynamic>.from(rawProps)
+            : <String, dynamic>{};
     final requiredList = (schema['required'] as List?)?.cast<String>() ?? [];
 
     if (properties.isEmpty) {

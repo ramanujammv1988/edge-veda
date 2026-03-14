@@ -621,6 +621,166 @@ class ChatSession {
     return parsed;
   }
 
+  /// Send a message and stream the response token-by-token, with
+  /// post-stream JSON schema validation.
+  ///
+  /// Combines streaming output with structured output guarantees:
+  /// tokens are yielded in real time via grammar-constrained decoding,
+  /// and the complete response is validated against [schema] after the
+  /// stream finishes.
+  ///
+  /// Uses GBNF grammar-constrained decoding to guide the model toward
+  /// valid JSON conforming to [schema]. After all tokens have been
+  /// yielded, the full response is parsed, validated, and the
+  /// [onValidationEvent] callback fires with pass/fail details.
+  ///
+  /// If the raw output is malformed JSON, [JsonRecovery] attempts to
+  /// repair it before failing. If validation still fails, a
+  /// [GenerationException] is thrown after the stream has completed
+  /// (all tokens have already been yielded to the caller).
+  ///
+  /// [mode] controls validation strictness: [SchemaValidationMode.standard]
+  /// (default) checks types and required fields; [SchemaValidationMode.strict]
+  /// additionally rejects extra keys not in the schema.
+  ///
+  /// Example:
+  /// ```dart
+  /// final buffer = StringBuffer();
+  /// await for (final chunk in session.sendStructuredStream(
+  ///   'Extract name and age from: John is 30',
+  ///   schema: {'type': 'object', 'properties': {'name': {'type': 'string'}, 'age': {'type': 'integer'}}, 'required': ['name', 'age']},
+  /// )) {
+  ///   if (!chunk.isFinal) buffer.write(chunk.token);
+  /// }
+  /// // At this point, the response is validated against the schema
+  /// ```
+  Stream<TokenChunk> sendStructuredStream(
+    String prompt, {
+    required Map<String, dynamic> schema,
+    SchemaValidationMode mode = SchemaValidationMode.standard,
+    GenerateOptions? options,
+    CancelToken? cancelToken,
+  }) async* {
+    final validationStart = DateTime.now();
+
+    // Generate GBNF grammar from schema
+    final grammar = GbnfBuilder.fromJsonSchema(schema);
+
+    // Merge grammar into options
+    final grammarOptions = (options ?? const GenerateOptions()).copyWith(
+      grammarStr: grammar,
+      grammarRoot: 'root',
+    );
+
+    // Delegate streaming to sendStream (handles history management)
+    yield* sendStream(
+      prompt,
+      options: grammarOptions,
+      cancelToken: cancelToken,
+    );
+
+    // After stream completes, sendStream has added the assistant message
+    // to _messages. Extract the full response for validation.
+    final lastMsg = _messages.lastWhere((m) => m.role == ChatRole.assistant);
+    final rawOutput = lastMsg.content;
+
+    var recoveryAttempted = false;
+    var recoverySucceeded = false;
+    var repairs = const <String>[];
+
+    // Parse the response as JSON, with recovery fallback
+    Map<String, dynamic> parsed;
+    try {
+      parsed = jsonDecode(rawOutput) as Map<String, dynamic>;
+    } catch (_) {
+      // JSON parse failed -- attempt recovery
+      recoveryAttempted = true;
+      final recovery = JsonRecovery.tryRepairWithDetails(rawOutput);
+
+      if (recovery.repaired != null) {
+        try {
+          parsed = jsonDecode(recovery.repaired!) as Map<String, dynamic>;
+          recoverySucceeded = true;
+          repairs = recovery.repairs;
+        } catch (_) {
+          // Recovery parse also failed
+          final validationTimeMs =
+              DateTime.now().difference(validationStart).inMilliseconds;
+          onValidationEvent?.call(
+            ValidationEvent(
+              passed: false,
+              mode: mode,
+              recoveryAttempted: true,
+              recoverySucceeded: false,
+              repairs: recovery.repairs,
+              errors: ['JSON parse failed even after recovery'],
+              rawOutput: rawOutput,
+              validationTimeMs: validationTimeMs,
+            ),
+          );
+          throw GenerationException(
+            'Model output is not valid JSON (recovery failed)',
+            details:
+                'Output: "${rawOutput.length > 200 ? '${rawOutput.substring(0, 200)}...' : rawOutput}"',
+          );
+        }
+      } else {
+        // Unrecoverable
+        final validationTimeMs =
+            DateTime.now().difference(validationStart).inMilliseconds;
+        onValidationEvent?.call(
+          ValidationEvent(
+            passed: false,
+            mode: mode,
+            recoveryAttempted: true,
+            recoverySucceeded: false,
+            repairs: recovery.repairs,
+            errors: ['JSON unrecoverable: no structure found'],
+            rawOutput: rawOutput,
+            validationTimeMs: validationTimeMs,
+          ),
+        );
+        throw GenerationException(
+          'Model output is not valid JSON',
+          details:
+              'Output: "${rawOutput.length > 200 ? '${rawOutput.substring(0, 200)}...' : rawOutput}"',
+        );
+      }
+    }
+
+    // Validate against schema using the selected mode
+    final SchemaValidationResult validation;
+    if (mode == SchemaValidationMode.strict) {
+      validation = SchemaValidator.validateStrict(parsed, schema);
+    } else {
+      validation = SchemaValidator.validate(parsed, schema);
+    }
+
+    final validationTimeMs =
+        DateTime.now().difference(validationStart).inMilliseconds;
+
+    // Emit validation event regardless of pass/fail
+    onValidationEvent?.call(
+      ValidationEvent(
+        passed: validation.isValid,
+        mode: mode,
+        recoveryAttempted: recoveryAttempted,
+        recoverySucceeded: recoverySucceeded,
+        repairs: repairs,
+        errors: validation.isValid ? const [] : validation.errors,
+        rawOutput: rawOutput,
+        validationTimeMs: validationTimeMs,
+      ),
+    );
+
+    if (!validation.isValid) {
+      throw GenerationException(
+        'Model output failed schema validation',
+        details: 'Errors: ${validation.errors.join(', ')}',
+      );
+    }
+  }
+
   /// Reset conversation history (keep model loaded)
   ///
   /// Clears all messages but preserves the system prompt and model state.
