@@ -201,7 +201,7 @@ void main() {
       final grammar = GbnfBuilder.fromJsonSchema({
         'type': 'object',
         'properties': {
-          'color': {r'$ref': '#/$defs/Color'},
+          'color': {r'$ref': r'#/$defs/Color'},
         },
         r'$defs': {
           'Color': {
@@ -349,6 +349,259 @@ void main() {
 
       expect(grammar, isA<String>());
       expect(grammar, contains('root ::='));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // oneOf / anyOf composition (CGEN-01)
+  // ---------------------------------------------------------------------------
+  group('oneOf/anyOf composition', () {
+    test('simple oneOf produces alternation', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'oneOf': [
+          {'type': 'string'},
+          {'type': 'integer'},
+        ],
+      });
+
+      expect(grammar, contains('root ::='));
+      // The grammar must contain a rule with alternation (|)
+      expect(grammar, contains('|'));
+      expect(grammar, contains('string ws'));
+      expect(grammar, contains('integer ws'));
+    });
+
+    test('anyOf treated identically to oneOf', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'anyOf': [
+          {'type': 'string'},
+          {'type': 'number'},
+        ],
+      });
+
+      expect(grammar, contains('root ::='));
+      expect(grammar, contains('|'));
+      expect(grammar, contains('string ws'));
+      expect(grammar, contains('number ws'));
+    });
+
+    test('oneOf with \$ref alternatives resolves references', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'oneOf': [
+          {r'$ref': '#/definitions/Cat'},
+          {r'$ref': '#/definitions/Dog'},
+        ],
+        'definitions': {
+          'Cat': {
+            'type': 'object',
+            'properties': {
+              'meow': {'type': 'boolean'},
+            },
+            'required': ['meow'],
+          },
+          'Dog': {
+            'type': 'object',
+            'properties': {
+              'bark': {'type': 'boolean'},
+            },
+            'required': ['bark'],
+          },
+        },
+      });
+
+      expect(grammar, contains('root ::='));
+      expect(grammar, contains('"meow"'));
+      expect(grammar, contains('"bark"'));
+      expect(grammar, contains('|'));
+    });
+
+    test('object property with oneOf value', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'type': 'object',
+        'properties': {
+          'value': {
+            'oneOf': [
+              {'type': 'string'},
+              {'type': 'integer'},
+            ],
+          },
+        },
+        'required': ['value'],
+      });
+
+      expect(grammar, contains('"value"'));
+      expect(grammar, contains('|'));
+      expect(grammar, contains('string ws'));
+      expect(grammar, contains('integer ws'));
+    });
+
+    test('empty oneOf falls back to value', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'oneOf': [],
+      });
+
+      expect(grammar, contains('root ::= value'));
+    });
+
+    test('single alternative oneOf returns type directly', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'oneOf': [
+          {'type': 'string'},
+        ],
+      });
+
+      expect(grammar, contains('root ::= string ws'));
+    });
+
+    test('nested oneOf inside object inside oneOf', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'oneOf': [
+          {
+            'type': 'object',
+            'properties': {
+              'inner': {
+                'oneOf': [
+                  {'type': 'string'},
+                  {'type': 'boolean'},
+                ],
+              },
+            },
+            'required': ['inner'],
+          },
+          {'type': 'integer'},
+        ],
+      });
+
+      expect(grammar, contains('root ::='));
+      expect(grammar, contains('"inner"'));
+      expect(grammar, contains('integer ws'));
+      // Inner oneOf should produce its own alternation
+      expect(grammar, contains('string ws'));
+      expect(grammar, contains('boolean ws'));
+    });
+
+    test('oneOf with object alternatives (discriminated union)', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'oneOf': [
+          {
+            'type': 'object',
+            'properties': {
+              'type': {'enum': ['circle']},
+              'radius': {'type': 'number'},
+            },
+            'required': ['type', 'radius'],
+          },
+          {
+            'type': 'object',
+            'properties': {
+              'type': {'enum': ['square']},
+              'side': {'type': 'number'},
+            },
+            'required': ['type', 'side'],
+          },
+        ],
+      });
+
+      expect(grammar, contains('root ::='));
+      expect(grammar, contains('circle'));
+      expect(grammar, contains('square'));
+      expect(grammar, contains('"radius"'));
+      expect(grammar, contains('"side"'));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // additionalProperties enforcement (CGEN-03)
+  // ---------------------------------------------------------------------------
+  group('additionalProperties', () {
+    test('false with declared properties restricts to declared keys', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'type': 'object',
+        'properties': {
+          'name': {'type': 'string'},
+          'age': {'type': 'integer'},
+        },
+        'required': ['name', 'age'],
+        'additionalProperties': false,
+      });
+
+      expect(grammar, contains('root ::='));
+      expect(grammar, contains('name'));
+      expect(grammar, contains('age'));
+      expect(grammar, contains('string ws'));
+      expect(grammar, contains('integer ws'));
+    });
+
+    test('false with no properties produces empty object', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'type': 'object',
+        'properties': {},
+        'additionalProperties': false,
+      });
+
+      expect(grammar, contains('"{" ws "}" ws'));
+    });
+
+    test('true preserves current behavior', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'type': 'object',
+        'properties': {
+          'name': {'type': 'string'},
+        },
+        'required': ['name'],
+        'additionalProperties': true,
+      });
+
+      expect(grammar, contains('name'));
+      expect(grammar, contains('string ws'));
+    });
+
+    test('absent preserves current behavior', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'type': 'object',
+        'properties': {
+          'name': {'type': 'string'},
+        },
+        'required': ['name'],
+      });
+
+      expect(grammar, contains('name'));
+      expect(grammar, contains('string ws'));
+    });
+
+    test('type-less schema with properties and additionalProperties false treated as object', () {
+      // No 'type' key, but has 'properties' and additionalProperties: false
+      // Should NOT fall through to 'value'
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'properties': {
+          'name': {'type': 'string'},
+          'age': {'type': 'integer'},
+        },
+        'required': ['name'],
+        'additionalProperties': false,
+      });
+
+      expect(grammar, contains('name'));
+      expect(grammar, contains('string ws'));
+      // Must not fall back to just 'value' at root
+      expect(grammar, isNot(contains('root ::= value')));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // allOf defensive handling
+  // ---------------------------------------------------------------------------
+  group('allOf handling', () {
+    test('allOf falls back to value without crashing', () {
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'allOf': [
+          {'type': 'object', 'properties': {'a': {'type': 'string'}}},
+          {'type': 'object', 'properties': {'b': {'type': 'integer'}}},
+        ],
+      });
+
+      // Should not throw; should fall back to value
+      expect(grammar, contains('root ::= value'));
     });
   });
 }
