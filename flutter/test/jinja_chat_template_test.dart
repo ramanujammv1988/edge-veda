@@ -4,44 +4,44 @@ import 'package:test/test.dart';
 
 /// Real Llama 3 Instruct Jinja2 template from GGUF metadata.
 const _llama3Template =
-    "{% set loop_messages = messages %}"
-    "{% for message in loop_messages %}"
+    '{% set loop_messages = messages %}'
+    '{% for message in loop_messages %}'
     "{% set content = '<|start_header_id|>' + message['role'] + "
     "'<|end_header_id|>\n\n' + message['content'] | trim + '<|eot_id|>' %}"
-    "{% if loop.first %}{% set content = bos_token + content %}{% endif %}"
-    "{{ content }}"
-    "{% endfor %}"
-    "{% if add_generation_prompt %}"
+    '{% if loop.first %}{% set content = bos_token + content %}{% endif %}'
+    '{{ content }}'
+    '{% endfor %}'
+    '{% if add_generation_prompt %}'
     "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-    "{% endif %}";
+    '{% endif %}';
 
 /// Standard ChatML template used by many open models.
 const _chatMLTemplate =
-    "{% for message in messages %}"
+    '{% for message in messages %}'
     "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-    "{% endfor %}"
-    "{% if add_generation_prompt %}"
+    '{% endfor %}'
+    '{% if add_generation_prompt %}'
     "{{'<|im_start|>assistant\n'}}"
-    "{% endif %}";
+    '{% endif %}';
 
 /// Simplified tool-aware template inspired by Qwen3-style patterns.
 /// Checks for a `tools` variable and renders tool definitions before the
 /// conversation when present.
 const _toolAwareTemplate =
-    "{% if tools is defined and tools %}"
-    "<|im_start|>system\n"
-    "You have access to the following tools:\n"
-    "{% for tool in tools %}"
+    '{% if tools is defined and tools %}'
+    '<|im_start|>system\n'
+    'You have access to the following tools:\n'
+    '{% for tool in tools %}'
     "- {{ tool['function']['name'] }}: {{ tool['function']['description'] }}\n"
-    "{% endfor %}"
-    "<|im_end|>\n"
-    "{% endif %}"
-    "{% for message in messages %}"
+    '{% endfor %}'
+    '<|im_end|>\n'
+    '{% endif %}'
+    '{% for message in messages %}'
     "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-    "{% endfor %}"
-    "{% if add_generation_prompt %}"
+    '{% endfor %}'
+    '{% if add_generation_prompt %}'
     "{{'<|im_start|>assistant\n'}}"
-    "{% endif %}";
+    '{% endif %}';
 
 void main() {
   group('Llama 3 Instruct template', () {
@@ -293,11 +293,11 @@ void main() {
     test('bos_token and eos_token are injected into template output', () {
       // Template that explicitly uses bos_token and eos_token
       const tokenTemplate =
-          "{{ bos_token }}"
-          "{% for message in messages %}"
+          '{{ bos_token }}'
+          '{% for message in messages %}'
           "{{ message['content'] }}"
-          "{% endfor %}"
-          "{{ eos_token }}";
+          '{% endfor %}'
+          '{{ eos_token }}';
 
       final tmpl = JinjaChatTemplate(tokenTemplate);
       final result = tmpl.format(
