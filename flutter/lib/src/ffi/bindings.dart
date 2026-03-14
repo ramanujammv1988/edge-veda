@@ -831,12 +831,10 @@ typedef EvFreeEmbeddingsDart = void Function(Pointer<EvEmbedResult> result);
 // =============================================================================
 
 /// const char* ev_get_chat_template(ev_context ctx)
-typedef EvGetChatTemplateNative = Pointer<Utf8> Function(
-  Pointer<EvContextImpl> ctx,
-);
-typedef EvGetChatTemplateDart = Pointer<Utf8> Function(
-  Pointer<EvContextImpl> ctx,
-);
+typedef EvGetChatTemplateNative =
+    Pointer<Utf8> Function(Pointer<EvContextImpl> ctx);
+typedef EvGetChatTemplateDart =
+    Pointer<Utf8> Function(Pointer<EvContextImpl> ctx);
 
 // =============================================================================
 // Image Generation Function Types (matching edge_veda.h Image Generation API)

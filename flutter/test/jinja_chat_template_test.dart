@@ -365,10 +365,7 @@ void main() {
 
   group('Error handling', () {
     test('invalid template string throws at construction time', () {
-      expect(
-        () => JinjaChatTemplate('{% if %}'),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => JinjaChatTemplate('{% if %}'), throwsA(isA<Exception>()));
     });
 
     test('template calling raise_exception produces a Dart exception', () {
@@ -376,10 +373,7 @@ void main() {
         "{{ raise_exception('feature not supported') }}",
       );
 
-      expect(
-        () => tmpl.format(messages: []),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => tmpl.format(messages: []), throwsA(isA<Exception>()));
     });
   });
 }

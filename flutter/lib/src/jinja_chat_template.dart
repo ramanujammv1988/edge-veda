@@ -36,7 +36,7 @@ class JinjaChatTemplate {
   /// The template is compiled immediately. Throws if the template
   /// has syntax errors.
   JinjaChatTemplate(this.templateString)
-      : _compiled = _createEnvironment().fromString(templateString);
+    : _compiled = _createEnvironment().fromString(templateString);
 
   /// Format a conversation using the Jinja2 template.
   ///

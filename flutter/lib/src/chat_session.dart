@@ -670,9 +670,10 @@ class ChatSession {
       }
     }
     return ChatTemplate.format(
-      template: templateFormat == ChatTemplateFormat.auto
-          ? ChatTemplateFormat.llama3Instruct
-          : templateFormat,
+      template:
+          templateFormat == ChatTemplateFormat.auto
+              ? ChatTemplateFormat.llama3Instruct
+              : templateFormat,
       systemPrompt: systemPrompt,
       messages: _messages,
     );
@@ -702,25 +703,25 @@ class ChatSession {
         );
       } catch (e) {
         // Fall through to hardcoded tool formatting
-        print(
-          'ChatSession: Jinja2 tool formatting failed, using fallback: $e',
-        );
+        print('ChatSession: Jinja2 tool formatting failed, using fallback: $e');
       }
     }
 
     // Hardcoded path: use ToolTemplate to inject tools into system prompt
     final toolSystemPrompt = ToolTemplate.formatToolSystemPrompt(
-      format: templateFormat == ChatTemplateFormat.auto
-          ? ChatTemplateFormat.llama3Instruct
-          : templateFormat,
+      format:
+          templateFormat == ChatTemplateFormat.auto
+              ? ChatTemplateFormat.llama3Instruct
+              : templateFormat,
       tools: tools.tools,
       systemPrompt: systemPrompt,
     );
 
     return ChatTemplate.format(
-      template: templateFormat == ChatTemplateFormat.auto
-          ? ChatTemplateFormat.llama3Instruct
-          : templateFormat,
+      template:
+          templateFormat == ChatTemplateFormat.auto
+              ? ChatTemplateFormat.llama3Instruct
+              : templateFormat,
       systemPrompt: toolSystemPrompt,
       messages: _messages,
     );
