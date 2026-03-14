@@ -127,9 +127,7 @@ void main() {
             },
             'required': ['name'],
           },
-          'ZipCode': {
-            'type': 'string',
-          },
+          'ZipCode': {'type': 'string'},
         },
         'required': ['address'],
       });
@@ -204,9 +202,7 @@ void main() {
           'color': {r'$ref': r'#/$defs/Color'},
         },
         r'$defs': {
-          'Color': {
-            'type': 'string',
-          },
+          'Color': {'type': 'string'},
         },
         'required': ['color'],
       });
@@ -236,20 +232,17 @@ void main() {
 
     test('schema exceeding budget degrades to value', () {
       // Use a very small budget to trigger degradation
-      final result = GbnfBuilder.build(
-        {
-          'type': 'object',
-          'properties': {
-            'a': {'type': 'string'},
-            'b': {'type': 'string'},
-            'c': {'type': 'string'},
-            'd': {'type': 'string'},
-            'e': {'type': 'string'},
-          },
-          'required': ['a', 'b', 'c', 'd', 'e'],
+      final result = GbnfBuilder.build({
+        'type': 'object',
+        'properties': {
+          'a': {'type': 'string'},
+          'b': {'type': 'string'},
+          'c': {'type': 'string'},
+          'd': {'type': 'string'},
+          'e': {'type': 'string'},
         },
-        maxRules: 3,
-      );
+        'required': ['a', 'b', 'c', 'd', 'e'],
+      }, maxRules: 3);
 
       // Should still produce valid grammar
       expect(result.grammar, contains('root ::='));
@@ -261,20 +254,17 @@ void main() {
       // Use a schema with many properties to ensure rule budget is exceeded.
       // Budget check triggers when _buildRule is called with _rules.length >= maxRules.
       // With 5 required properties + object rule + 5 prop rules = 6 rules minimum.
-      final result = GbnfBuilder.build(
-        {
-          'type': 'object',
-          'properties': {
-            'a': {'type': 'string'},
-            'b': {'type': 'string'},
-            'c': {'type': 'string'},
-            'd': {'type': 'string'},
-            'e': {'type': 'string'},
-          },
-          'required': ['a', 'b', 'c', 'd', 'e'],
+      final result = GbnfBuilder.build({
+        'type': 'object',
+        'properties': {
+          'a': {'type': 'string'},
+          'b': {'type': 'string'},
+          'c': {'type': 'string'},
+          'd': {'type': 'string'},
+          'e': {'type': 'string'},
         },
-        maxRules: 3,
-      );
+        'required': ['a', 'b', 'c', 'd', 'e'],
+      }, maxRules: 3);
 
       expect(result.budgetExceeded, isTrue);
     });
@@ -282,42 +272,33 @@ void main() {
     test('custom budget via maxRules parameter', () {
       // Low budget: 5 required properties generate prop rules, so with maxRules: 3
       // the budget will be exceeded when the 4th property _buildRule call runs.
-      final resultLow = GbnfBuilder.build(
-        {
-          'type': 'object',
-          'properties': {
-            'a': {'type': 'string'},
-            'b': {'type': 'string'},
-            'c': {'type': 'string'},
-            'd': {'type': 'string'},
-            'e': {'type': 'string'},
-          },
-          'required': ['a', 'b', 'c', 'd', 'e'],
+      final resultLow = GbnfBuilder.build({
+        'type': 'object',
+        'properties': {
+          'a': {'type': 'string'},
+          'b': {'type': 'string'},
+          'c': {'type': 'string'},
+          'd': {'type': 'string'},
+          'e': {'type': 'string'},
         },
-        maxRules: 3,
-      );
+        'required': ['a', 'b', 'c', 'd', 'e'],
+      }, maxRules: 3);
 
-      final resultHigh = GbnfBuilder.build(
-        {
-          'type': 'object',
-          'properties': {
-            'a': {'type': 'string'},
-            'b': {'type': 'string'},
-          },
-          'required': ['a', 'b'],
+      final resultHigh = GbnfBuilder.build({
+        'type': 'object',
+        'properties': {
+          'a': {'type': 'string'},
+          'b': {'type': 'string'},
         },
-        maxRules: 500,
-      );
+        'required': ['a', 'b'],
+      }, maxRules: 500);
 
       expect(resultLow.budgetExceeded, isTrue);
       expect(resultHigh.budgetExceeded, isFalse);
     });
 
     test('budget of 0 degrades entire schema to value', () {
-      final result = GbnfBuilder.build(
-        {'type': 'string'},
-        maxRules: 0,
-      );
+      final result = GbnfBuilder.build({'type': 'string'}, maxRules: 0);
 
       expect(result.grammar, contains('root ::= value'));
       expect(result.budgetExceeded, isTrue);
@@ -338,17 +319,14 @@ void main() {
     });
 
     test('fromJsonSchema accepts optional maxRules', () {
-      final grammar = GbnfBuilder.fromJsonSchema(
-        {
-          'type': 'object',
-          'properties': {
-            'a': {'type': 'string'},
-            'b': {'type': 'string'},
-          },
-          'required': ['a', 'b'],
+      final grammar = GbnfBuilder.fromJsonSchema({
+        'type': 'object',
+        'properties': {
+          'a': {'type': 'string'},
+          'b': {'type': 'string'},
         },
-        maxRules: 500,
-      );
+        'required': ['a', 'b'],
+      }, maxRules: 500);
 
       expect(grammar, isA<String>());
       expect(grammar, contains('root ::='));
@@ -439,9 +417,7 @@ void main() {
     });
 
     test('empty oneOf falls back to value', () {
-      final grammar = GbnfBuilder.fromJsonSchema({
-        'oneOf': [],
-      });
+      final grammar = GbnfBuilder.fromJsonSchema({'oneOf': []});
 
       expect(grammar, contains('root ::= value'));
     });
@@ -489,7 +465,9 @@ void main() {
           {
             'type': 'object',
             'properties': {
-              'type': {'enum': ['circle']},
+              'type': {
+                'enum': ['circle'],
+              },
               'radius': {'type': 'number'},
             },
             'required': ['type', 'radius'],
@@ -497,7 +475,9 @@ void main() {
           {
             'type': 'object',
             'properties': {
-              'type': {'enum': ['square']},
+              'type': {
+                'enum': ['square'],
+              },
               'side': {'type': 'number'},
             },
             'required': ['type', 'side'],
@@ -572,23 +552,26 @@ void main() {
       expect(grammar, contains('string ws'));
     });
 
-    test('type-less schema with properties and additionalProperties false treated as object', () {
-      // No 'type' key, but has 'properties' and additionalProperties: false
-      // Should NOT fall through to 'value'
-      final grammar = GbnfBuilder.fromJsonSchema({
-        'properties': {
-          'name': {'type': 'string'},
-          'age': {'type': 'integer'},
-        },
-        'required': ['name'],
-        'additionalProperties': false,
-      });
+    test(
+      'type-less schema with properties and additionalProperties false treated as object',
+      () {
+        // No 'type' key, but has 'properties' and additionalProperties: false
+        // Should NOT fall through to 'value'
+        final grammar = GbnfBuilder.fromJsonSchema({
+          'properties': {
+            'name': {'type': 'string'},
+            'age': {'type': 'integer'},
+          },
+          'required': ['name'],
+          'additionalProperties': false,
+        });
 
-      expect(grammar, contains('name'));
-      expect(grammar, contains('string ws'));
-      // Must not fall back to just 'value' at root
-      expect(grammar, isNot(contains('root ::= value')));
-    });
+        expect(grammar, contains('name'));
+        expect(grammar, contains('string ws'));
+        // Must not fall back to just 'value' at root
+        expect(grammar, isNot(contains('root ::= value')));
+      },
+    );
   });
 
   // ---------------------------------------------------------------------------
@@ -598,8 +581,18 @@ void main() {
     test('allOf falls back to value without crashing', () {
       final grammar = GbnfBuilder.fromJsonSchema({
         'allOf': [
-          {'type': 'object', 'properties': {'a': {'type': 'string'}}},
-          {'type': 'object', 'properties': {'b': {'type': 'integer'}}},
+          {
+            'type': 'object',
+            'properties': {
+              'a': {'type': 'string'},
+            },
+          },
+          {
+            'type': 'object',
+            'properties': {
+              'b': {'type': 'integer'},
+            },
+          },
         ],
       });
 

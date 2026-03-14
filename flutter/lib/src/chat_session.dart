@@ -681,9 +681,7 @@ class ChatSession {
 
     // After stream completes, sendStream has added the assistant message
     // to _messages. Extract the full response for validation.
-    final lastMsg = _messages.lastWhere(
-      (m) => m.role == ChatRole.assistant,
-    );
+    final lastMsg = _messages.lastWhere((m) => m.role == ChatRole.assistant);
     final rawOutput = lastMsg.content;
 
     var recoveryAttempted = false;

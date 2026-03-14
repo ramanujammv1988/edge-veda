@@ -312,9 +312,10 @@ ws ::= | " " | "\n" [ \t]{0,20}
   /// Build an object rule from properties and required list.
   String _buildObject(Map<String, dynamic> schema) {
     final rawProps = schema['properties'];
-    final properties = rawProps is Map
-        ? Map<String, dynamic>.from(rawProps)
-        : <String, dynamic>{};
+    final properties =
+        rawProps is Map
+            ? Map<String, dynamic>.from(rawProps)
+            : <String, dynamic>{};
     final requiredList = (schema['required'] as List?)?.cast<String>() ?? [];
 
     if (properties.isEmpty) {
