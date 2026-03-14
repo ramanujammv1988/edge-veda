@@ -155,6 +155,7 @@ class EdgeVeda {
     final numThreads = config.numThreads;
     final contextSize = config.contextLength;
     final useGpu = config.useGpu;
+    final useVulkan = config.useVulkan;
     final flashAttn = config.flashAttn;
     final kvCacheTypeK = config.kvCacheTypeK;
     final kvCacheTypeV = config.kvCacheTypeV;
@@ -174,13 +175,13 @@ class EdgeVeda {
           // Populate config
           configPtr.ref.modelPath = modelPathPtr;
           configPtr.ref.backend =
-              useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+              (useGpu && useVulkan) ? EvBackend.auto_.value : EvBackend.cpu.value;
           configPtr.ref.numThreads = numThreads;
           configPtr.ref.contextSize = contextSize;
           configPtr.ref.batchSize = 512;
           configPtr.ref.memoryLimitBytes = 0;
           configPtr.ref.autoUnloadOnMemoryPressure = true;
-          configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+          configPtr.ref.gpuLayers = (useGpu && useVulkan) ? -1 : 0;
           configPtr.ref.useMmap = true;
           configPtr.ref.useMlock = false;
           configPtr.ref.seed = -1;
@@ -420,6 +421,7 @@ class EdgeVeda {
           numThreads: _config!.numThreads,
           contextSize: _config!.contextLength,
           useGpu: _config!.useGpu,
+          useVulkan: _config!.useVulkan,
           memoryLimitBytes: _config!.maxMemoryMb * 1024 * 1024,
           flashAttn: _config!.flashAttn,
           kvCacheTypeK: _config!.kvCacheTypeK,
@@ -526,6 +528,7 @@ class EdgeVeda {
     final numThreads = _config!.numThreads;
     final contextSize = _config!.contextLength;
     final useGpu = _config!.useGpu;
+    final useVulkan = _config!.useVulkan;
     final flashAttn = _config!.flashAttn;
     final kvCacheTypeK = _config!.kvCacheTypeK;
     final kvCacheTypeV = _config!.kvCacheTypeV;
@@ -541,13 +544,13 @@ class EdgeVeda {
       try {
         configPtr.ref.modelPath = modelPathPtr;
         configPtr.ref.backend =
-            useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+            (useGpu && useVulkan) ? EvBackend.auto_.value : EvBackend.cpu.value;
         configPtr.ref.numThreads = numThreads;
         configPtr.ref.contextSize = contextSize;
         configPtr.ref.batchSize = 512;
         configPtr.ref.memoryLimitBytes = 0;
         configPtr.ref.autoUnloadOnMemoryPressure = true;
-        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+        configPtr.ref.gpuLayers = (useGpu && useVulkan) ? -1 : 0;
         configPtr.ref.useMmap = true;
         configPtr.ref.useMlock = false;
         configPtr.ref.seed = -1;
@@ -628,6 +631,7 @@ class EdgeVeda {
     final numThreads = _config!.numThreads;
     final contextSize = _config!.contextLength;
     final useGpu = _config!.useGpu;
+    final useVulkan = _config!.useVulkan;
     final flashAttn = _config!.flashAttn;
     final kvCacheTypeK = _config!.kvCacheTypeK;
     final kvCacheTypeV = _config!.kvCacheTypeV;
@@ -643,13 +647,13 @@ class EdgeVeda {
       try {
         configPtr.ref.modelPath = modelPathPtr;
         configPtr.ref.backend =
-            useGpu ? EvBackend.auto_.value : EvBackend.cpu.value;
+            (useGpu && useVulkan) ? EvBackend.auto_.value : EvBackend.cpu.value;
         configPtr.ref.numThreads = numThreads;
         configPtr.ref.contextSize = contextSize;
         configPtr.ref.batchSize = 512;
         configPtr.ref.memoryLimitBytes = 0;
         configPtr.ref.autoUnloadOnMemoryPressure = true;
-        configPtr.ref.gpuLayers = useGpu ? -1 : 0;
+        configPtr.ref.gpuLayers = (useGpu && useVulkan) ? -1 : 0;
         configPtr.ref.useMmap = true;
         configPtr.ref.useMlock = false;
         configPtr.ref.seed = -1;
