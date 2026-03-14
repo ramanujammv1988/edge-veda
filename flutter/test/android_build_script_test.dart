@@ -296,10 +296,11 @@ void main() {
       expect(content, contains('EDGE_VEDA_BUILD_STATIC=OFF'));
     });
 
-    test('disables Vulkan (CPU-only for initial build)', () {
+    test('supports Vulkan with --no-vulkan opt-out', () {
       if (!scriptFile.existsSync()) return;
       final content = scriptFile.readAsStringSync();
-      expect(content, contains('EDGE_VEDA_ENABLE_VULKAN=OFF'));
+      expect(content, contains('EDGE_VEDA_ENABLE_VULKAN='));
+      expect(content, contains('--no-vulkan'));
     });
 
     test('disables OpenMP (not available in NDK r26)', () {
@@ -502,8 +503,9 @@ void main() {
       final androidContent = scriptFile.readAsStringSync();
       final iosContent = iosScriptFile.readAsStringSync();
 
-      // Android has no Metal — uses ENABLE_VULKAN instead
-      expect(androidContent, contains('ENABLE_VULKAN=OFF'));
+      // Android has no Metal — uses Vulkan instead
+      expect(androidContent, contains('ENABLE_VULKAN='));
+      expect(androidContent, isNot(contains('ENABLE_METAL=')));
       expect(iosContent, contains('ENABLE_METAL=ON'));
     });
   });
