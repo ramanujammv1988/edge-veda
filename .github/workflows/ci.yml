@@ -212,10 +212,10 @@ jobs:
           ndk-version: r26c
           add-to-path: true
 
-      - name: Install CMake and Ninja
+      - name: Install CMake, Ninja, and Vulkan tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build ccache
+          sudo apt-get install -y cmake ninja-build ccache shaderc
 
       - name: Configure ccache
         uses: hendrikmuhs/ccache-action@v1.2
