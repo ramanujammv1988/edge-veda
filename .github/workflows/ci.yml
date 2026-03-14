@@ -224,12 +224,19 @@ jobs:
           if [ -f "$GLSLC_DIR/glslc" ]; then
             echo "$GLSLC_DIR" >> $GITHUB_PATH
           fi
-          # NDK has Vulkan C headers but not C++ headers (vulkan.hpp)
-          # Copy host C++ headers into NDK include path for cross-compilation
-          NDK_VK="${{ steps.setup-ndk.outputs.ndk-path }}/sources/third_party/vulkan/src/include/vulkan"
-          for f in /usr/include/vulkan/*.hpp; do
-            sudo cp "$f" "$NDK_VK/" 2>/dev/null || true
-          done
+          # NDK has Vulkan C headers (vulkan.h) but NOT C++ headers (vulkan.hpp)
+          # The compiler's --sysroot points to NDK's sysroot, so we must place
+          # vulkan.hpp there for #include <vulkan/vulkan.hpp> to resolve
+          NDK_SYSROOT_VK="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan"
+          # Download Vulkan C++ headers from Khronos (compatible with NDK r26c)
+          VULKAN_HPP_TAG="v1.3.268"
+          TMP_VK_HPP=$(mktemp -d)
+          curl -sL "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/${VULKAN_HPP_TAG}.tar.gz" | \
+            tar xz -C "$TMP_VK_HPP"
+          sudo cp "$TMP_VK_HPP"/Vulkan-Headers-*/include/vulkan/*.hpp "$NDK_SYSROOT_VK/"
+          rm -rf "$TMP_VK_HPP"
+          echo "Vulkan C++ headers installed in NDK sysroot:"
+          ls "$NDK_SYSROOT_VK"/*.hpp | head -5
 
       - name: Configure ccache
         uses: hendrikmuhs/ccache-action@v1.2
