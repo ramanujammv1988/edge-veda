@@ -159,7 +159,7 @@ void main() {
 
     group('JSON recovery for malformed stream output', () {
       test('recovers JSON with leading text', () {
-        final malformed = 'Here is the JSON: {"name": "John", "age": 30}';
+        const malformed = 'Here is the JSON: {"name": "John", "age": 30}';
         final repaired = JsonRecovery.tryRepair(malformed);
 
         expect(repaired, isNotNull);
@@ -169,7 +169,7 @@ void main() {
       });
 
       test('recovers truncated JSON with missing closer', () {
-        final malformed = '{"name": "John", "age": 30';
+        const malformed = '{"name": "John", "age": 30';
         final result = JsonRecovery.tryRepairWithDetails(malformed);
 
         expect(result.repaired, isNotNull);
@@ -247,7 +247,7 @@ void main() {
         }
 
         // Validate
-        final result = SchemaValidator.validate(parsed!, schema);
+        final result = SchemaValidator.validate(parsed, schema);
         expect(result.isValid, true);
         expect(parsed['city'], 'Tokyo');
       });
