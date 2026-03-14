@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:edge_veda/edge_veda.dart';
 
@@ -270,7 +268,7 @@ void main() {
     });
 
     test('parseToolCalls extracts Qwen3-style tool call', () {
-      final output =
+      const output =
           '<tool_call>\n{"name": "get_weather", "arguments": {"location": "Tokyo"}}\n</tool_call>';
       final calls = ToolTemplate.parseToolCalls(
         format: ChatTemplateFormat.qwen3,
@@ -284,7 +282,7 @@ void main() {
     });
 
     test('parseToolCalls extracts Gemma3-style tool call', () {
-      final output = '{"name": "search", "parameters": {"query": "flutter"}}';
+      const output = '{"name": "search", "parameters": {"query": "flutter"}}';
       final calls = ToolTemplate.parseToolCalls(
         format: ChatTemplateFormat.gemma3,
         output: output,
