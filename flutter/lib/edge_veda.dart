@@ -171,7 +171,7 @@ export 'src/tool_template.dart' show ToolTemplate;
 export 'src/schema_validator.dart'
     show SchemaValidator, SchemaValidationResult, SchemaValidationMode;
 
-export 'src/gbnf_builder.dart' show GbnfBuilder;
+export 'src/gbnf_builder.dart' show GbnfBuilder, GbnfResult;
 
 // JSON recovery utilities
 export 'src/json_recovery.dart' show JsonRecovery, JsonRecoveryResult;
