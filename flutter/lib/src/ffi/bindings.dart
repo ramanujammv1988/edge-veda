@@ -827,6 +827,18 @@ typedef EvFreeEmbeddingsNative = Void Function(Pointer<EvEmbedResult> result);
 typedef EvFreeEmbeddingsDart = void Function(Pointer<EvEmbedResult> result);
 
 // =============================================================================
+// Chat Template Function Types
+// =============================================================================
+
+/// const char* ev_get_chat_template(ev_context ctx)
+typedef EvGetChatTemplateNative = Pointer<Utf8> Function(
+  Pointer<EvContextImpl> ctx,
+);
+typedef EvGetChatTemplateDart = Pointer<Utf8> Function(
+  Pointer<EvContextImpl> ctx,
+);
+
+// =============================================================================
 // Image Generation Function Types (matching edge_veda.h Image Generation API)
 // =============================================================================
 
@@ -1122,6 +1134,23 @@ class EdgeVedaNativeBindings {
   late final EvFreeEmbeddingsDart evFreeEmbeddings;
 
   // ---------------------------------------------------------------------------
+  // Chat Template Functions
+  // ---------------------------------------------------------------------------
+
+  /// Get chat template string from GGUF model metadata
+  late final EvGetChatTemplateDart evGetChatTemplate;
+
+  /// Get chat template as Dart String, or null if not available.
+  ///
+  /// The returned string is the raw Jinja2 template from GGUF metadata.
+  /// Valid only while the context is alive.
+  String? getChatTemplate(Pointer<EvContextImpl> ctx) {
+    final ptr = evGetChatTemplate(ctx);
+    if (ptr == nullptr) return null;
+    return ptr.toDartString();
+  }
+
+  // ---------------------------------------------------------------------------
   // Image Generation Functions
   // ---------------------------------------------------------------------------
 
@@ -1314,6 +1343,12 @@ class EdgeVedaNativeBindings {
     evFreeEmbeddings = _dylib
         .lookupFunction<EvFreeEmbeddingsNative, EvFreeEmbeddingsDart>(
           'ev_free_embeddings',
+        );
+
+    // Chat template
+    evGetChatTemplate = _dylib
+        .lookupFunction<EvGetChatTemplateNative, EvGetChatTemplateDart>(
+          'ev_get_chat_template',
         );
 
     // Streaming confidence
