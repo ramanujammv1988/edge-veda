@@ -122,6 +122,80 @@ check_tools() {
 check_tools
 
 # ============================================================================
+# Setup Vulkan C++ headers for cross-compilation
+# ============================================================================
+setup_vulkan() {
+    if [ "$VULKAN_ENABLED" != "ON" ]; then
+        return
+    fi
+
+    # Detect host OS for NDK prebuilt path
+    case "$(uname -s)" in
+        Linux*)  NDK_HOST="linux-x86_64" ;;
+        Darwin*) NDK_HOST="darwin-x86_64" ;;
+        *)       echo "WARNING: Unsupported host OS for Vulkan, disabling"; VULKAN_ENABLED="OFF"; return ;;
+    esac
+
+    NDK_SYSROOT_VK="$ANDROID_NDK/toolchains/llvm/prebuilt/$NDK_HOST/sysroot/usr/include/vulkan"
+
+    if [ ! -f "$NDK_SYSROOT_VK/vulkan_core.h" ]; then
+        echo "WARNING: Vulkan C headers not found in NDK sysroot, disabling Vulkan"
+        VULKAN_ENABLED="OFF"
+        return
+    fi
+
+    # Add glslc to PATH (must happen before any early returns)
+    GLSLC_DIR="$ANDROID_NDK/shader-tools/$NDK_HOST"
+    if [ -x "$GLSLC_DIR/glslc" ]; then
+        export PATH="$GLSLC_DIR:$PATH"
+        echo "Added NDK glslc to PATH: $GLSLC_DIR/glslc"
+    elif ! command -v glslc &>/dev/null; then
+        echo "WARNING: glslc not found, disabling Vulkan"
+        VULKAN_ENABLED="OFF"
+        return
+    fi
+
+    # Check if vulkan.hpp already exists (matching version)
+    if [ -f "$NDK_SYSROOT_VK/vulkan.hpp" ]; then
+        echo "Vulkan C++ headers already present in NDK sysroot"
+        return
+    fi
+
+    # Read VK_HEADER_VERSION from NDK's vulkan_core.h to download matching C++ headers
+    VK_VERSION=$(grep '#define VK_HEADER_VERSION ' "$NDK_SYSROOT_VK/vulkan_core.h" | awk '{print $3}')
+    if [ -z "$VK_VERSION" ]; then
+        echo "WARNING: Could not detect VK_HEADER_VERSION, disabling Vulkan"
+        VULKAN_ENABLED="OFF"
+        return
+    fi
+
+    VULKAN_HPP_VERSION="1.3.${VK_VERSION}"
+    VULKAN_HPP_TAG="v${VULKAN_HPP_VERSION}"
+    echo "NDK Vulkan header version: $VK_VERSION → downloading Vulkan-Headers $VULKAN_HPP_TAG"
+
+    TMP_VK_HPP=$(mktemp -d)
+    if curl -sL "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/${VULKAN_HPP_TAG}.tar.gz" | \
+        tar xz -C "$TMP_VK_HPP" 2>/dev/null; then
+        # Copy C++ headers (.hpp) into NDK sysroot alongside existing C headers
+        HPP_DIR="$TMP_VK_HPP/Vulkan-Headers-${VULKAN_HPP_VERSION}/include/vulkan"
+        if [ -d "$HPP_DIR" ]; then
+            cp "$HPP_DIR"/*.hpp "$NDK_SYSROOT_VK/" 2>/dev/null || \
+                sudo cp "$HPP_DIR"/*.hpp "$NDK_SYSROOT_VK/"
+            echo "Installed Vulkan C++ headers ($(ls "$NDK_SYSROOT_VK"/*.hpp 2>/dev/null | wc -l | tr -d ' ') files)"
+        else
+            echo "WARNING: Expected headers not found in downloaded archive, disabling Vulkan"
+            VULKAN_ENABLED="OFF"
+        fi
+    else
+        echo "WARNING: Failed to download Vulkan-Headers $VULKAN_HPP_TAG, disabling Vulkan"
+        VULKAN_ENABLED="OFF"
+    fi
+    rm -rf "$TMP_VK_HPP"
+}
+
+setup_vulkan
+
+# ============================================================================
 # Clean if requested
 # ============================================================================
 if [ "$CLEAN" = true ]; then
@@ -152,12 +226,25 @@ for abi in $ABIS; do
     BUILD_ABI_DIR="$BUILD_DIR/$abi"
     mkdir -p "$BUILD_ABI_DIR"
 
+    VULKAN_CMAKE_ARGS=""
+    ANDROID_API_LEVEL="android-24"
+    if [ "$VULKAN_ENABLED" = "ON" ]; then
+        # Vulkan 1.1 functions (vkGetPhysicalDeviceFeatures2 etc.) require API 29+
+        ANDROID_API_LEVEL="android-30"
+        # glslc is a host tool — must be passed explicitly during cross-compilation
+        # because cmake's find_program won't search host paths
+        GLSLC_EXE=$(command -v glslc 2>/dev/null || echo "")
+        if [ -n "$GLSLC_EXE" ]; then
+            VULKAN_CMAKE_ARGS="-DVulkan_GLSLC_EXECUTABLE=$GLSLC_EXE"
+        fi
+    fi
+
     cmake -B "$BUILD_ABI_DIR" \
         -S "$CORE_DIR" \
         -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$CORE_DIR/cmake/android.toolchain.cmake" \
         -DANDROID_ABI="$abi" \
-        -DANDROID_PLATFORM=android-24 \
+        -DANDROID_PLATFORM=$ANDROID_API_LEVEL \
         -DANDROID_STL=c++_shared \
         -DANDROID_NDK="$ANDROID_NDK" \
         -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -165,7 +252,8 @@ for abi in $ABIS; do
         -DEDGE_VEDA_BUILD_STATIC=OFF \
         -DEDGE_VEDA_ENABLE_VULKAN=$VULKAN_ENABLED \
         -DEDGE_VEDA_ENABLE_CPU=ON \
-        -DGGML_OPENMP=OFF
+        -DGGML_OPENMP=OFF \
+        $VULKAN_CMAKE_ARGS
 
     cmake --build "$BUILD_ABI_DIR" --config "$BUILD_TYPE"
 
@@ -244,11 +332,11 @@ for abi in "${BUILT_ABIS[@]}"; do
     echo ""
     echo "--- $abi ---"
 
-    # File size check (warn if > 35MB per ABI — 3 engines: llama + whisper + SD)
+    # File size check (warn if > 60MB per ABI — 3 engines: llama + whisper + SD + Vulkan)
     SO_SIZE_KB=$(du -k "$SO_FILE" | cut -f1)
-    MAX_SIZE_KB=35840  # 35MB
+    MAX_SIZE_KB=61440  # 60MB
     if [ "$SO_SIZE_KB" -gt "$MAX_SIZE_KB" ]; then
-        echo "  WARNING: libedge_veda.so (${SO_SIZE_KB}KB) exceeds 35MB"
+        echo "  WARNING: libedge_veda.so (${SO_SIZE_KB}KB) exceeds 60MB"
     fi
     echo "  Size: ${SO_SIZE_KB}KB (warning threshold: ${MAX_SIZE_KB}KB)"
 

@@ -212,31 +212,10 @@ jobs:
           ndk-version: r26c
           add-to-path: true
 
-      - name: Install CMake, Ninja, and Vulkan SDK
+      - name: Install CMake and Ninja
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build ccache libvulkan-dev
-
-      - name: Setup Vulkan for Android cross-compilation
-        run: |
-          # Add NDK glslc to PATH for shader compilation
-          GLSLC_DIR="${{ steps.setup-ndk.outputs.ndk-path }}/shader-tools/linux-x86_64"
-          if [ -f "$GLSLC_DIR/glslc" ]; then
-            echo "$GLSLC_DIR" >> $GITHUB_PATH
-          fi
-          # NDK has Vulkan C headers (vulkan.h) but NOT C++ headers (vulkan.hpp)
-          # The compiler's --sysroot points to NDK's sysroot, so we must place
-          # vulkan.hpp there for #include <vulkan/vulkan.hpp> to resolve
-          NDK_SYSROOT_VK="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan"
-          # Download Vulkan C++ headers from Khronos (compatible with NDK r26c)
-          VULKAN_HPP_TAG="v1.3.268"
-          TMP_VK_HPP=$(mktemp -d)
-          curl -sL "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/${VULKAN_HPP_TAG}.tar.gz" | \
-            tar xz -C "$TMP_VK_HPP"
-          sudo cp "$TMP_VK_HPP"/Vulkan-Headers-*/include/vulkan/*.hpp "$NDK_SYSROOT_VK/"
-          rm -rf "$TMP_VK_HPP"
-          echo "Vulkan C++ headers installed in NDK sysroot:"
-          ls "$NDK_SYSROOT_VK"/*.hpp | head -5
+          sudo apt-get install -y cmake ninja-build ccache
 
       - name: Configure ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -252,11 +231,11 @@ jobs:
         run: |
           echo "Android shared library sizes:"
           find build/android/jniLibs -name "*.so" -exec ls -lh {} \;
-          # Fail if any .so exceeds 35MB (3 engines: llama + whisper + SD)
+          # Fail if any .so exceeds 60MB (3 engines: llama + whisper + SD + Vulkan GPU backend)
           find build/android/jniLibs -name "libedge_veda.so" | while read file; do
             size=$(stat -c%s "$file")
-            if [ $size -gt 36700160 ]; then
-              echo "ERROR: $file is too large: $size bytes (>35MB)"
+            if [ $size -gt 62914560 ]; then
+              echo "ERROR: $file is too large: $size bytes (>60MB)"
               exit 1
             fi
           done
