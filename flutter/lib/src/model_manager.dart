@@ -848,6 +848,42 @@ class ModelRegistry {
     family: 'tinyllama',
   );
 
+  // === Medical Specialized Models ===
+
+  /// MedGemma 2B (Q4_K_M) - Google's medical specialized LLM
+  static const ModelInfo medGemma2b = ModelInfo(
+    id: 'medgemma-2b-q4km',
+    name: 'MedGemma 2B',
+    sizeBytes: 1600 * 1024 * 1024, // ~1.6 GB
+    description:
+        'Google MedGemma 2B - Medical specialized LLM for clinical text understanding',
+    downloadUrl:
+        'https://huggingface.co/google/medgemma-2b-GGUF/resolve/main/medgemma-2b-q4_k_m.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    parametersB: 2.0,
+    maxContextLength: 8192,
+    capabilities: ['medical', 'clinical', 'extraction', 'chat'],
+    family: 'gemma2',
+  );
+
+  /// MedGemma 4B (Q4_K_M) - Enhanced medical reasoning model
+  static const ModelInfo medGemma4b = ModelInfo(
+    id: 'medgemma-4b-q4km',
+    name: 'MedGemma 4B',
+    sizeBytes: 2800 * 1024 * 1024, // ~2.8 GB
+    description:
+        'Google MedGemma 4B - Medical specialized LLM with enhanced clinical reasoning',
+    downloadUrl:
+        'https://huggingface.co/google/medgemma-4b-GGUF/resolve/main/medgemma-4b-q4_k_m.gguf',
+    format: 'GGUF',
+    quantization: 'Q4_K_M',
+    parametersB: 4.0,
+    maxContextLength: 8192,
+    capabilities: ['medical', 'clinical', 'extraction', 'reasoning', 'chat'],
+    family: 'gemma2',
+  );
+
   // === Tool Calling Models ===
 
   /// Qwen3 0.6B (Q4_K_M) - Tool calling capable model
@@ -1247,10 +1283,16 @@ class ModelRegistry {
     return [allMiniLmL6V2, nomicEmbedText, mxbaiEmbedLarge];
   }
 
+  /// Get all available medical specialized models
+  static List<ModelInfo> getMedicalModels() {
+    return [medGemma2b, medGemma4b];
+  }
+
   /// Get model by ID (searches all categories)
   static ModelInfo? getModelById(String id) {
     final allModels = [
       ...getAllModels(),
+      ...getMedicalModels(),
       ...getVisionModels(),
       smolvlm2_256m_mmproj,
       smolvlm2_500m_mmproj,
