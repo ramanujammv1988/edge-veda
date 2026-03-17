@@ -1,0 +1,5 @@
+module CEdgeVeda {
+    header "include/edge_veda.h"
+    link "edge_veda"
+    export *
+}

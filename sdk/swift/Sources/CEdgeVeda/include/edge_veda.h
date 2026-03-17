@@ -1,0 +1,1156 @@
+/**
+ * @file edge_veda.h
+ * @brief Edge Veda SDK - Public C API
+ *
+ * This header provides the public C API for the Edge Veda SDK,
+ * enabling on-device AI inference across multiple platforms
+ * (iOS, Android, Web, Flutter, React Native).
+ *
+ * @version 1.0.0
+ * @copyright Copyright (c) 2026 Edge Veda
+ */
+
+#ifndef EDGE_VEDA_H
+#define EDGE_VEDA_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+/* Symbol visibility for FFI/dlsym access */
+#if defined(_WIN32) || defined(__CYGWIN__)
+#  ifdef EV_BUILD_SHARED
+#    define EV_API __declspec(dllexport)
+#  else
+#    define EV_API __declspec(dllimport)
+#  endif
+#else
+#  define EV_API __attribute__((visibility("default")))
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ============================================================================
+ * Version Information
+ * ========================================================================= */
+
+#define EDGE_VEDA_VERSION_MAJOR 1
+#define EDGE_VEDA_VERSION_MINOR 0
+#define EDGE_VEDA_VERSION_PATCH 0
+
+/**
+ * @brief Get the version string of the Edge Veda SDK
+ * @return Version string in format "MAJOR.MINOR.PATCH"
+ */
+EV_API const char* ev_version(void);
+
+/* ============================================================================
+ * Error Codes
+ * ========================================================================= */
+
+typedef enum {
+    EV_SUCCESS = 0,                    /**< Operation successful */
+    EV_ERROR_INVALID_PARAM = -1,       /**< Invalid parameter provided */
+    EV_ERROR_OUT_OF_MEMORY = -2,       /**< Out of memory */
+    EV_ERROR_MODEL_LOAD_FAILED = -3,   /**< Failed to load model */
+    EV_ERROR_BACKEND_INIT_FAILED = -4, /**< Failed to initialize backend */
+    EV_ERROR_INFERENCE_FAILED = -5,    /**< Inference operation failed */
+    EV_ERROR_CONTEXT_INVALID = -6,     /**< Invalid context */
+    EV_ERROR_STREAM_ENDED = -7,        /**< Stream has ended */
+    EV_ERROR_NOT_IMPLEMENTED = -8,     /**< Feature not implemented */
+    EV_ERROR_MEMORY_LIMIT_EXCEEDED = -9, /**< Memory limit exceeded */
+    EV_ERROR_UNSUPPORTED_BACKEND = -10, /**< Backend not supported on this platform */
+    EV_ERROR_UNKNOWN = -999            /**< Unknown error */
+} ev_error_t;
+
+/**
+ * @brief Get human-readable error message for error code
+ * @param error Error code
+ * @return Error message string
+ */
+EV_API const char* ev_error_string(ev_error_t error);
+
+/* ============================================================================
+ * Backend Types
+ * ========================================================================= */
+
+typedef enum {
+    EV_BACKEND_AUTO = 0,    /**< Automatically detect best backend */
+    EV_BACKEND_METAL = 1,   /**< Metal (iOS/macOS) */
+    EV_BACKEND_VULKAN = 2,  /**< Vulkan (Android) */
+    EV_BACKEND_CPU = 3      /**< CPU fallback */
+} ev_backend_t;
+
+/**
+ * @brief Detect the best available backend for current platform
+ * @return The recommended backend type
+ */
+EV_API ev_backend_t ev_detect_backend(void);
+
+/**
+ * @brief Check if a specific backend is available
+ * @param backend Backend type to check
+ * @return true if available, false otherwise
+ */
+EV_API bool ev_is_backend_available(ev_backend_t backend);
+
+/**
+ * @brief Get human-readable name for backend type
+ * @param backend Backend type
+ * @return Backend name string
+ */
+EV_API const char* ev_backend_name(ev_backend_t backend);
+
+/* ============================================================================
+ * Configuration
+ * ========================================================================= */
+
+/**
+ * @brief Configuration structure for initializing Edge Veda context
+ */
+typedef struct {
+    /** Model file path (GGUF format) */
+    const char* model_path;
+
+    /** Backend to use (use EV_BACKEND_AUTO for automatic detection) */
+    ev_backend_t backend;
+
+    /** Number of threads for CPU backend (0 = auto-detect) */
+    int num_threads;
+
+    /** Context size (number of tokens) */
+    int context_size;
+
+    /** Batch size for processing */
+    int batch_size;
+
+    /** Memory limit in bytes (0 = no limit) */
+    size_t memory_limit_bytes;
+
+    /** Enable memory auto-unload when limit is reached */
+    bool auto_unload_on_memory_pressure;
+
+    /** GPU layers to offload (-1 = all, 0 = none, >0 = specific count) */
+    int gpu_layers;
+
+    /** Use memory mapping for model file */
+    bool use_mmap;
+
+    /** Lock model in memory (prevent swapping) */
+    bool use_mlock;
+
+    /** Seed for random number generation (-1 = random) */
+    int seed;
+
+    /** Flash attention type: -1=auto, 0=disabled, 1=enabled (default: -1)
+     *  Maps to llama_flash_attn_type enum in llama.h */
+    int flash_attn;
+
+    /** KV cache data type for keys: 1=F16(default), 8=Q8_0
+     *  Maps to ggml_type enum. Q8_0 halves KV cache memory. */
+    int kv_cache_type_k;
+
+    /** KV cache data type for values: 1=F16(default), 8=Q8_0
+     *  Maps to ggml_type enum. Q8_0 halves KV cache memory. */
+    int kv_cache_type_v;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_config;
+
+/**
+ * @brief Get default configuration with recommended settings
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_config_default(ev_config* config);
+
+/* ============================================================================
+ * Thread Safety & Lock Ordering
+ * =========================================================================
+ *
+ * The C API is thread-safe. Functions that mutate context state acquire
+ * internal mutexes. Read-only accessors on immutable state (e.g., model
+ * metadata set at init time) may skip locking.
+ *
+ * **Lock ordering** (always acquire in this order to prevent deadlock):
+ *   1. ev_stream::mutex   (stream-level, acquired first)
+ *   2. ev_context::mutex  (context-level, acquired second)
+ *
+ * ev_stream_next() acquires stream->mutex then ctx->mutex (nested).
+ * ev_generate() acquires only ctx->mutex.
+ * ev_embed() acquires only ctx->mutex.
+ *
+ * Direct C API consumers (Swift, Kotlin, etc.) must NOT hold ctx->mutex
+ * then acquire stream->mutex — this inverts the ordering and deadlocks.
+ *
+ * The Dart SDK serializes all commands through isolate SendPort/ReceivePort,
+ * so lock ordering is not observable from Dart.
+ * ========================================================================= */
+
+/* ============================================================================
+ * Context Management
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda inference engine
+ */
+typedef struct ev_context_impl* ev_context;
+
+/**
+ * @brief Initialize Edge Veda context with configuration
+ * @param config Configuration structure
+ * @param error Optional pointer to receive error code
+ * @return Context handle on success, NULL on failure
+ */
+EV_API ev_context ev_init(const ev_config* config, ev_error_t* error);
+
+/**
+ * @brief Free Edge Veda context and release all resources
+ *
+ * All streams created from this context must be freed with
+ * ev_stream_free() BEFORE calling ev_free(). Calling ev_free()
+ * while streams are still alive is undefined behavior.
+ *
+ * @param ctx Context handle to free
+ */
+EV_API void ev_free(ev_context ctx);
+
+/**
+ * @brief Check if context is valid and ready for inference
+ * @param ctx Context handle
+ * @return true if valid, false otherwise
+ */
+EV_API bool ev_is_valid(ev_context ctx);
+
+/* ============================================================================
+ * Generation Parameters
+ * ========================================================================= */
+
+/**
+ * @brief Parameters for text generation
+ */
+typedef struct {
+    /** Maximum number of tokens to generate */
+    int max_tokens;
+
+    /** Temperature for sampling (0.0 = deterministic, higher = more random) */
+    float temperature;
+
+    /** Top-p (nucleus) sampling threshold */
+    float top_p;
+
+    /** Top-k sampling limit */
+    int top_k;
+
+    /** Repetition penalty (1.0 = no penalty) */
+    float repeat_penalty;
+
+    /** Frequency penalty */
+    float frequency_penalty;
+
+    /** Presence penalty */
+    float presence_penalty;
+
+    /** Stop sequences (NULL-terminated array of strings) */
+    const char** stop_sequences;
+
+    /** Number of stop sequences */
+    int num_stop_sequences;
+
+    /** GBNF grammar string for constrained decoding (NULL = no constraint) */
+    const char* grammar_str;
+
+    /** Grammar root rule name (NULL = "root") */
+    const char* grammar_root;
+
+    /** Confidence threshold for cloud handoff (0.0 = disabled, >0.0 = enable confidence tracking) */
+    float confidence_threshold;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_generation_params;
+
+/**
+ * @brief Get default generation parameters
+ *
+ * Sets all fields to sensible defaults. Grammar fields (grammar_str,
+ * grammar_root) default to NULL, meaning no grammar constraint is applied.
+ *
+ * @param params Pointer to parameters structure to fill
+ */
+EV_API void ev_generation_params_default(ev_generation_params* params);
+
+/* ============================================================================
+ * Single-Shot Generation
+ * ========================================================================= */
+
+/**
+ * @brief Generate a complete response for given prompt
+ *
+ * This is a blocking call that returns the complete generated text.
+ * For streaming output, use ev_generate_stream() instead.
+ *
+ * @param ctx Context handle
+ * @param prompt Input prompt text
+ * @param params Generation parameters (NULL = use defaults)
+ * @param output Pointer to receive generated text (caller must free with ev_free_string)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_generate(
+    ev_context ctx,
+    const char* prompt,
+    const ev_generation_params* params,
+    char** output
+);
+
+/**
+ * @brief Free string allocated by Edge Veda
+ * @param str String to free
+ */
+EV_API void ev_free_string(char* str);
+
+/* ============================================================================
+ * Streaming Generation
+ * ========================================================================= */
+
+/**
+ * @brief Opaque stream handle for streaming generation
+ */
+typedef struct ev_stream_impl* ev_stream;
+
+/**
+ * @brief Start streaming generation for given prompt
+ *
+ * Returns a stream handle that can be used with ev_stream_next()
+ * to retrieve tokens as they are generated.
+ *
+ * The returned stream borrows the context — the context must outlive
+ * the stream. Only one stream may be active per context. If a stream is
+ * already active (not yet freed), this function returns NULL and sets
+ * *error to EV_ERROR_CONTEXT_INVALID.
+ *
+ * @param ctx Context handle
+ * @param prompt Input prompt text
+ * @param params Generation parameters (NULL = use defaults)
+ * @param error Optional pointer to receive error code
+ * @return Stream handle on success, NULL on failure
+ */
+EV_API ev_stream ev_generate_stream(
+    ev_context ctx,
+    const char* prompt,
+    const ev_generation_params* params,
+    ev_error_t* error
+);
+
+/**
+ * @brief Get next token from streaming generation
+ *
+ * This is a blocking call that waits for the next token.
+ * Returns NULL when generation is complete or on error.
+ *
+ * @param stream Stream handle
+ * @param error Optional pointer to receive error code
+ * @return Next token string (caller must free with ev_free_string), or NULL when done
+ */
+EV_API char* ev_stream_next(ev_stream stream, ev_error_t* error);
+
+/**
+ * @brief Check if stream has more tokens available
+ * @param stream Stream handle
+ * @return true if more tokens available, false if ended or error
+ */
+EV_API bool ev_stream_has_next(ev_stream stream);
+
+/**
+ * @brief Cancel ongoing streaming generation
+ * @param stream Stream handle
+ */
+EV_API void ev_stream_cancel(ev_stream stream);
+
+/**
+ * @brief Free stream handle and release resources
+ *
+ * Safe to call after ev_free(ctx) — gracefully skips the context
+ * reference if the context has already been freed.
+ *
+ * @param stream Stream handle to free
+ */
+EV_API void ev_stream_free(ev_stream stream);
+
+/* ============================================================================
+ * Memory Management
+ * ========================================================================= */
+
+/**
+ * @brief Memory usage statistics
+ */
+typedef struct {
+    /** Current memory usage in bytes */
+    size_t current_bytes;
+
+    /** Peak memory usage in bytes */
+    size_t peak_bytes;
+
+    /** Memory limit in bytes (0 = no limit) */
+    size_t limit_bytes;
+
+    /** Memory used by model in bytes */
+    size_t model_bytes;
+
+    /** Memory used by context in bytes */
+    size_t context_bytes;
+
+    /** Reserved for future use */
+    size_t reserved[8];
+} ev_memory_stats;
+
+/**
+ * @brief Get current memory usage statistics
+ * @param ctx Context handle
+ * @param stats Pointer to stats structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_get_memory_usage(ev_context ctx, ev_memory_stats* stats);
+
+/**
+ * @brief Set memory limit for context
+ *
+ * If auto_unload is enabled in config, the context will automatically
+ * unload resources when this limit is approached.
+ *
+ * @param ctx Context handle
+ * @param limit_bytes Memory limit in bytes (0 = no limit)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_set_memory_limit(ev_context ctx, size_t limit_bytes);
+
+/**
+ * @brief Memory pressure callback function type
+ *
+ * @param user_data User-provided data pointer
+ * @param current_bytes Current memory usage
+ * @param limit_bytes Memory limit
+ */
+typedef void (*ev_memory_pressure_callback)(
+    void* user_data,
+    size_t current_bytes,
+    size_t limit_bytes
+);
+
+/**
+ * @brief Register callback for memory pressure events
+ *
+ * The callback will be invoked when memory usage approaches the limit.
+ *
+ * @param ctx Context handle
+ * @param callback Callback function (NULL to unregister)
+ * @param user_data User data to pass to callback
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_set_memory_pressure_callback(
+    ev_context ctx,
+    ev_memory_pressure_callback callback,
+    void* user_data
+);
+
+/**
+ * @brief Manually trigger garbage collection and memory cleanup
+ * @param ctx Context handle
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_memory_cleanup(ev_context ctx);
+
+/* ============================================================================
+ * Model Information
+ * ========================================================================= */
+
+/**
+ * @brief Model metadata information
+ */
+typedef struct {
+    /** Model name */
+    const char* name;
+
+    /** Model architecture */
+    const char* architecture;
+
+    /** Number of parameters */
+    uint64_t num_parameters;
+
+    /** Context length */
+    int context_length;
+
+    /** Embedding dimension */
+    int embedding_dim;
+
+    /** Number of layers */
+    int num_layers;
+
+    /** Reserved for future use */
+    void* reserved;
+} ev_model_info;
+
+/**
+ * @brief Get model metadata information
+ *
+ * The returned structure contains pointers to internal strings
+ * and is valid until the context is freed.
+ *
+ * @param ctx Context handle
+ * @param info Pointer to info structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_get_model_info(ev_context ctx, ev_model_info* info);
+
+/* ============================================================================
+ * Utility Functions
+ * ========================================================================= */
+
+/**
+ * @brief Enable or disable verbose logging
+ * @param enable true to enable, false to disable
+ */
+EV_API void ev_set_verbose(bool enable);
+
+/**
+ * @brief Get last error message for context
+ * @param ctx Context handle
+ * @return Last error message string (valid until next API call)
+ */
+EV_API const char* ev_get_last_error(ev_context ctx);
+
+/**
+ * @brief Reset context state (clear conversation history)
+ * @param ctx Context handle
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_reset(ev_context ctx);
+
+/* ============================================================================
+ * Vision API (VLM - Vision Language Model)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda vision inference engine
+ *
+ * Vision context is SEPARATE from text context (ev_context).
+ * Create with ev_vision_init(), free with ev_vision_free().
+ */
+typedef struct ev_vision_context_impl* ev_vision_context;
+
+/**
+ * @brief Configuration structure for initializing vision context
+ */
+typedef struct {
+    /** Path to VLM GGUF model file */
+    const char* model_path;
+
+    /** Path to mmproj (multimodal projector) GGUF file */
+    const char* mmproj_path;
+
+    /** Number of CPU threads (0 = auto-detect) */
+    int num_threads;
+
+    /** Token context window size (0 = auto, based on model) */
+    int context_size;
+
+    /** Batch size for processing (0 = default 512) */
+    int batch_size;
+
+    /** Memory limit in bytes (0 = no limit) */
+    size_t memory_limit_bytes;
+
+    /** GPU layers to offload (-1 = all, 0 = none) */
+    int gpu_layers;
+
+    /** Use memory mapping for model file */
+    bool use_mmap;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_vision_config;
+
+/**
+ * @brief Get default vision configuration with recommended settings
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_vision_config_default(ev_vision_config* config);
+
+/**
+ * @brief Initialize vision context with VLM model and mmproj
+ *
+ * Loads the vision language model and multimodal projector.
+ * The vision context is independent from any text context.
+ *
+ * @param config Vision configuration (model_path and mmproj_path required)
+ * @param error Optional pointer to receive error code
+ * @return Vision context handle on success, NULL on failure
+ */
+EV_API ev_vision_context ev_vision_init(
+    const ev_vision_config* config,
+    ev_error_t* error
+);
+
+/**
+ * @brief Describe an image using the vision model
+ *
+ * Takes raw RGB888 image bytes and a text prompt, returns a text description.
+ * This is a blocking call that returns the complete generated text.
+ *
+ * @param ctx Vision context handle
+ * @param image_bytes Raw pixel data in RGB888 format (width * height * 3 bytes)
+ * @param width Image width in pixels
+ * @param height Image height in pixels
+ * @param prompt User prompt (e.g., "Describe this image")
+ * @param params Generation parameters (NULL = use defaults)
+ * @param output Pointer to receive generated text (caller must free with ev_free_string)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_vision_describe(
+    ev_vision_context ctx,
+    const unsigned char* image_bytes,
+    int width,
+    int height,
+    const char* prompt,
+    const ev_generation_params* params,
+    char** output
+);
+
+/* ============================================================================
+ * Vision Streaming API
+ *
+ * Incremental token delivery for vision inference.
+ * Mirrors the LLM streaming pattern (ev_generate_stream / ev_stream_next).
+ *
+ * The image encoding phase (mtmd_helper_eval_chunks) runs during
+ * ev_vision_describe_stream() before returning the stream handle.
+ * Subsequent ev_vision_stream_next() calls deliver tokens one at a time.
+ *
+ * Thread safety:
+ *   - One active vision stream per context (enforced, same as LLM).
+ *   - Cancel is safe to call from any thread (atomic flag).
+ * ========================================================================= */
+
+/** Opaque handle to a vision stream */
+typedef struct ev_vision_stream_impl* ev_vision_stream;
+
+/**
+ * @brief Start a streaming vision inference
+ *
+ * Encodes the image (blocking), then returns a stream handle for
+ * incremental token retrieval via ev_vision_stream_next().
+ *
+ * @param ctx Vision context handle
+ * @param image_bytes Raw RGB888 pixel data (width * height * 3 bytes)
+ * @param width Image width in pixels
+ * @param height Image height in pixels
+ * @param prompt Text prompt describing the query
+ * @param params Generation parameters (NULL for defaults)
+ * @param error Pointer to receive error code
+ * @return Stream handle on success, NULL on failure
+ */
+EV_API ev_vision_stream ev_vision_describe_stream(
+    ev_vision_context ctx,
+    const unsigned char* image_bytes,
+    int width,
+    int height,
+    const char* prompt,
+    const ev_generation_params* params,
+    ev_error_t* error
+);
+
+/**
+ * @brief Get the next token from a vision stream
+ * @param stream Vision stream handle
+ * @param error Pointer to receive error code
+ * @return Token text (caller frees with ev_free_string), NULL when done
+ */
+EV_API char* ev_vision_stream_next(ev_vision_stream stream, ev_error_t* error);
+
+/**
+ * @brief Check if more tokens are available in the vision stream
+ * @param stream Vision stream handle
+ * @return true if more tokens are available
+ */
+EV_API bool ev_vision_stream_has_next(ev_vision_stream stream);
+
+/**
+ * @brief Cancel a running vision stream
+ *
+ * Safe to call from any thread. The next ev_vision_stream_next() call
+ * will return NULL with EV_ERROR_STREAM_ENDED.
+ *
+ * @param stream Vision stream handle
+ */
+EV_API void ev_vision_stream_cancel(ev_vision_stream stream);
+
+/**
+ * @brief Free a vision stream and its resources
+ * @param stream Vision stream handle
+ */
+EV_API void ev_vision_stream_free(ev_vision_stream stream);
+
+/**
+ * @brief Free vision context and release all resources
+ * @param ctx Vision context handle to free
+ */
+EV_API void ev_vision_free(ev_vision_context ctx);
+
+/**
+ * @brief Check if vision context is valid and ready for inference
+ * @param ctx Vision context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_vision_is_valid(ev_vision_context ctx);
+
+/* ============================================================================
+ * Vision Timing / Performance Data
+ * ========================================================================= */
+
+/**
+ * @brief Timing data from the last vision inference call
+ *
+ * Contains timing breakdowns from llama.cpp's internal perf counters
+ * plus custom image encoding measurement.
+ */
+typedef struct {
+    /** Model load time in milliseconds (from llama_perf_context_data.t_load_ms) */
+    double model_load_ms;
+
+    /** Image encoding time in milliseconds (measured around mtmd_helper_eval_chunks) */
+    double image_encode_ms;
+
+    /** Prompt evaluation time in milliseconds (from llama_perf_context_data.t_p_eval_ms) */
+    double prompt_eval_ms;
+
+    /** Token decode/generation time in milliseconds (from llama_perf_context_data.t_eval_ms) */
+    double decode_ms;
+
+    /** Number of prompt tokens processed (from llama_perf_context_data.n_p_eval) */
+    int32_t prompt_tokens;
+
+    /** Number of tokens generated (from llama_perf_context_data.n_eval) */
+    int32_t generated_tokens;
+} ev_timings_data;
+
+/**
+ * @brief Get timing data from the last vision inference call
+ *
+ * Returns performance timing breakdown from the most recent
+ * ev_vision_describe() call on this context.
+ *
+ * @param ctx Vision context handle
+ * @param timings Pointer to timings structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_vision_get_last_timings(
+    ev_vision_context ctx,
+    ev_timings_data* timings
+);
+
+/* ============================================================================
+ * Embeddings API
+ * ========================================================================= */
+
+/**
+ * @brief Result of text embedding operation
+ */
+typedef struct {
+    float* embeddings;    /**< Embedding vector (caller must free with ev_free_embeddings()) */
+    int dimensions;       /**< Number of dimensions (n_embd) */
+    int token_count;      /**< Number of tokens in input text */
+} ev_embed_result;
+
+/**
+ * @brief Compute text embeddings
+ *
+ * Generates an embedding vector for the input text using the loaded model.
+ * The caller must free the result with ev_free_embeddings().
+ *
+ * @param ctx Context handle
+ * @param text Input text to embed
+ * @param result Pointer to result structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_embed(
+    ev_context ctx,
+    const char* text,
+    ev_embed_result* result
+);
+
+/**
+ * @brief Free embedding result
+ *
+ * Frees the embeddings array allocated by ev_embed().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_free_embeddings(ev_embed_result* result);
+
+/* ============================================================================
+ * Streaming Token Info (confidence scoring)
+ * ========================================================================= */
+
+/**
+ * @brief Extended token information from streaming generation
+ */
+typedef struct {
+    float confidence;        /**< Token confidence score (0.0-1.0), -1.0 if not computed */
+    float avg_confidence;    /**< Running average confidence across all tokens */
+    bool needs_cloud_handoff; /**< True when avg confidence drops below threshold */
+    int token_index;         /**< Token position in generated sequence */
+} ev_stream_token_info;
+
+/**
+ * @brief Get extended token information from current stream position
+ *
+ * Returns confidence scoring and cloud handoff information for the
+ * most recently generated token in the stream.
+ *
+ * @param stream Stream handle
+ * @param info Pointer to info structure to fill
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_stream_get_token_info(
+    ev_stream stream,
+    ev_stream_token_info* info
+);
+
+/* ============================================================================
+ * Whisper API (STT - Speech-to-Text)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda whisper (speech-to-text) engine
+ *
+ * Whisper context is SEPARATE from text context (ev_context) and
+ * vision context (ev_vision_context).
+ * Create with ev_whisper_init(), free with ev_whisper_free().
+ */
+typedef struct ev_whisper_context_impl* ev_whisper_context;
+
+/**
+ * @brief Configuration structure for initializing whisper context
+ */
+typedef struct {
+    /** Path to Whisper GGUF model file */
+    const char* model_path;
+
+    /** Number of CPU threads (0 = auto-detect) */
+    int num_threads;
+
+    /** Use GPU acceleration (Metal on iOS/macOS) */
+    bool use_gpu;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_whisper_config;
+
+/**
+ * @brief Parameters for whisper transcription
+ */
+typedef struct {
+    /** Number of threads for transcription (0 = use config default) */
+    int n_threads;
+
+    /** Language code: "en", "auto", etc. (NULL = "en") */
+    const char* language;
+
+    /** Translate to English (true = translate, false = transcribe) */
+    bool translate;
+
+    /** Reserved for future use - must be NULL */
+    void* reserved;
+} ev_whisper_params;
+
+/**
+ * @brief A single transcription segment with timing information
+ */
+typedef struct {
+    /** Transcribed text for this segment */
+    const char* text;
+
+    /** Segment start time in milliseconds */
+    int64_t start_ms;
+
+    /** Segment end time in milliseconds */
+    int64_t end_ms;
+} ev_whisper_segment;
+
+/**
+ * @brief Result of a whisper transcription
+ *
+ * Contains an array of segments with timing information.
+ * Must be freed with ev_whisper_free_result() after use.
+ */
+typedef struct {
+    /** Array of transcription segments */
+    ev_whisper_segment* segments;
+
+    /** Number of segments in the array */
+    int n_segments;
+
+    /** Total processing time in milliseconds */
+    double process_time_ms;
+} ev_whisper_result;
+
+/**
+ * @brief Get default whisper configuration with recommended settings
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_whisper_config_default(ev_whisper_config* config);
+
+/**
+ * @brief Initialize whisper context with model
+ *
+ * Loads the Whisper model for speech-to-text transcription.
+ * The whisper context is independent from text and vision contexts.
+ *
+ * @param config Whisper configuration (model_path required)
+ * @param error Optional pointer to receive error code
+ * @return Whisper context handle on success, NULL on failure
+ */
+EV_API ev_whisper_context ev_whisper_init(
+    const ev_whisper_config* config,
+    ev_error_t* error
+);
+
+/**
+ * @brief Transcribe PCM audio samples to text
+ *
+ * Takes 16kHz mono float32 PCM samples and returns transcribed text
+ * with segment-level timing information.
+ * This is a blocking call that returns the complete transcription.
+ *
+ * @param ctx Whisper context handle
+ * @param pcm_samples PCM audio data (16kHz, mono, float32, range [-1.0, 1.0])
+ * @param n_samples Number of samples in pcm_samples array
+ * @param params Transcription parameters (NULL = use defaults)
+ * @param result Pointer to result structure to fill (caller must free with ev_whisper_free_result)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_whisper_transcribe(
+    ev_whisper_context ctx,
+    const float* pcm_samples,
+    int n_samples,
+    const ev_whisper_params* params,
+    ev_whisper_result* result
+);
+
+/**
+ * @brief Free whisper transcription result
+ *
+ * Frees the segments array and associated text strings
+ * allocated by ev_whisper_transcribe().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_whisper_free_result(ev_whisper_result* result);
+
+/**
+ * @brief Free whisper context and release all resources
+ * @param ctx Whisper context handle to free
+ */
+EV_API void ev_whisper_free(ev_whisper_context ctx);
+
+/**
+ * @brief Check if whisper context is valid and ready for transcription
+ * @param ctx Whisper context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_whisper_is_valid(ev_whisper_context ctx);
+
+/* ============================================================================
+ * Image Generation API (Text-to-Image via Stable Diffusion)
+ * ========================================================================= */
+
+/**
+ * @brief Opaque context handle for Edge Veda image generation engine
+ *
+ * Image generation context is SEPARATE from text (ev_context), vision
+ * (ev_vision_context), and whisper (ev_whisper_context) contexts.
+ * Create with ev_image_init(), free with ev_image_free().
+ */
+typedef struct ev_image_context_impl* ev_image_context;
+
+/**
+ * @brief Configuration for initializing image generation context
+ */
+typedef struct {
+    const char* model_path;      /**< Path to SD GGUF model file */
+    int num_threads;             /**< CPU threads (0 = auto) */
+    bool use_gpu;                /**< Metal on iOS/macOS */
+    int wtype;                   /**< Weight type override (-1 = auto from GGUF) */
+    void* reserved;
+} ev_image_config;
+
+/**
+ * @brief Sampler types for diffusion denoising
+ */
+typedef enum {
+    EV_SAMPLER_EULER_A = 0,
+    EV_SAMPLER_EULER = 1,
+    EV_SAMPLER_DPM_PLUS_PLUS_2M = 2,
+    EV_SAMPLER_DPM_PLUS_PLUS_2S_A = 3,
+    EV_SAMPLER_LCM = 4,
+} ev_image_sampler_t;
+
+/**
+ * @brief Schedule types for noise scheduling
+ */
+typedef enum {
+    EV_SCHEDULE_DEFAULT = 0,
+    EV_SCHEDULE_DISCRETE = 1,
+    EV_SCHEDULE_KARRAS = 2,
+    EV_SCHEDULE_AYS = 3,
+} ev_image_schedule_t;
+
+/**
+ * @brief Parameters for image generation
+ */
+typedef struct {
+    const char* prompt;            /**< Text prompt describing desired image */
+    const char* negative_prompt;   /**< Negative prompt (NULL = "") */
+    int width;                     /**< Image width in pixels (default 512) */
+    int height;                    /**< Image height in pixels (default 512) */
+    int steps;                     /**< Number of inference steps (default 4 for turbo) */
+    float cfg_scale;               /**< Classifier-free guidance scale (default 1.0 for turbo) */
+    int64_t seed;                  /**< Random seed (-1 = random) */
+    ev_image_sampler_t sampler;    /**< Sampler type (default EULER_A) */
+    ev_image_schedule_t schedule;  /**< Schedule type (default DEFAULT) */
+    void* reserved;
+} ev_image_gen_params;
+
+/**
+ * @brief Result of image generation
+ *
+ * Contains raw RGB pixel data. Caller must free with ev_image_free_result().
+ */
+typedef struct {
+    uint8_t* data;       /**< Raw pixel data (RGB, width * height * 3) */
+    uint32_t width;      /**< Image width */
+    uint32_t height;     /**< Image height */
+    uint32_t channels;   /**< Number of channels (3 for RGB) */
+    size_t data_size;    /**< Total bytes in data */
+} ev_image_result;
+
+/**
+ * @brief Progress callback for image generation
+ */
+typedef void (*ev_image_progress_cb)(int step, int total_steps, float elapsed_s, void* user_data);
+
+/**
+ * @brief Get default image generation configuration
+ * @param config Pointer to config structure to fill
+ */
+EV_API void ev_image_config_default(ev_image_config* config);
+
+/**
+ * @brief Get default image generation parameters
+ * @param params Pointer to parameters structure to fill
+ */
+EV_API void ev_image_gen_params_default(ev_image_gen_params* params);
+
+/**
+ * @brief Initialize image generation context with SD model
+ *
+ * Loads the Stable Diffusion model for text-to-image generation.
+ * The image context is independent from text, vision, and whisper contexts.
+ *
+ * @param config Image generation configuration (model_path required)
+ * @param error Optional pointer to receive error code
+ * @return Image context handle on success, NULL on failure
+ */
+EV_API ev_image_context ev_image_init(const ev_image_config* config, ev_error_t* error);
+
+/**
+ * @brief Free image generation context and release all resources
+ * @param ctx Image context handle to free
+ */
+EV_API void ev_image_free(ev_image_context ctx);
+
+/**
+ * @brief Check if image generation context is valid and ready
+ * @param ctx Image context handle
+ * @return true if valid and model is loaded, false otherwise
+ */
+EV_API bool ev_image_is_valid(ev_image_context ctx);
+
+/**
+ * @brief Set progress callback for image generation
+ *
+ * The callback is invoked on each denoising step during generation.
+ *
+ * @param ctx Image context handle
+ * @param cb Progress callback function (NULL to unregister)
+ * @param user_data User data to pass to callback
+ */
+EV_API void ev_image_set_progress_callback(ev_image_context ctx, ev_image_progress_cb cb, void* user_data);
+
+/**
+ * @brief Generate an image from a text prompt
+ *
+ * This is a blocking call that runs the full diffusion pipeline:
+ * CLIP text encoding -> noise scheduling -> iterative denoising -> VAE decode.
+ * Use ev_image_set_progress_callback() for step-by-step progress updates.
+ *
+ * @param ctx Image context handle
+ * @param params Generation parameters (prompt required)
+ * @param result Pointer to result structure to fill (caller must free with ev_image_free_result)
+ * @return Error code (EV_SUCCESS on success)
+ */
+EV_API ev_error_t ev_image_generate(ev_image_context ctx, const ev_image_gen_params* params, ev_image_result* result);
+
+/**
+ * @brief Cancel an in-progress image generation
+ *
+ * Sets a cancel flag that is checked between denoising steps via the
+ * progress callback. The next ev_image_generate() call on this context
+ * will return EV_ERROR_INFERENCE_FAILED. Safe to call from any thread.
+ *
+ * @param ctx Image context handle
+ */
+EV_API void ev_image_cancel(ev_image_context ctx);
+
+/**
+ * @brief Free image generation result
+ *
+ * Frees the pixel data allocated by ev_image_generate().
+ *
+ * @param result Pointer to result structure to free
+ */
+EV_API void ev_image_free_result(ev_image_result* result);
+
+/* ============================================================================
+ * Test Hooks (compile with EDGE_VEDA_TEST_HOOKS to enable)
+ * ========================================================================= */
+
+#ifdef EDGE_VEDA_TEST_HOOKS
+
+/**
+ * @brief Test hook: check if stream owns grammar string copies
+ *
+ * Returns whether the stream's internal grammar_str_owned and
+ * grammar_root_owned fields are non-NULL. Used to verify the
+ * strdup-based ownership fix (issue #33) without UB-based crash tests.
+ *
+ * @param stream Stream handle
+ * @param has_grammar_str Set to true if grammar_str_owned is non-NULL
+ * @param has_grammar_root Set to true if grammar_root_owned is non-NULL
+ * @return EV_SUCCESS, or EV_ERROR_INVALID_PARAM if stream is NULL
+ */
+EV_API ev_error_t ev_test_stream_grammar_owned(
+    ev_stream stream,
+    bool* has_grammar_str,
+    bool* has_grammar_root
+);
+
+#endif /* EDGE_VEDA_TEST_HOOKS */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* EDGE_VEDA_H */
