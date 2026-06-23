@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "edge-veda": {
+      "command": "node",
+      "args": ["/Users/ram/Documents/explore/edge/tools/mcp-server/build/index.js"]
+    }
+  }
+}
