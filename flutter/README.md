@@ -160,25 +160,20 @@ final result = await session.sendStructured(
 ## Speech-to-Text (Whisper)
 
 ```dart
-final whisperWorker = WhisperWorker();
-await whisperWorker.spawn();
-await whisperWorker.initWhisper(
-  modelPath: whisperModelPath,
-  numThreads: 4,
-);
+final session = WhisperSession(modelPath: whisperModelPath);
+await session.start();
 
-// Streaming transcription from microphone
-final whisperSession = WhisperSession(worker: whisperWorker);
-whisperSession.transcriptionStream.listen((segments) {
-  for (final segment in segments) {
-    print(segment.text);
-  }
+// Listen for transcription segments
+session.onSegment.listen((segment) {
+  print('${segment.text} [${segment.startMs}-${segment.endMs}]');
 });
 
 // Feed audio chunks (16kHz mono Float32)
-whisperSession.addAudioChunk(audioData);
+session.feedAudio(audioData);
 
-await whisperWorker.dispose();
+// When done, flush remaining audio and stop
+await session.flush();
+await session.dispose();
 ```
 
 ## Continuous Vision Inference
