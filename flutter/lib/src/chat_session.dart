@@ -43,6 +43,7 @@ import 'edge_veda_impl.dart';
 import 'gbnf_builder.dart';
 import 'json_recovery.dart';
 import 'schema_validator.dart';
+import 'tool.dart';
 import 'tool_registry.dart';
 import 'tool_template.dart';
 import 'tool_types.dart';
@@ -458,6 +459,237 @@ class ChatSession {
       }
       rethrow;
     }
+  }
+
+  /// Send a message with automatic tool dispatch and grammar-constrained output.
+  ///
+  /// This is the high-level tool calling API. Unlike [sendWithTools] which
+  /// requires an [onToolCall] callback, `chat()` accepts declarative [Tool]
+  /// objects that bundle their handler. Tool calls are dispatched automatically
+  /// in a multi-round loop.
+  ///
+  /// When [tools] is null or empty, delegates to [send] (no regression).
+  ///
+  /// Grammar constraining guarantees the model produces valid JSON for tool
+  /// calls, eliminating parse failures from malformed output.
+  ///
+  /// [maxToolRounds] limits consecutive tool call rounds (default 3).
+  ///
+  /// Example:
+  /// ```dart
+  /// final reply = await session.chat(
+  ///   'What is the weather in Tokyo?',
+  ///   tools: [weatherTool],
+  /// );
+  /// print(reply.content); // "The weather in Tokyo is 22C and sunny."
+  /// ```
+  Future<ChatMessage> chat(
+    String prompt, {
+    List<Tool>? tools,
+    GenerateOptions? options,
+    CancelToken? cancelToken,
+    int maxToolRounds = 3,
+  }) async {
+    // No tools -- delegate to send() for zero-overhead path
+    if (tools == null || tools.isEmpty) {
+      return send(prompt, options: options, cancelToken: cancelToken);
+    }
+
+    // Build lookup map and definitions
+    final toolMap = {for (final t in tools) t.name: t};
+    final definitions = tools.map((t) => t.toDefinition()).toList();
+
+    // Build grammar for constrained tool call output
+    final grammar = _buildToolCallGrammar(tools);
+
+    // Add user message
+    _messages.add(
+      ChatMessage(
+        role: ChatRole.user,
+        content: prompt,
+        timestamp: DateTime.now(),
+      ),
+    );
+
+    try {
+      // Check and summarize if needed
+      await _summarizeIfNeeded(cancelToken: cancelToken);
+
+      for (int round = 0; round < maxToolRounds; round++) {
+        // Format conversation with tool definitions
+        final formatted = _formatConversationWithToolsList(definitions);
+
+        // Grammar-constrained options for tool call output
+        final grammarOptions = (options ?? const GenerateOptions()).copyWith(
+          grammarStr: grammar,
+          grammarRoot: 'root',
+        );
+
+        // Generate response with grammar constraining
+        final response = await _edgeVeda.generate(
+          formatted,
+          options: grammarOptions,
+        );
+
+        // Parse tool calls from model output
+        var toolCalls = ToolTemplate.parseToolCalls(
+          format: templateFormat,
+          output: response.text,
+        );
+
+        // Fallback: if parseToolCalls returns null but grammar forced JSON,
+        // try direct JSON decode (handles Qwen3 grammar override of XML tags)
+        if (toolCalls == null || toolCalls.isEmpty) {
+          try {
+            final json =
+                jsonDecode(response.text.trim()) as Map<String, dynamic>;
+            if (json.containsKey('name')) {
+              final name = json['name'] as String;
+              final argsKey =
+                  json.containsKey('parameters') ? 'parameters' : 'arguments';
+              final arguments =
+                  (json[argsKey] ?? <String, dynamic>{})
+                      as Map<String, dynamic>;
+              toolCalls = [ToolCall(name: name, arguments: arguments)];
+            }
+          } catch (_) {
+            // Not valid JSON -- treat as normal text response
+          }
+        }
+
+        if (toolCalls == null || toolCalls.isEmpty) {
+          // No tool call -- model gave final text response
+          final assistantMsg = ChatMessage(
+            role: ChatRole.assistant,
+            content: response.text,
+            timestamp: DateTime.now(),
+          );
+          _messages.add(assistantMsg);
+          return assistantMsg;
+        }
+
+        // Process the first tool call
+        final toolCall = toolCalls.first;
+
+        // Add tool call message to history
+        _messages.add(
+          ChatMessage(
+            role: ChatRole.toolCall,
+            content: jsonEncode({
+              'name': toolCall.name,
+              'arguments': toolCall.arguments,
+            }),
+            timestamp: DateTime.now(),
+          ),
+        );
+
+        // Dispatch to the tool handler
+        final tool = toolMap[toolCall.name];
+        final ToolResult toolResult;
+        if (tool != null) {
+          toolResult = await tool.execute(toolCall);
+        } else {
+          toolResult = ToolResult.failure(
+            toolCallId: toolCall.id,
+            error: 'Unknown tool: ${toolCall.name}',
+          );
+        }
+
+        // Add tool result message to history
+        _messages.add(
+          ChatMessage(
+            role: ChatRole.toolResult,
+            content:
+                toolResult.isError
+                    ? jsonEncode({'error': toolResult.error})
+                    : jsonEncode(toolResult.data),
+            timestamp: DateTime.now(),
+          ),
+        );
+
+        // Continue loop -- model will see the result and may call
+        // another tool or produce a final response.
+      }
+
+      // Max rounds exhausted -- final generation WITHOUT grammar constraining
+      final formatted = _formatConversationWithToolsList(definitions);
+      final finalResponse = await _edgeVeda.generate(
+        formatted,
+        options: options,
+      );
+      final assistantMsg = ChatMessage(
+        role: ChatRole.assistant,
+        content: finalResponse.text,
+        timestamp: DateTime.now(),
+      );
+      _messages.add(assistantMsg);
+      return assistantMsg;
+    } catch (e) {
+      // Rollback user message on error
+      if (_messages.isNotEmpty && _messages.last.role == ChatRole.user) {
+        _messages.removeLast();
+      }
+      rethrow;
+    }
+  }
+
+  /// Build a GBNF grammar constraining model output to valid tool call JSON.
+  ///
+  /// Adapts the arguments field name based on [templateFormat]:
+  /// - Gemma3 uses `'parameters'`
+  /// - Qwen3 and others use `'arguments'`
+  String _buildToolCallGrammar(List<Tool> tools) {
+    final argsFieldName =
+        templateFormat == ChatTemplateFormat.gemma3
+            ? 'parameters'
+            : 'arguments';
+
+    final Map<String, dynamic> schema;
+    if (tools.length == 1) {
+      // Single tool: constrain name to exact match and args to tool schema
+      final tool = tools.first;
+      schema = {
+        'type': 'object',
+        'properties': {
+          'name': {
+            'type': 'string',
+            'enum': [tool.name],
+          },
+          argsFieldName: tool.parameters.toJsonSchema(),
+        },
+        'required': ['name', argsFieldName],
+      };
+    } else {
+      // Multiple tools: constrain name to valid tool names, args to any object
+      // (GbnfBuilder does not support oneOf/anyOf)
+      schema = {
+        'type': 'object',
+        'properties': {
+          'name': {'type': 'string', 'enum': tools.map((t) => t.name).toList()},
+          argsFieldName: {'type': 'object'},
+        },
+        'required': ['name', argsFieldName],
+      };
+    }
+
+    return GbnfBuilder.fromJsonSchema(schema);
+  }
+
+  /// Format conversation with an explicit tool definitions list.
+  ///
+  /// Unlike [_formatConversationWithTools] which uses the constructor's
+  /// [_tools] field, this takes an inline list for use with [chat].
+  String _formatConversationWithToolsList(List<ToolDefinition> tools) {
+    final toolSystemPrompt = ToolTemplate.formatToolSystemPrompt(
+      format: templateFormat,
+      tools: tools,
+      systemPrompt: systemPrompt,
+    );
+    return ChatTemplate.format(
+      template: templateFormat,
+      systemPrompt: toolSystemPrompt,
+      messages: _messages,
+    );
   }
 
   /// Send a message and get a structured JSON response validated

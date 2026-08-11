@@ -168,6 +168,9 @@ export 'src/tool_registry.dart' show ToolRegistry;
 
 export 'src/tool_template.dart' show ToolTemplate;
 
+export 'src/param_builder.dart' show Param, ParamSchema;
+export 'src/tool.dart' show Tool;
+
 export 'src/schema_validator.dart'
     show SchemaValidator, SchemaValidationResult, SchemaValidationMode;
 
