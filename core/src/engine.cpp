@@ -24,6 +24,11 @@
 #include "ggml.h"
 #endif
 
+#ifdef EDGE_VEDA_VULKAN_ENABLED
+#include "ggml-vulkan.h"
+#include "vulkan_denylist.h"
+#endif
+
 #include "memory_guard.h"
 #include "thread_utils.h"
 
@@ -237,10 +242,20 @@ ev_backend_t ev_detect_backend(void) {
             return EV_BACKEND_METAL;
         #endif
     #endif
-#elif defined(__ANDROID__)
-    #ifdef EDGE_VEDA_VULKAN_ENABLED
-        return EV_BACKEND_VULKAN;
-    #endif
+#elif defined(EDGE_VEDA_VULKAN_ENABLED)
+    // Runtime Vulkan detection: check if a working device actually exists
+    {
+        int vk_count = ggml_backend_vk_get_device_count();
+        if (vk_count > 0) {
+            char desc[256] = {0};
+            ggml_backend_vk_get_device_description(0, desc, sizeof(desc));
+            if (!ev_vulkan_is_denied(desc)) {
+                return EV_BACKEND_VULKAN;
+            }
+            // Denied driver — fall through to CPU
+        }
+        // No Vulkan device or denied — fall through to CPU
+    }
 #endif
 
 #ifdef EDGE_VEDA_CPU_ENABLED
@@ -261,7 +276,15 @@ bool ev_is_backend_available(ev_backend_t backend) {
 
         case EV_BACKEND_VULKAN:
 #ifdef EDGE_VEDA_VULKAN_ENABLED
-            return true;
+            {
+                int vk_count = ggml_backend_vk_get_device_count();
+                if (vk_count > 0) {
+                    char desc[256] = {0};
+                    ggml_backend_vk_get_device_description(0, desc, sizeof(desc));
+                    return !ev_vulkan_is_denied(desc);
+                }
+                return false;
+            }
 #else
             return false;
 #endif
@@ -359,6 +382,39 @@ ev_context ev_init(const ev_config* config, ev_error_t* error) {
     model_params.n_gpu_layers = config->gpu_layers;
     model_params.use_mmap = config->use_mmap;
     model_params.use_mlock = config->use_mlock;
+
+#ifdef EDGE_VEDA_VULKAN_ENABLED
+    // VRAM-based GPU layer heuristic for Vulkan on integrated GPUs.
+    // When gpu_layers == -1 (auto) and Vulkan is active, compute a safe
+    // layer count from available VRAM instead of offloading everything
+    // (which would OOM on mobile devices with shared memory).
+    if (ctx->active_backend == EV_BACKEND_VULKAN && config->gpu_layers == -1) {
+        size_t vram_free = 0, vram_total = 0;
+        ggml_backend_vk_get_device_memory(0, &vram_free, &vram_total);
+
+        // On integrated GPUs (all mobile), VRAM reports shared system RAM.
+        // Use a conservative 40% of reported free memory as GPU budget.
+        size_t vram_budget = static_cast<size_t>(vram_free * 0.40);
+
+        // Conservative default: 16 layers is safe for small models on
+        // most mobile GPUs. This will be refined once we can inspect
+        // actual model layer count and per-layer size after loading.
+        // For now, cap at a safe starting point based on VRAM budget.
+        int estimated_layers = 16; // safe baseline for 1-3B models
+        if (vram_budget > 2ULL * 1024 * 1024 * 1024) {
+            // > 2GB budget: offload generously (large models or desktop GPU)
+            estimated_layers = 99; // llama.cpp clamps to actual layer count
+        } else if (vram_budget > 1ULL * 1024 * 1024 * 1024) {
+            // 1-2GB budget: moderate offload
+            estimated_layers = 32;
+        } else if (vram_budget < 256ULL * 1024 * 1024) {
+            // < 256MB: very constrained, minimal offload
+            estimated_layers = 4;
+        }
+
+        model_params.n_gpu_layers = estimated_layers;
+    }
+#endif
 
     // Load model (using new API: llama_model_load_from_file)
     ctx->model = llama_model_load_from_file(ctx->model_path.c_str(), model_params);

@@ -26,6 +26,9 @@ class InitWorkerCommand extends WorkerCommand {
   /// Use GPU acceleration (Metal on iOS)
   final bool useGpu;
 
+  /// Use Vulkan GPU acceleration (Android/Linux/Windows)
+  final bool useVulkan;
+
   /// Memory limit in bytes (0 = no limit)
   final int memoryLimitBytes;
 
@@ -43,6 +46,7 @@ class InitWorkerCommand extends WorkerCommand {
     required this.numThreads,
     required this.contextSize,
     required this.useGpu,
+    this.useVulkan = true,
     this.memoryLimitBytes = 0,
     this.flashAttn = -1,
     this.kvCacheTypeK = 8,

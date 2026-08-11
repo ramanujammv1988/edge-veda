@@ -98,8 +98,11 @@ elseif(ANDROID_ABI STREQUAL "x86_64")
 endif()
 
 # Vulkan support detection
+# NDK r26 and earlier: sources/third_party/vulkan/src/include
+# NDK r27+: headers are in the sysroot (toolchains/llvm/prebuilt/*/sysroot/usr/include)
 find_path(VULKAN_INCLUDE_DIR vulkan/vulkan.h
     PATHS ${ANDROID_NDK}/sources/third_party/vulkan/src/include
+          ${CMAKE_SYSROOT}/usr/include
     NO_DEFAULT_PATH
 )
 
