@@ -470,4 +470,4 @@ For the full API reference, example app, and architecture details:
 - [README](README.md) -- complete SDK documentation
 - [API Reference](https://pub.dev/documentation/edge_veda/latest/) -- generated Dart docs
 - [Example App](https://github.com/ramanujammv1988/edge-veda/tree/main/flutter/example) -- full-featured demo with chat, vision, STT, TTS, and image generation
-- [Discord](https://discord.gg/rv8qZMGC) -- community support
+- [Discord](https://discord.gg/zztPPRcnFC) -- community support

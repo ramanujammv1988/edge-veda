@@ -6,7 +6,7 @@
 
 [![pub package](https://img.shields.io/pub/v/edge_veda.svg)](https://pub.dev/packages/edge_veda)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ramanujammv1988/edge-veda/blob/main/LICENSE)
-[![Discord](https://img.shields.io/discord/1341234567890?logo=discord&label=Discord&color=5865F2)](https://discord.gg/rv8qZMGC)
+[![Discord](https://img.shields.io/discord/1341234567890?logo=discord&label=Discord&color=5865F2)](https://discord.gg/zztPPRcnFC)
 
 ---
 
@@ -465,7 +465,7 @@ Any GGUF model compatible with llama.cpp or whisper.cpp can be loaded by file pa
 
 ## Support
 
-- **Discord:** [Join our community](https://discord.gg/rv8qZMGC)
+- **Discord:** [Join our community](https://discord.gg/zztPPRcnFC)
 - **GitHub Issues:** [Report bugs or request features](https://github.com/ramanujammv1988/edge-veda/issues)
 
 ---
