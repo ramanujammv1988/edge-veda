@@ -19,6 +19,13 @@ import 'chat_types.dart';
 /// responses are delimited in the prompt string. Using the wrong template
 /// for a model will produce garbage output.
 enum ChatTemplateFormat {
+  /// Automatic detection from GGUF model metadata (recommended).
+  ///
+  /// When used with [ChatSession], the Jinja2 template from the model's
+  /// GGUF metadata is evaluated directly. Falls back to [llama3Instruct]
+  /// if no template is found or evaluation fails.
+  auto,
+
   /// Llama 3 Instruct format (default for Llama-3.x-Instruct models)
   ///
   /// Uses `<|begin_of_text|>`, `<|start_header_id|>`, `<|end_header_id|>`,
@@ -80,6 +87,10 @@ class ChatTemplate {
     required List<ChatMessage> messages,
   }) {
     switch (template) {
+      case ChatTemplateFormat.auto:
+        // Auto should be resolved before reaching here.
+        // If it gets here, fall back to Llama3 format.
+        return _formatLlama3Instruct(systemPrompt, messages);
       case ChatTemplateFormat.llama3Instruct:
         return _formatLlama3Instruct(systemPrompt, messages);
       case ChatTemplateFormat.chatML:
